@@ -53,6 +53,11 @@ const EXEC_LOGS_MIN_EXPANDED_PCT = EXEC_LOGS_COLLAPSED_PCT;
 const EXEC_LOGS_MAX_EXPANDED_PCT = 90;
 const EXEC_LOGS_EXPANDED_STORAGE_KEY = 'docrouter.flow.executionsView.logsPanel.expandedPct';
 
+/** Lightweight list poll while the visible page has queued/running rows. */
+const EXECUTIONS_LIST_POLL_MS = 2000;
+/** Re-render in-progress duration labels between list polls (no extra API calls). */
+const EXECUTIONS_LIST_DURATION_TICK_MS = 1000;
+
 /** Read persisted list width (client-only; do not call during SSR / first paint). */
 function readStoredExecutionsListLeftPct(): number {
   if (typeof window === 'undefined') return EXECUTIONS_LIST_PANEL_DEFAULT_PCT;
@@ -84,9 +89,23 @@ function statusRunning(e: FlowExecutionSummary) {
   return e.status === 'queued' || e.status === 'running';
 }
 
-function formatDuration(e: FlowExecutionSummary) {
+function patchListSummaryFromExecution(
+  row: FlowExecutionSummary,
+  ex: FlowExecution,
+): FlowExecutionSummary {
+  return {
+    ...row,
+    status: ex.status,
+    started_at: ex.started_at,
+    finished_at: ex.finished_at,
+    last_heartbeat_at: ex.last_heartbeat_at,
+    stop_requested: ex.stop_requested,
+  };
+}
+
+function formatDuration(e: FlowExecutionSummary, nowMs = Date.now()) {
   if (!e.started_at) return '—';
-  const end = e.finished_at ? new Date(e.finished_at).getTime() : Date.now();
+  const end = e.finished_at ? new Date(e.finished_at).getTime() : nowMs;
   const start = new Date(e.started_at).getTime();
   if (!Number.isFinite(end) || !Number.isFinite(start)) return '—';
   const s = Math.max(0, Math.round((end - start) / 1000));
@@ -129,6 +148,7 @@ const FlowExecutionsView: React.FC<{
   const [detail, setDetail] = useState<FlowExecution | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [stopLoadingId, setStopLoadingId] = useState<string | null>(null);
+  const [durationNowMs, setDurationNowMs] = useState(() => Date.now());
   const userClearedSelectionRef = useRef(false);
   const [viewNodes, setViewNodes] = useState<Node<FlowRfNodeData>[]>([]);
   const [viewEdges, setViewEdges] = useState<Edge[]>([]);
@@ -186,15 +206,19 @@ const FlowExecutionsView: React.FC<{
     queueMicrotask(() => applyExecLogsLayout(true));
   }, [applyExecLogsLayout, selectedId]);
 
+  const fetchListPage = useCallback(async () => {
+    return orgApi.listExecutions({
+      flowId,
+      limit: listPagination.pageSize,
+      offset: listPagination.page * listPagination.pageSize,
+    });
+  }, [orgApi, flowId, listPagination.page, listPagination.pageSize]);
+
   const loadList = useCallback(async () => {
     try {
       setListLoading(true);
       setErr('');
-      const res = await orgApi.listExecutions({
-        flowId,
-        limit: listPagination.pageSize,
-        offset: listPagination.page * listPagination.pageSize,
-      });
+      const res = await fetchListPage();
       setList(res.items);
       setTotal(res.total);
     } catch (e: unknown) {
@@ -202,7 +226,62 @@ const FlowExecutionsView: React.FC<{
     } finally {
       setListLoading(false);
     }
-  }, [orgApi, flowId, listPagination.page, listPagination.pageSize]);
+  }, [fetchListPage]);
+
+  const refreshListSilently = useCallback(async () => {
+    try {
+      const res = await fetchListPage();
+      setList(res.items);
+      setTotal(res.total);
+    } catch {
+      // Ignore transient poll errors; manual refresh still surfaces failures.
+    }
+  }, [fetchListPage]);
+
+  const hasInFlightOnPage = useMemo(() => list.some(statusRunning), [list]);
+
+  /** Tick duration labels for in-flight rows without polling the API every second. */
+  useEffect(() => {
+    if (!hasInFlightOnPage) return;
+    const id = window.setInterval(() => setDurationNowMs(Date.now()), EXECUTIONS_LIST_DURATION_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [hasInFlightOnPage]);
+
+  useEffect(() => {
+    if (!hasInFlightOnPage) return;
+
+    let intervalId: number | undefined;
+
+    const stop = () => {
+      if (intervalId == null) return;
+      window.clearInterval(intervalId);
+      intervalId = undefined;
+    };
+
+    const start = () => {
+      if (intervalId != null || document.hidden) return;
+      intervalId = window.setInterval(() => {
+        if (document.hidden) return;
+        void refreshListSilently();
+      }, EXECUTIONS_LIST_POLL_MS);
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+        return;
+      }
+      void refreshListSilently();
+      start();
+    };
+
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [hasInFlightOnPage, refreshListSilently]);
 
   useLayoutEffect(() => {
     setListPagination({ page: 0, pageSize: 20 });
@@ -255,7 +334,15 @@ const FlowExecutionsView: React.FC<{
 
   const onExecutionPollChange = useCallback(
     (ex: FlowExecution | null) => {
-      if (!ex || ex.execution_id !== selectedId) return;
+      if (!ex) return;
+      setList((prev) => {
+        const idx = prev.findIndex((row) => row.execution_id === ex.execution_id);
+        if (idx < 0) return prev;
+        const next = [...prev];
+        next[idx] = patchListSummaryFromExecution(prev[idx], ex);
+        return next;
+      });
+      if (ex.execution_id !== selectedId) return;
       setDetail(ex);
       const runData = ex.run_data as Record<string, unknown> | undefined;
       setViewNodes((prev) => applyExecutionStatusToNodes(prev, runData) as Node<FlowRfNodeData>[]);
@@ -427,7 +514,7 @@ const FlowExecutionsView: React.FC<{
                       <div
                         className="block min-w-0 pl-0.5 text-sm font-semibold leading-snug text-gray-900 overflow-hidden text-ellipsis whitespace-nowrap text-left"
                         title={
-                          `${e.status === 'success' ? 'Succeeded' : e.status === 'error' ? 'Error' : e.status === 'running' ? 'Running' : e.status === 'queued' ? 'Queued' : e.status === 'stopped' ? 'Stopped' : e.status} in ${formatDuration(e)}`
+                          `${e.status === 'success' ? 'Succeeded' : e.status === 'error' ? 'Error' : e.status === 'running' ? 'Running' : e.status === 'queued' ? 'Queued' : e.status === 'stopped' ? 'Stopped' : e.status} in ${formatDuration(e, durationNowMs)}`
                         }
                       >
                         {e.status === 'success' && 'Succeeded'}
@@ -437,7 +524,7 @@ const FlowExecutionsView: React.FC<{
                         {e.status === 'stopped' && 'Stopped'}
                         {e.status === 'interrupted' && 'Interrupted'}
                         {!['success', 'error', 'running', 'queued', 'stopped', 'interrupted'].includes(e.status) && e.status}{' '}
-                        <span className="font-normal text-gray-500">in {formatDuration(e)}</span>
+                        <span className="font-normal text-gray-500">in {formatDuration(e, durationNowMs)}</span>
                       </div>
                     </button>
 
@@ -570,7 +657,7 @@ const FlowExecutionsView: React.FC<{
                       <div className="flex items-center justify-between gap-2">
                         <p className="m-0 min-w-0 leading-snug break-words">
                           <span className="font-medium text-gray-800">{detail.started_at ? formatLocalDate(detail.started_at) : '—'}</span> · {detail.status}
-                          {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
+                          {detail.finished_at && <span> · {formatDuration(detail, durationNowMs)}</span>} ·{' '}
                           <span className="font-mono text-[11px] text-gray-700">ID {detail.execution_id}</span>
                         </p>
                         <div className="flex shrink-0 items-center gap-0.5 self-start pt-px">
