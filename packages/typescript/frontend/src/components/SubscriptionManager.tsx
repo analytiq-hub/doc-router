@@ -154,7 +154,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
     <div className="bg-white p-4 rounded-lg shadow">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">Billing</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Billing</h2>
         {stripePaymentsPortal && customerPortalUrl && (
           <a 
             href={customerPortalUrl} 

@@ -554,7 +554,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     <div className="max-w-4xl mx-auto bg-white rounded-lg shadow p-6 min-h-[calc(100vh-80px)] flex flex-col">
       <div className="flex flex-col flex-1 h-0">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold">Edit Organization</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Edit Organization</h2>
           <div className="flex gap-4">
             {/* Subscription Link - Only show for org admins and sys admins */}
             {(() => {

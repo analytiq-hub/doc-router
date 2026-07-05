@@ -8,7 +8,7 @@ const AccessTokensPage: React.FC = () => {
   return (
     <SettingsLayout selectedMenu="user_developer">
       <div>
-        <h2 className="text-xl font-semibold mb-4">Organization Token Management</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Organization Token Management</h2>
         <OrganizationTokenManager />
       </div>
     </SettingsLayout>

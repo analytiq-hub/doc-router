@@ -148,7 +148,7 @@ const GCPConfigManager: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-semibold">GCP service account JSON</h2>
+              <h2 className="text-lg font-semibold text-gray-900">GCP service account JSON</h2>
               <button
                 type="button"
                 onClick={() => setEditOpen(false)}

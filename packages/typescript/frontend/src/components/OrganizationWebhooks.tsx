@@ -495,7 +495,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     <div className="max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
       <div className="mb-4 bg-gray-50 rounded-lg px-0 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-900">Organization webhooks</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Organization webhooks</h2>
           <div className="flex items-center gap-2 flex-wrap">
             {canEdit && (
               <button
@@ -967,7 +967,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
             </button>
 
             <div className="p-6">
-              <div className="text-xl font-semibold">New webhook secret</div>
+              <div className="text-lg font-semibold text-gray-900">New webhook secret</div>
               <div className="text-sm text-gray-600 mt-2">Copy this secret now. It is shown only once.</div>
 
               <div className="mt-4 flex items-center justify-between gap-2 p-2 bg-gray-100 rounded">

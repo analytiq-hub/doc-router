@@ -243,11 +243,11 @@ const LLMModelsConfig: React.FC = () => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-2xl font-bold mb-6">LLM Models Configuration</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-6">LLM Models Configuration</h2>
       
       {/* Chat Models Section */}
       <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4">Chat Models</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Chat Models</h3>
         <div className="w-full overflow-x-auto">
           <DataGrid
             rows={chatModelRows}
@@ -278,7 +278,7 @@ const LLMModelsConfig: React.FC = () => {
 
       {/* Embedding Models Section */}
       <div>
-        <h3 className="text-xl font-semibold mb-4">Embedding Models</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Embedding Models</h3>
         <div className="w-full overflow-x-auto">
           <DataGrid
             rows={embeddingModelRows}

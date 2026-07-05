@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material';
 import { SvgIconProps } from '@mui/material';
 import TourGuide from '@/components/TourGuide';
+import SidebarNavTooltip from '@/components/SidebarNavTooltip';
 
 // First, let's fix the type errors (exported for use in doc viewer page)
 export interface PDFViewerControlsType {
@@ -187,26 +188,32 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     if (isPlaceholder) {
       return (
-        <span
+        <SidebarNavTooltip
           key={item.text}
-          className="block px-2 py-1 cursor-not-allowed opacity-70"
-          title={!open ? item.tooltip : 'Select an organization'}
+          label={!open ? item.tooltip : 'Select an organization'}
+          show={!open}
+          className="px-2 py-1 cursor-not-allowed opacity-70"
         >
           {content}
-        </span>
+        </SidebarNavTooltip>
       );
     }
 
     return (
-      <Link
+      <SidebarNavTooltip
         key={item.text}
-        href={item.href}
-        className="block px-2 py-1"
-        title={!open ? item.tooltip : ''}
-        prefetch={false}
+        label={item.tooltip}
+        show={!open}
+        className="px-2 py-1"
       >
-        {content}
-      </Link>
+        <Link
+          href={item.href}
+          className="block"
+          prefetch={false}
+        >
+          {content}
+        </Link>
+      </SidebarNavTooltip>
     );
   };
 
@@ -251,9 +258,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside
-          className={`flex-shrink-0 transition-all duration-300 ease-in-out bg-blue-50 border-r border-gray-200 ${open ? 'w-48' : 'w-16'}`}
+          className={`flex-shrink-0 transition-all duration-300 ease-in-out bg-blue-50 border-r border-gray-200 ${open ? 'w-48' : 'w-16 overflow-visible'}`}
         >
-          <nav className="flex h-full flex-col overflow-hidden">
+          <nav className={`flex h-full flex-col ${open ? 'overflow-hidden' : 'overflow-visible'}`}>
             {status === 'authenticated' && (
               <>
                 <div className="py-1">

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import SettingsLayout from '@/components/SettingsLayout';
+import SettingsLayout, { settingsSectionTitleClass, settingsDescriptionClass } from '@/components/SettingsLayout';
 import Link from 'next/link';
 import { Button } from '@mui/material';
 
@@ -13,8 +13,8 @@ const DeveloperPage: React.FC = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-semibold">Account Tokens</h2>
-            <p className="text-gray-600 mb-2">
+            <h2 className={settingsSectionTitleClass}>Account Tokens</h2>
+            <p className={`${settingsDescriptionClass} mb-2`}>
               Use Acccess Tokens to authenticate with our account API.
             </p>
           </div>
@@ -27,8 +27,8 @@ const DeveloperPage: React.FC = () => {
 
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-semibold">Organization Tokens</h2>
-            <p className="text-gray-600 mb-2">
+            <h2 className={settingsSectionTitleClass}>Organization Tokens</h2>
+            <p className={`${settingsDescriptionClass} mb-2`}>
               Use Organization Tokens to authenticate with our organization API.
             </p>
           </div>
@@ -41,8 +41,8 @@ const DeveloperPage: React.FC = () => {
 
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-semibold">Webhook</h2>
-            <p className="text-gray-600 mb-2">
+            <h2 className={settingsSectionTitleClass}>Webhook</h2>
+            <p className={`${settingsDescriptionClass} mb-2`}>
               Configure a per-organization webhook and view delivery history.
             </p>
           </div>

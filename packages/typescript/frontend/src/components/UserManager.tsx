@@ -31,7 +31,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, user
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-        <h3 className="text-lg font-medium mb-4">Delete User</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete User</h3>
         <p className="text-gray-600 mb-6">
           Are you sure you want to delete user &quot;{user.email}&quot;? This action cannot be undone.
         </p>
@@ -213,7 +213,7 @@ const UserManager: React.FC = () => {
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Users</h2>
+        <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
         <div className="flex gap-2">
           <button
             onClick={() => setIsAddModalOpen(true)}

@@ -11,7 +11,7 @@ const LLMManagerPage: React.FC = () => {
     <SettingsLayout selectedMenu="system_development">
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold">LLM Management</h2>
+          <h2 className="text-lg font-semibold text-gray-900">LLM Management</h2>
           <Link 
             href="/settings/account/development/llm-manager/models"
             className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
