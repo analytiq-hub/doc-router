@@ -25,6 +25,7 @@ class SystemSettingsResponse(BaseModel):
         ge=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MIN,
         le=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MAX,
     )
+    llm_max_concurrent_by_model: dict[str, int] = Field(default_factory=dict)
     n_ocr_workers: int = _worker_count_field()
     n_llm_workers: int = _worker_count_field()
     n_kb_index_workers: int = _worker_count_field()
@@ -39,6 +40,7 @@ class SystemSettingsUpdate(BaseModel):
         ge=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MIN,
         le=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MAX,
     )
+    llm_max_concurrent_by_model: Optional[dict[str, int]] = None
     n_ocr_workers: Optional[int] = _worker_count_field(default=None)
     n_llm_workers: Optional[int] = _worker_count_field(default=None)
     n_kb_index_workers: Optional[int] = _worker_count_field(default=None)
@@ -49,6 +51,7 @@ class SystemSettingsUpdate(BaseModel):
 def _response_from_doc(doc: dict) -> SystemSettingsResponse:
     return SystemSettingsResponse(
         textract_max_concurrent=int(doc["textract_max_concurrent"]),
+        llm_max_concurrent_by_model=dict(doc.get("llm_max_concurrent_by_model") or {}),
         n_ocr_workers=int(doc["n_ocr_workers"]),
         n_llm_workers=int(doc["n_llm_workers"]),
         n_kb_index_workers=int(doc["n_kb_index_workers"]),

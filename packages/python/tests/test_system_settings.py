@@ -12,6 +12,11 @@ def test_clamp_textract_max_concurrent():
     assert ad.system.settings.clamp_textract_max_concurrent(-5) == 0
 
 
+def test_clamp_llm_max_concurrent():
+    assert ad.system.settings.clamp_llm_max_concurrent(8) == 8
+    assert ad.system.settings.clamp_llm_max_concurrent(0) == 0
+
+
 def test_default_worker_counts():
     assert ad.system.worker_counts.default_worker_counts() == ad.system.worker_counts.WorkerCounts()
 
@@ -77,6 +82,7 @@ async def test_seed_system_settings_if_missing(test_db):
     doc = await test_db.system_settings.find_one({"_id": ad.system.settings.SYSTEM_SETTINGS_ID})
     assert doc is not None
     assert doc["textract_max_concurrent"] == ad.system.settings.default_textract_max_concurrent()
+    assert doc.get("llm_max_concurrent_by_model", {}) == {}
     assert doc["n_ocr_workers"] == 4
 
     assert await ad.system.settings.seed_system_settings_if_missing() is False
@@ -114,19 +120,26 @@ async def test_system_settings_api_get_and_patch(test_db, mock_auth):
     body = response.json()
     assert body["textract_max_concurrent"] is not None
     assert body["n_ocr_workers"] is not None
+    assert body.get("llm_max_concurrent_by_model", {}) == {}
     assert 0 <= body["textract_max_concurrent"] <= 1024
     assert 0 <= body["n_ocr_workers"] <= 256
 
     response = client.patch(
         "/v0/account/system_settings",
         headers=get_auth_headers(),
-        json={"textract_max_concurrent": 16, "n_llm_workers": 5},
+        json={
+            "textract_max_concurrent": 16,
+            "n_llm_workers": 5,
+            "llm_max_concurrent_by_model": {"gpt-4o-mini": 8},
+        },
     )
     assert response.status_code == 200
     body = response.json()
     assert body["textract_max_concurrent"] == 16
     assert body["n_llm_workers"] == 5
+    assert body["llm_max_concurrent_by_model"] == {"gpt-4o-mini": 8}
 
     ad.system.settings.invalidate_system_settings_cache()
     counts = await ad.system.settings.get_worker_counts()
     assert counts.n_llm_workers == 5
+    assert await ad.system.settings.get_llm_max_concurrent_for_model("gpt-4o-mini") == 8

@@ -8,6 +8,7 @@ import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import LLMTestModal from './LLMTestModal';
 import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
+import { useLlmMaxConcurrentSettings } from './useLlmMaxConcurrentSettings';
 
 interface LLMProviderConfigProps {
   providerName: string;
@@ -15,6 +16,8 @@ interface LLMProviderConfigProps {
 
 const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
+  const { loadMaxConcurrentSettings, createMaxConcurrentColumn } =
+    useLlmMaxConcurrentSettings(docRouterAccountApi);
   const [provider, setProvider] = useState<LLMProvider | null>(null);
   const [chatModels, setChatModels] = useState<LLMChatModel[]>([]);
   const [embeddingModels, setEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
@@ -36,12 +39,14 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         const foundProvider = providerResponse.providers.find(p => p.name === providerName);
         if (foundProvider) {
           setProvider(foundProvider);
-          // Fetch model data for this provider
-          const modelsResponse = await docRouterAccountApi.listLLMModels({
-            providerName: providerName,
-            providerEnabled: false,
-            llmEnabled: false
-          });
+          const [modelsResponse] = await Promise.all([
+            docRouterAccountApi.listLLMModels({
+              providerName: providerName,
+              providerEnabled: false,
+              llmEnabled: false,
+            }),
+            loadMaxConcurrentSettings(),
+          ]);
           setChatModels(modelsResponse.chat_models);
           setEmbeddingModels(modelsResponse.embedding_models);
         } else {
@@ -56,9 +61,15 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     };
 
     fetchData();
-  }, [providerName, docRouterAccountApi]);
+  }, [providerName, docRouterAccountApi, loadMaxConcurrentSettings]);
 
   const chatAgentModels = provider?.litellm_models_chat_agent ?? provider?.litellm_models_enabled ?? [];
+
+  const maxConcurrentColumn = createMaxConcurrentColumn({
+    getModelName: (row) => String(row.litellm_model),
+    isEnabled: (row) =>
+      provider?.litellm_models_enabled.includes(String(row.litellm_model)) ?? false,
+  });
 
   const handleToggleModel = async (model: string, enabled: boolean) => {
     if (!provider) return;
@@ -185,6 +196,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         </Button>
       ),
     },
+    maxConcurrentColumn,
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
     { field: 'max_output_tokens', headerName: 'Max Output Tokens', width: 140, minWidth: 140 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
@@ -224,6 +236,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         </Button>
       ),
     },
+    maxConcurrentColumn,
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
     { field: 'dimensions', headerName: 'Dimensions', width: 120, minWidth: 120 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
@@ -278,7 +291,10 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       {chatModelRows.length > 0 && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Chat Models</h3>
-          <p className="text-sm text-gray-600 mb-2">Use <strong>Chat Agent</strong> to allow a model in the document chat agent (conversation UI). Only enabled models can be selected.</p>
+          <p className="text-sm text-gray-600 mb-2">
+            Use <strong>Chat Agent</strong> to allow a model in the document chat agent (conversation UI). Only enabled models can be selected.
+            Max concurrent limits are per worker process; leave empty or 0 for unlimited.
+          </p>
           <div className="w-full overflow-x-auto">
             <DataGrid
               rows={chatModelRows}

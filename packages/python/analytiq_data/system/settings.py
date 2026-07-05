@@ -23,8 +23,14 @@ TEXTRACT_MAX_CONCURRENT_MIN = 0
 TEXTRACT_MAX_CONCURRENT_MAX = 1024
 TEXTRACT_MAX_CONCURRENT_REFRESH_EVERY = 25
 
+LLM_MAX_CONCURRENT_MIN = 0
+LLM_MAX_CONCURRENT_MAX = 1024
+LLM_MAX_CONCURRENT_REFRESH_EVERY = 25
+
 _cached_textract_max_concurrent: int | None = None
 _textract_requests_since_refresh = 0
+_cached_llm_max_concurrent_by_model: dict[str, int] | None = None
+_llm_gate_requests_since_refresh = 0
 _cached_worker_counts: WorkerCounts | None = None
 _worker_counts_requests_since_refresh = 0
 WORKER_COUNTS_REFRESH_EVERY = 25
@@ -55,11 +61,39 @@ def clamp_textract_max_concurrent(value: int) -> int:
     )
 
 
+def clamp_llm_max_concurrent(value: int) -> int:
+    return max(
+        LLM_MAX_CONCURRENT_MIN,
+        min(LLM_MAX_CONCURRENT_MAX, int(value)),
+    )
+
+
+def normalize_llm_max_concurrent_by_model(raw: Any) -> dict[str, int]:
+    """Return a sanitized per-model map; omit keys with limit <= 0."""
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, int] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not key.strip():
+            continue
+        try:
+            clamped = clamp_llm_max_concurrent(int(value))
+        except (TypeError, ValueError):
+            logger.warning(
+                f"Invalid system_settings.llm_max_concurrent_by_model[{key!r}]={value!r}; skipping"
+            )
+            continue
+        if clamped > 0:
+            result[key.strip()] = clamped
+    return result
+
+
 def default_system_settings() -> dict[str, Any]:
     counts = default_worker_counts()
     return {
         "_id": SYSTEM_SETTINGS_ID,
         "textract_max_concurrent": default_textract_max_concurrent(),
+        "llm_max_concurrent_by_model": {},
         **counts.as_dict(),
         "created_at": None,
         "updated_at": None,
@@ -94,6 +128,34 @@ async def load_textract_max_concurrent_from_db() -> int:
 async def load_worker_counts_from_db() -> WorkerCounts:
     doc = await _load_settings_document()
     return _worker_counts_from_doc(doc)
+
+
+async def load_llm_max_concurrent_map_from_db() -> dict[str, int]:
+    doc = await _load_settings_document()
+    return normalize_llm_max_concurrent_by_model(doc.get("llm_max_concurrent_by_model"))
+
+
+async def get_llm_max_concurrent_for_model(model: str) -> int:
+    """Return cached per-model concurrency limit; 0 means unlimited."""
+    global _cached_llm_max_concurrent_by_model, _llm_gate_requests_since_refresh
+
+    if (
+        _cached_llm_max_concurrent_by_model is None
+        or _llm_gate_requests_since_refresh >= LLM_MAX_CONCURRENT_REFRESH_EVERY
+    ):
+        _llm_gate_requests_since_refresh = 0
+        try:
+            _cached_llm_max_concurrent_by_model = await load_llm_max_concurrent_map_from_db()
+        except Exception as e:
+            logger.warning(f"Failed to load llm_max_concurrent_by_model from system_settings: {e}")
+            if _cached_llm_max_concurrent_by_model is None:
+                _cached_llm_max_concurrent_by_model = {}
+    else:
+        _llm_gate_requests_since_refresh += 1
+
+    if not model:
+        return 0
+    return _cached_llm_max_concurrent_by_model.get(model, 0)
 
 
 async def get_textract_max_concurrent() -> int:
@@ -143,6 +205,11 @@ def invalidate_textract_max_concurrent_cache() -> None:
     _textract_requests_since_refresh = TEXTRACT_MAX_CONCURRENT_REFRESH_EVERY
 
 
+def invalidate_llm_max_concurrent_cache() -> None:
+    global _llm_gate_requests_since_refresh
+    _llm_gate_requests_since_refresh = LLM_MAX_CONCURRENT_REFRESH_EVERY
+
+
 def invalidate_worker_counts_cache() -> None:
     global _worker_counts_requests_since_refresh
     _worker_counts_requests_since_refresh = WORKER_COUNTS_REFRESH_EVERY
@@ -150,15 +217,19 @@ def invalidate_worker_counts_cache() -> None:
 
 def invalidate_system_settings_cache() -> None:
     invalidate_textract_max_concurrent_cache()
+    invalidate_llm_max_concurrent_cache()
     invalidate_worker_counts_cache()
 
 
 def reset_system_settings_cache() -> None:
     """Clear cached settings (tests and process startup)."""
     global _cached_textract_max_concurrent, _textract_requests_since_refresh
+    global _cached_llm_max_concurrent_by_model, _llm_gate_requests_since_refresh
     global _cached_worker_counts, _worker_counts_requests_since_refresh
     _cached_textract_max_concurrent = None
     _textract_requests_since_refresh = 0
+    _cached_llm_max_concurrent_by_model = None
+    _llm_gate_requests_since_refresh = 0
     _cached_worker_counts = None
     _worker_counts_requests_since_refresh = 0
 
@@ -171,6 +242,9 @@ async def get_system_settings_document() -> dict[str, Any]:
         "textract_max_concurrent": clamp_textract_max_concurrent(
             int(doc.get("textract_max_concurrent", default_textract_max_concurrent()))
         ),
+        "llm_max_concurrent_by_model": normalize_llm_max_concurrent_by_model(
+            doc.get("llm_max_concurrent_by_model")
+        ),
         **counts.as_dict(),
         "created_at": doc.get("created_at"),
         "updated_at": doc.get("updated_at"),
@@ -180,6 +254,7 @@ async def get_system_settings_document() -> dict[str, Any]:
 async def update_system_settings(
     *,
     textract_max_concurrent: int | None = None,
+    llm_max_concurrent_by_model: dict[str, int] | None = None,
     n_ocr_workers: int | None = None,
     n_llm_workers: int | None = None,
     n_kb_index_workers: int | None = None,
@@ -191,6 +266,10 @@ async def update_system_settings(
 
     if textract_max_concurrent is not None:
         update["textract_max_concurrent"] = clamp_textract_max_concurrent(textract_max_concurrent)
+    if llm_max_concurrent_by_model is not None:
+        update["llm_max_concurrent_by_model"] = normalize_llm_max_concurrent_by_model(
+            llm_max_concurrent_by_model
+        )
     if n_ocr_workers is not None:
         update["n_ocr_workers"] = clamp_worker_count(n_ocr_workers)
     if n_llm_workers is not None:

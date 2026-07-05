@@ -402,7 +402,8 @@ async def _litellm_acompletion_with_retry(
     if thinking is not None:
         params["thinking"] = thinking
 
-    return await litellm.acompletion(**params)
+    async with ad.llm.llm_concurrency(model):
+        return await litellm.acompletion(**params)
 
 
 async def agent_completion(
@@ -490,95 +491,96 @@ async def agent_completion_stream(
     chunk_count = 0
 
     logger.info(f"agent_completion_stream start model={model} stream=True")
-    response = await litellm.acompletion(**params)
-    async for chunk in response:
-        chunk_count += 1
-        if chunk_count == 1 and isinstance(chunk, dict):
-            logger.debug(f"agent_completion_stream first chunk keys: {list(chunk.keys())}")
-        choices = chunk.get("choices", []) if isinstance(chunk, dict) else getattr(chunk, "choices", None) or []
-        if not chunk or not choices or len(choices) == 0:
-            # Usage-only chunk (include_usage)
-            usage_obj = chunk.get("usage") if isinstance(chunk, dict) else getattr(chunk, "usage", None)
-            continue
-        c0 = choices[0]
-        delta = c0.get("delta") if isinstance(c0, dict) else (getattr(c0, "delta", None) if hasattr(c0, "delta") else None)
-        # Some providers send full message in one chunk instead of deltas
-        if not delta:
-            msg = c0.get("message") if isinstance(c0, dict) else getattr(c0, "message", None)
-            if msg:
-                msg_content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
-                if msg_content:
-                    content_parts.append(msg_content)
-                    yield ("content", msg_content)
-            continue
-        # Content delta
-        part = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
-        if part:
-            content_parts.append(part)
-            yield ("content", part)
-        # Reasoning/thinking delta (Anthropic extended thinking, etc.)
-        thinking_part = (
-            delta.get("reasoning_content") if isinstance(delta, dict) else getattr(delta, "reasoning_content", None)
-        ) or (delta.get("thinking") if isinstance(delta, dict) else getattr(delta, "thinking", None))
-        if thinking_part:
-            thinking_parts.append(thinking_part)
-            yield ("thinking", thinking_part)
-        # Tool call deltas (merge by index)
-        tcs = delta.get("tool_calls") if isinstance(delta, dict) else getattr(delta, "tool_calls", None)
-        if tcs:
-            for tc in tcs:
-                idx = getattr(tc, "index", None) if not isinstance(tc, dict) else tc.get("index")
-                if idx is None:
-                    continue
-                if idx not in tool_calls_by_index:
-                    tool_calls_by_index[idx] = {"id": "", "function": {"name": "", "arguments": ""}}
-                cur = tool_calls_by_index[idx]
-                if isinstance(tc, dict):
-                    if tc.get("id"):
-                        cur["id"] = tc["id"]
-                    fn = tc.get("function") or {}
-                    if fn.get("name"):
-                        cur["function"]["name"] = fn["name"]
-                    if fn.get("arguments"):
-                        cur["function"]["arguments"] = cur["function"]["arguments"] + fn["arguments"]
-                else:
-                    if getattr(tc, "id", None):
-                        cur["id"] = tc.id
-                    fn = getattr(tc, "function", None)
-                    if fn and getattr(fn, "name", None):
-                        cur["function"]["name"] = fn.name
-                    if fn and getattr(fn, "arguments", None):
-                        cur["function"]["arguments"] = cur["function"]["arguments"] + fn.arguments
+    async with ad.llm.llm_concurrency(model):
+        response = await litellm.acompletion(**params)
+        async for chunk in response:
+            chunk_count += 1
+            if chunk_count == 1 and isinstance(chunk, dict):
+                logger.debug(f"agent_completion_stream first chunk keys: {list(chunk.keys())}")
+            choices = chunk.get("choices", []) if isinstance(chunk, dict) else getattr(chunk, "choices", None) or []
+            if not chunk or not choices or len(choices) == 0:
+                # Usage-only chunk (include_usage)
+                usage_obj = chunk.get("usage") if isinstance(chunk, dict) else getattr(chunk, "usage", None)
+                continue
+            c0 = choices[0]
+            delta = c0.get("delta") if isinstance(c0, dict) else (getattr(c0, "delta", None) if hasattr(c0, "delta") else None)
+            # Some providers send full message in one chunk instead of deltas
+            if not delta:
+                msg = c0.get("message") if isinstance(c0, dict) else getattr(c0, "message", None)
+                if msg:
+                    msg_content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+                    if msg_content:
+                        content_parts.append(msg_content)
+                        yield ("content", msg_content)
+                continue
+            # Content delta
+            part = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
+            if part:
+                content_parts.append(part)
+                yield ("content", part)
+            # Reasoning/thinking delta (Anthropic extended thinking, etc.)
+            thinking_part = (
+                delta.get("reasoning_content") if isinstance(delta, dict) else getattr(delta, "reasoning_content", None)
+            ) or (delta.get("thinking") if isinstance(delta, dict) else getattr(delta, "thinking", None))
+            if thinking_part:
+                thinking_parts.append(thinking_part)
+                yield ("thinking", thinking_part)
+            # Tool call deltas (merge by index)
+            tcs = delta.get("tool_calls") if isinstance(delta, dict) else getattr(delta, "tool_calls", None)
+            if tcs:
+                for tc in tcs:
+                    idx = getattr(tc, "index", None) if not isinstance(tc, dict) else tc.get("index")
+                    if idx is None:
+                        continue
+                    if idx not in tool_calls_by_index:
+                        tool_calls_by_index[idx] = {"id": "", "function": {"name": "", "arguments": ""}}
+                    cur = tool_calls_by_index[idx]
+                    if isinstance(tc, dict):
+                        if tc.get("id"):
+                            cur["id"] = tc["id"]
+                        fn = tc.get("function") or {}
+                        if fn.get("name"):
+                            cur["function"]["name"] = fn["name"]
+                        if fn.get("arguments"):
+                            cur["function"]["arguments"] = cur["function"]["arguments"] + fn["arguments"]
+                    else:
+                        if getattr(tc, "id", None):
+                            cur["id"] = tc.id
+                        fn = getattr(tc, "function", None)
+                        if fn and getattr(fn, "name", None):
+                            cur["function"]["name"] = fn.name
+                        if fn and getattr(fn, "arguments", None):
+                            cur["function"]["arguments"] = cur["function"]["arguments"] + fn.arguments
 
-    full_content = "".join(content_parts)
-    full_thinking = "".join(thinking_parts).strip() or None
-    logger.info(
-        f"agent_completion_stream done model={model} chunks={chunk_count} content_parts={len(content_parts)} "
-        f"thinking_parts={len(thinking_parts)} full_content_len={len(full_content)}"
-    )
-    # When provider sends full response in one (or zero) content chunks, simulate streaming so UI shows progressive output
-    if full_content and len(content_parts) <= 1:
-        sim_chunk_size = 80
-        for i in range(0, len(full_content), sim_chunk_size):
-            yield ("content", full_content[i : i + sim_chunk_size])
+        full_content = "".join(content_parts)
+        full_thinking = "".join(thinking_parts).strip() or None
+        logger.info(
+            f"agent_completion_stream done model={model} chunks={chunk_count} content_parts={len(content_parts)} "
+            f"thinking_parts={len(thinking_parts)} full_content_len={len(full_content)}"
+        )
+        # When provider sends full response in one (or zero) content chunks, simulate streaming so UI shows progressive output
+        if full_content and len(content_parts) <= 1:
+            sim_chunk_size = 80
+            for i in range(0, len(full_content), sim_chunk_size):
+                yield ("content", full_content[i : i + sim_chunk_size])
 
-    # Build message-like object for agent_loop (content, tool_calls in OpenAI shape)
-    tool_calls_list = []
-    for i in sorted(tool_calls_by_index.keys()):
-        tc = tool_calls_by_index[i]
-        tool_calls_list.append(type("ToolCall", (), {
-            "id": tc["id"],
-            "function": type("Fn", (), {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]})(),
-        })())
-    message = type("Message", (), {
-        "content": full_content,
-        "tool_calls": tool_calls_list,
-        "thinking_blocks": [{"type": "thinking", "thinking": full_thinking}] if full_thinking else None,
-        "reasoning_content": full_thinking,
-    })()
-    yield ("message", message)
-    if usage_obj is not None:
-        yield ("usage", usage_obj)
+        # Build message-like object for agent_loop (content, tool_calls in OpenAI shape)
+        tool_calls_list = []
+        for i in sorted(tool_calls_by_index.keys()):
+            tc = tool_calls_by_index[i]
+            tool_calls_list.append(type("ToolCall", (), {
+                "id": tc["id"],
+                "function": type("Fn", (), {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]})(),
+            })())
+        message = type("Message", (), {
+            "content": full_content,
+            "tool_calls": tool_calls_list,
+            "thinking_blocks": [{"type": "thinking", "thinking": full_thinking}] if full_thinking else None,
+            "reasoning_content": full_thinking,
+        })()
+        yield ("message", message)
+        if usage_obj is not None:
+            yield ("usage", usage_obj)
 
 
 @stamina.retry(on=llm_connection_retry_backoff)
@@ -1741,10 +1743,11 @@ async def run_llm_chat(
             async def generate_stream():
                 try:
                     params["temperature"] = get_temperature(params["model"])
-                    response = await litellm.acompletion(**params, stream=True)
-                    async for chunk in response:
-                        if chunk.choices[0].delta.content:
-                            yield f"data: {json.dumps({'chunk': chunk.choices[0].delta.content, 'done': False})}\n\n"
+                    async with ad.llm.llm_concurrency(request.model):
+                        response = await litellm.acompletion(**params, stream=True)
+                        async for chunk in response:
+                            if chunk.choices[0].delta.content:
+                                yield f"data: {json.dumps({'chunk': chunk.choices[0].delta.content, 'done': False})}\n\n"
                     # Send final done signal
                     yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
                 except Exception as e:
@@ -1760,7 +1763,8 @@ async def run_llm_chat(
         else:
             # Non-streaming response
             params["temperature"] = get_temperature(params["model"])
-            response = await litellm.acompletion(**params)
+            async with ad.llm.llm_concurrency(request.model):
+                response = await litellm.acompletion(**params)
             
             return {
                 "id": response.id,

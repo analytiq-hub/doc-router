@@ -8,9 +8,12 @@ import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import colors from 'tailwindcss/colors';
 import LLMTestModal from './LLMTestModal';
 import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
+import { useLlmMaxConcurrentSettings } from './useLlmMaxConcurrentSettings';
 
 const LLMModelsConfig: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
+  const { loadMaxConcurrentSettings, createMaxConcurrentColumn } =
+    useLlmMaxConcurrentSettings(docRouterAccountApi);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [chatModels, setChatModels] = useState<LLMChatModel[]>([]);
   const [embeddingModels, setEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
@@ -29,7 +32,8 @@ const LLMModelsConfig: React.FC = () => {
         setLoading(true);
         const [providersResponse, modelsResponse] = await Promise.all([
           docRouterAccountApi.listLLMProviders(),
-          docRouterAccountApi.listLLMModels({})
+          docRouterAccountApi.listLLMModels({}),
+          loadMaxConcurrentSettings(),
         ]);
         setProviders(providersResponse.providers);
         setChatModels(modelsResponse.chat_models);
@@ -43,7 +47,12 @@ const LLMModelsConfig: React.FC = () => {
     };
 
     fetchData();
-  }, [docRouterAccountApi]);
+  }, [docRouterAccountApi, loadMaxConcurrentSettings]);
+
+  const maxConcurrentColumn = createMaxConcurrentColumn({
+    getModelName: (row) => String(row.name),
+    isEnabled: (row) => Boolean(row.enabled),
+  });
 
   const handleToggleModel = async (providerName: string, model: string, enabled: boolean) => {
     const provider = providers.find(p => p.name === providerName);
@@ -126,6 +135,7 @@ const LLMModelsConfig: React.FC = () => {
         </Button>
       ),
     },
+    maxConcurrentColumn,
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
     { field: 'max_output_tokens', headerName: 'Max Output Tokens', width: 140, minWidth: 140 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
@@ -166,6 +176,7 @@ const LLMModelsConfig: React.FC = () => {
         </Button>
       ),
     },
+    maxConcurrentColumn,
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
     { field: 'dimensions', headerName: 'Dimensions', width: 120, minWidth: 120 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
@@ -243,7 +254,10 @@ const LLMModelsConfig: React.FC = () => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-lg font-semibold text-gray-900 mb-6">LLM Models Configuration</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-2">LLM Models Configuration</h2>
+      <p className="text-sm text-gray-600 mb-6">
+        Max concurrent limits are per worker process. Leave empty or set to 0 for unlimited (default).
+      </p>
       
       {/* Chat Models Section */}
       <div className="mb-8">

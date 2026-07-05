@@ -1209,6 +1209,7 @@ export interface AzureServicePrincipalConfig {
 /** GET/PATCH: deployment-wide worker limits (admin only). */
 export interface SystemSettings {
   textract_max_concurrent: number;
+  llm_max_concurrent_by_model: Record<string, number>;
   n_ocr_workers: number;
   n_llm_workers: number;
   n_kb_index_workers: number;
@@ -1219,6 +1220,7 @@ export interface SystemSettings {
 
 export interface SystemSettingsUpdate {
   textract_max_concurrent?: number;
+  llm_max_concurrent_by_model?: Record<string, number>;
   n_ocr_workers?: number;
   n_llm_workers?: number;
   n_kb_index_workers?: number;

@@ -68,4 +68,5 @@ async def aembedding(analytiq_client, model: str, texts: list) -> litellm.Embedd
 
         await add_azure_params(params)
 
-    return await litellm.aembedding(**params)
+    async with ad.llm.llm_concurrency(model):
+        return await litellm.aembedding(**params)
