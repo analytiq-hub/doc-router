@@ -801,8 +801,27 @@ class FlowExecution(BaseModel):
     flow_name: str | None = None
 
 
+class FlowExecutionSummary(BaseModel):
+    """Lightweight execution row for list endpoints (no ``run_data`` / heavy payloads)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    execution_id: str
+    flow_id: str
+    organization_id: str
+    mode: str
+    status: str
+    started_at: datetime | str | None = None
+    finished_at: datetime | str | None = None
+    last_heartbeat_at: datetime | str | None = None
+    stop_requested: bool = False
+    trigger: dict[str, Any] = {}
+    #: Present on list responses when joined from ``flows`` (org-wide execution views).
+    flow_name: str | None = None
+
+
 class ListExecutionsResponse(BaseModel):
-    items: list[FlowExecution]
+    items: list[FlowExecutionSummary]
     total: int
 
 
@@ -831,42 +850,29 @@ async def _get_db():
     return ad.common.get_async_db()
 
 
-def _execution_doc_to_list_item(d: dict[str, Any]) -> FlowExecution:
-    """Serialize a `flow_executions` document for list responses (ISO timestamps for JSON)."""
+def _iso_or_none(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=UTC).isoformat()
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _execution_doc_to_summary(d: dict[str, Any]) -> FlowExecutionSummary:
+    """Serialize a projected `flow_executions` document for list responses."""
 
     fn = d.get("flow_name")
-    return FlowExecution(
+    return FlowExecutionSummary(
         execution_id=str(d["_id"]),
         flow_id=d["flow_id"],
-        flow_revid=d["flow_revid"],
         organization_id=d["organization_id"],
         mode=d["mode"],
         status=d["status"],
-        started_at=(
-            d["started_at"].replace(tzinfo=UTC).isoformat()
-            if isinstance(d.get("started_at"), datetime)
-            else None
-        ),
-        finished_at=(
-            d["finished_at"].replace(tzinfo=UTC).isoformat()
-            if isinstance(d.get("finished_at"), datetime)
-            else d.get("finished_at")
-        ),
-        last_heartbeat_at=(
-            d["last_heartbeat_at"].replace(tzinfo=UTC).isoformat()
-            if isinstance(d.get("last_heartbeat_at"), datetime)
-            else d.get("last_heartbeat_at")
-        ),
+        started_at=_iso_or_none(d.get("started_at")),
+        finished_at=_iso_or_none(d.get("finished_at")),
+        last_heartbeat_at=_iso_or_none(d.get("last_heartbeat_at")),
         stop_requested=bool(d.get("stop_requested")),
-        last_node_executed=d.get("last_node_executed"),
-        run_data=d.get("run_data") or {},
-        error=d.get("error"),
         trigger=d.get("trigger") or {},
-        target_node_id=d.get("target_node_id"),
-        initial_run_data=d.get("initial_run_data"),
-        completed_nodes=[str(x) for x in (d.get("completed_nodes") or []) if x],
-        resumed_from=str(d["resumed_from"]) if d.get("resumed_from") else None,
-        resumed_by=str(d["resumed_by"]) if d.get("resumed_by") else None,
         flow_name=str(fn) if fn is not None else None,
     )
 
@@ -2206,10 +2212,24 @@ async def list_executions(
                 }
             }
         },
-        {"$project": {"_flow_join": 0}},
+        {
+            "$project": {
+                "_id": 1,
+                "flow_id": 1,
+                "organization_id": 1,
+                "mode": 1,
+                "status": 1,
+                "started_at": 1,
+                "finished_at": 1,
+                "last_heartbeat_at": 1,
+                "stop_requested": 1,
+                "trigger": 1,
+                "flow_name": 1,
+            }
+        },
     ]
     docs = await db.flow_executions.aggregate(pipeline).to_list(limit)
-    items = [_execution_doc_to_list_item(d) for d in docs]
+    items = [_execution_doc_to_summary(d) for d in docs]
     return {"items": items, "total": total}
 
 

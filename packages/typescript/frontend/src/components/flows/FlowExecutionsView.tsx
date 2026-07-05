@@ -13,7 +13,7 @@ import ReactFlow, {
 } from 'reactflow';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import 'reactflow/dist/style.css';
-import type { FlowExecution, FlowNodeType } from '@docrouter/sdk';
+import type { FlowExecution, FlowExecutionSummary, FlowNodeType } from '@docrouter/sdk';
 import type { FlowRfNodeData } from './flowRf';
 import { FLOW_CANVAS_GRID_PX, snapRfNodesPositions } from './canvasGrid';
 import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
@@ -80,11 +80,11 @@ function toCanvasEdges(edges: Edge[]): Edge[] {
   }));
 }
 
-function statusRunning(e: FlowExecution) {
+function statusRunning(e: FlowExecutionSummary) {
   return e.status === 'queued' || e.status === 'running';
 }
 
-function formatDuration(e: FlowExecution) {
+function formatDuration(e: FlowExecutionSummary) {
   if (!e.started_at) return '—';
   const end = e.finished_at ? new Date(e.finished_at).getTime() : Date.now();
   const start = new Date(e.started_at).getTime();
@@ -120,7 +120,7 @@ const FlowExecutionsView: React.FC<{
 }> = ({ orgApi, flowId, nodeTypes, fallbackNodes, fallbackEdges, onEditFlowNode, suppressTopChrome }) => {
   const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
-  const [list, setList] = useState<FlowExecution[]>([]);
+  const [list, setList] = useState<FlowExecutionSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [err, setErr] = useState('');
   const [listLoading, setListLoading] = useState(true);

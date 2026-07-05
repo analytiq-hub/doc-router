@@ -227,8 +227,24 @@ export interface FlowSourceRef {
   previous_node_run?: number;
 }
 
+/** Lightweight execution row returned by list endpoints (no ``run_data``). */
+export interface FlowExecutionSummary {
+  execution_id: string;
+  flow_id: string;
+  organization_id: string;
+  mode: string;
+  status: FlowExecutionStatus;
+  started_at: string | null;
+  finished_at: string | null;
+  last_heartbeat_at: string | null;
+  stop_requested: boolean;
+  trigger: Record<string, unknown>;
+  /** Populated on org-wide execution list responses when the flow header exists. */
+  flow_name?: string | null;
+}
+
 export interface ListExecutionsResponse {
-  items: FlowExecution[];
+  items: FlowExecutionSummary[];
   total: number;
 }
 

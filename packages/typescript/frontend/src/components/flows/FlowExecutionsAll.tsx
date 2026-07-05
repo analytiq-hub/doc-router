@@ -3,16 +3,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { FlowExecution } from '@docrouter/sdk';
+import type { FlowExecutionSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
 
-function statusRunning(e: FlowExecution) {
+function statusRunning(e: FlowExecutionSummary) {
   return e.status === 'queued' || e.status === 'running';
 }
 
-function formatDuration(e: FlowExecution) {
+function formatDuration(e: FlowExecutionSummary) {
   if (!e.started_at) return '—';
   const end = e.finished_at ? new Date(e.finished_at).getTime() : Date.now();
   const start = new Date(e.started_at).getTime();
@@ -22,7 +22,7 @@ function formatDuration(e: FlowExecution) {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-function statusLabel(e: FlowExecution) {
+function statusLabel(e: FlowExecutionSummary) {
   switch (e.status) {
     case 'success':
       return 'Succeeded';
@@ -44,7 +44,7 @@ function statusLabel(e: FlowExecution) {
 const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
   const api = useFlowApi(organizationId);
-  const [list, setList] = useState<FlowExecution[]>([]);
+  const [list, setList] = useState<FlowExecutionSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type {
   FlowExecution,
+  FlowExecutionSummary,
   FlowNode,
   FlowNodeType,
   FlowPinData,
@@ -77,7 +78,7 @@ async function sleepMs(ms: number): Promise<void> {
 
 /** Newest list row for this test leaf, started at/after the current listen session (epoch ms). */
 function pickLatestWebhookTestExecutionId(
-  items: FlowExecution[],
+  items: FlowExecutionSummary[],
   flowId: string,
   leaf: string,
   minStartedMs: number,
@@ -753,7 +754,7 @@ export default function FlowDetailPageClient({
     const tick = async () => {
       if (cancelled) return;
       try {
-        const res = await api.getHttpClient().get<{ items: FlowExecution[]; total: number }>(
+        const res = await api.getHttpClient().get<{ items: FlowExecutionSummary[]; total: number }>(
           `/v0/orgs/${organizationId}/executions`,
           { params: { flow_id: flowId, mode: 'webhook_test', limit: 30 } },
         );
