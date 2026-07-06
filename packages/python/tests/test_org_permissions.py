@@ -239,3 +239,24 @@ async def test_enterprise_creation_restriction(test_db, mock_auth):
     except Exception as e:
         logger.error(f"test_enterprise_creation_restriction() failed: {e}")
         raise
+
+
+@pytest.mark.asyncio
+async def test_org_member_can_get_organization_by_id(org_and_users, mock_auth):
+    """Non-admin org members can fetch their organization via organization_id query."""
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+
+    from app.main import app
+
+    app.dependency_overrides.clear()
+
+    response = client.get(
+        f"/v0/account/organizations?organization_id={org_id}",
+        headers=get_token_headers(member["account_token"]),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["organizations"]) == 1
+    assert data["organizations"][0]["id"] == org_id

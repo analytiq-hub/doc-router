@@ -1,6 +1,7 @@
 # Standard library imports
 import os
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Optional, Tuple
 from contextlib import asynccontextmanager
 from bson import ObjectId
@@ -47,6 +48,26 @@ def get_api_context(path: str) -> tuple[str, Optional[str]]:
     elif len(parts) > 2 and parts[2] == "orgs":
         return "organization", parts[3]
     return "unknown", None
+
+def is_access_token_expired(stored_token: dict) -> bool:
+    """Return True when ``lifetime`` (days) has elapsed since ``created_at``. 0 = no expiry."""
+    lifetime = stored_token.get("lifetime") or 0
+    try:
+        lifetime_days = int(lifetime)
+    except (TypeError, ValueError):
+        lifetime_days = 0
+    if lifetime_days <= 0:
+        return False
+
+    created_at = stored_token.get("created_at")
+    if not isinstance(created_at, datetime):
+        return False
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+
+    expires_at = created_at + timedelta(days=lifetime_days)
+    return datetime.now(UTC) >= expires_at
+
 
 def extract_org_id_from_path(path: str) -> Optional[str]:
     """
@@ -141,6 +162,9 @@ async def get_current_user(
     stored_token = await db.access_tokens.find_one(token_query)
 
     if stored_token:
+        if is_access_token_expired(stored_token):
+            raise HTTPException(status_code=401, detail="API token expired")
+
         # Validate that user_id from stored token exists in database
         user = await db.users.find_one({"_id": ObjectId(stored_token["user_id"])})
         if not user:
@@ -291,5 +315,7 @@ async def get_org_id_from_token(token: str) -> Optional[str]:
     )
     if not stored_token:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+    if is_access_token_expired(stored_token):
+        raise HTTPException(status_code=401, detail="API token expired")
+
     return stored_token.get("organization_id")
