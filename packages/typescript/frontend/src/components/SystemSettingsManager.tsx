@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SystemSettings } from '@docrouter/sdk';
+import type { SystemSettings, SystemSettingsUpdate } from '@docrouter/sdk';
 import { DocRouterAccountApi } from '@/utils/api';
 import { getApiErrorMsg } from '@/utils/api';
 
@@ -42,6 +42,7 @@ function clampWorkerCount(value: number): number {
 function defaultSettings(): SystemSettings {
   return {
     textract_max_concurrent: DEFAULT_TEXTRACT_MAX_CONCURRENT,
+    llm_max_concurrent_by_model: {},
     n_ocr_workers: DEFAULT_WORKER_COUNT,
     n_llm_workers: DEFAULT_WORKER_COUNT,
     n_kb_index_workers: DEFAULT_WORKER_COUNT,
@@ -80,7 +81,7 @@ const SystemSettingsManager: React.FC = () => {
     setError(null);
     setSuccess(null);
 
-    const payload: SystemSettings = {
+    const payload: SystemSettingsUpdate = {
       textract_max_concurrent: clampTextractMaxConcurrent(settings.textract_max_concurrent),
       n_ocr_workers: clampWorkerCount(settings.n_ocr_workers),
       n_llm_workers: clampWorkerCount(settings.n_llm_workers),
@@ -88,7 +89,7 @@ const SystemSettingsManager: React.FC = () => {
       n_webhook_workers: clampWorkerCount(settings.n_webhook_workers),
       n_flow_run_workers: clampWorkerCount(settings.n_flow_run_workers),
     };
-    setSettings(payload);
+    setSettings((prev) => ({ ...prev, ...payload }));
 
     try {
       const saved = await docRouterAccountApi.updateSystemSettings(payload);
