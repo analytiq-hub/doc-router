@@ -2,6 +2,7 @@
 
 # Standard library imports
 import logging
+import re
 from datetime import datetime, UTC
 from typing import Any, List, Literal, Optional
 from enum import Enum
@@ -192,15 +193,26 @@ async def list_organizations(
 
     # Apply organization name search
     if name_search:
-        and_filters.append({"name": {"$regex": name_search, "$options": "i"}})
+        if len(name_search) > limits.MAX_SEARCH_TERM_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"name_search exceeds maximum length of {limits.MAX_SEARCH_TERM_LENGTH}",
+            )
+        and_filters.append({"name": {"$regex": re.escape(name_search), "$options": "i"}})
 
     # Apply member name/email search
     if member_search:
+        if len(member_search) > limits.MAX_SEARCH_TERM_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"member_search exceeds maximum length of {limits.MAX_SEARCH_TERM_LENGTH}",
+            )
+        escaped_member_search = re.escape(member_search)
         # Find users matching by name or email
         user_cursor = db.users.find({
             "$or": [
-                {"name": {"$regex": member_search, "$options": "i"}},
-                {"email": {"$regex": member_search, "$options": "i"}},
+                {"name": {"$regex": escaped_member_search, "$options": "i"}},
+                {"email": {"$regex": escaped_member_search, "$options": "i"}},
             ]
         }, {"_id": 1})
         matching_users = await user_cursor.to_list(None)

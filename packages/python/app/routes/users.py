@@ -2,6 +2,7 @@
 
 # Standard library imports
 import logging
+import re
 from datetime import datetime, UTC
 from typing import List, Optional
 
@@ -172,10 +173,16 @@ async def list_users(
 
     # Apply search_name filter if provided (search across entire user collection)
     if search_name:
+        if len(search_name) > limits.MAX_SEARCH_TERM_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"search_name exceeds maximum length of {limits.MAX_SEARCH_TERM_LENGTH}",
+            )
+        escaped_search_name = re.escape(search_name)
         or_filter = {
             "$or": [
-                {"name": {"$regex": search_name, "$options": "i"}},
-                {"email": {"$regex": search_name, "$options": "i"}},
+                {"name": {"$regex": escaped_search_name, "$options": "i"}},
+                {"email": {"$regex": escaped_search_name, "$options": "i"}},
             ]
         }
         and_filters.append(or_filter)

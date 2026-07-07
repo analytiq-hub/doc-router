@@ -297,10 +297,13 @@ async def update_schema(
     if not any(member["user_id"] == current_user.user_id for member in org["members"]):
         raise HTTPException(status_code=403, detail="Not authorized to update schemas in this organization")
 
-    # Get the existing schema and latest revision
-    existing_schema = await db.schemas.find_one({"_id": ObjectId(schema_id)})
+    # Get the existing schema and latest revision (scoped to organization)
+    existing_schema = await db.schemas.find_one({
+        "_id": ObjectId(schema_id),
+        "organization_id": organization_id,
+    })
     if not existing_schema:
-        raise HTTPException(status_code=404, detail="Schema not found")
+        raise HTTPException(status_code=404, detail="Schema not found or not in this organization")
     
     latest_schema_revision = await db.schema_revisions.find_one(
         {"schema_id": schema_id},
@@ -323,7 +326,7 @@ async def update_schema(
     if only_name_changed:
         # Update the name in the schemas collection
         result = await db.schemas.update_one(
-            {"_id": ObjectId(schema_id)},
+            {"_id": ObjectId(schema_id), "organization_id": organization_id},
             {"$set": {"name": new_name}}
         )
         
@@ -343,7 +346,7 @@ async def update_schema(
     # Update the schemas collection if name changed
     if new_name != existing_schema["name"]:
         await db.schemas.update_one(
-            {"_id": ObjectId(schema_id)},
+            {"_id": ObjectId(schema_id), "organization_id": organization_id},
             {"$set": {"name": new_name}}
         )
     

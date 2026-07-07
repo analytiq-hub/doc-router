@@ -288,4 +288,75 @@ async def test_schema_permissions(org_and_users, test_db):
 
     # Outsider cannot delete schema
     resp = client.delete(f"/v0/orgs/{org_id}/schemas/{schema_revid}", headers=get_token_headers(outsider["token"]))
-    assert resp.status_code in (401, 403) 
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_update_schema_cross_tenant_denied(org_and_users, test_db):
+    """A member of org B cannot update a schema that belongs to org A."""
+    from bson import ObjectId
+    from datetime import datetime, UTC
+    import secrets
+    import analytiq_data as ad
+    from app.routes.payments import sync_payments_customer
+
+    org_a_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+
+    schema_data = {
+        "name": "Org A Schema",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "org_a_schema",
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"field1": {"type": "string"}},
+                    "required": ["field1"],
+                },
+                "strict": True,
+            },
+        },
+    }
+    resp = client.post(
+        f"/v0/orgs/{org_a_id}/schemas",
+        json=schema_data,
+        headers=get_token_headers(member["token"]),
+    )
+    assert resp.status_code == 200
+    schema_id = resp.json()["schema_id"]
+    original_name = resp.json()["name"]
+
+    org_b_id = str(ObjectId())
+    await test_db.organizations.insert_one({
+        "_id": ObjectId(org_b_id),
+        "name": "Other Org",
+        "members": [{"user_id": member["id"], "role": "user"}],
+        "type": "team",
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
+    })
+    await sync_payments_customer(test_db, org_b_id)
+
+    org_b_token = f"org_{secrets.token_urlsafe(32)}"
+    await test_db.access_tokens.insert_one({
+        "user_id": member["id"],
+        "organization_id": org_b_id,
+        "name": "member-org-b-token",
+        "token": ad.crypto.encrypt_secret(org_b_token),
+        "fingerprint": ad.crypto.fingerprint_secret(org_b_token),
+        "created_at": datetime.now(UTC),
+        "lifetime": 30,
+    })
+
+    resp = client.put(
+        f"/v0/orgs/{org_b_id}/schemas/{schema_id}",
+        json={"name": "Cross-tenant overwrite attempt"},
+        headers=get_token_headers(org_b_token),
+    )
+    assert resp.status_code == 404, f"Expected 404 for cross-tenant update, got {resp.status_code}: {resp.text}"
+
+    schema_doc = await test_db.schemas.find_one({"_id": ObjectId(schema_id)})
+    assert schema_doc["name"] == original_name
+    assert schema_doc["organization_id"] == org_a_id 
