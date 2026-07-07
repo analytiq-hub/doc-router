@@ -2,6 +2,7 @@ import pytest
 from bson import ObjectId
 import os
 import logging
+from datetime import datetime, UTC, timedelta
 
 # Import shared test utilities
 from .conftest_utils import (
@@ -388,4 +389,44 @@ async def test_get_organization_from_token(test_db, mock_auth):
     finally:
         pass  # mock_auth fixture handles cleanup
     
-    logger.info(f"test_get_organization_from_token() end") 
+    logger.info(f"test_get_organization_from_token() end")
+
+
+@pytest.mark.asyncio
+async def test_expired_access_token_rejected(test_db, mock_auth):
+    """Expired API tokens must be rejected at authentication time."""
+    token_data = {
+        "name": "Short-lived Token",
+        "lifetime": 30,
+    }
+
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/access_tokens",
+        json=token_data,
+        headers=get_auth_headers(),
+    )
+    assert create_response.status_code == 200
+    token_result = create_response.json()
+    api_token = token_result["token"]
+    token_id = token_result["id"]
+
+    await test_db.access_tokens.update_one(
+        {"_id": ObjectId(token_id)},
+        {"$set": {"created_at": datetime.now(UTC) - timedelta(days=31)}},
+    )
+
+    from app.main import app
+
+    original_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides.clear()
+
+    try:
+        docs_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/documents",
+            headers=get_token_headers(api_token),
+        )
+        assert docs_response.status_code == 401
+        assert docs_response.json()["detail"] == "API token expired"
+    finally:
+        app.dependency_overrides = original_overrides
+        await test_db.access_tokens.delete_one({"_id": ObjectId(token_id)})

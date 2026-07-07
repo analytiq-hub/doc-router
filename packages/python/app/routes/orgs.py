@@ -24,6 +24,7 @@ from app.auth import (
     get_current_user,
     is_system_admin,
     is_organization_admin,
+    is_organization_member,
 )
 from app.models import User
 from app.routes.payments import sync_customer, delete_payments_customer
@@ -150,14 +151,14 @@ async def list_organizations(
         if not organization:
             raise HTTPException(status_code=404, detail="Organization not found")
 
-        # Check permissions
-        is_org_admin = await is_organization_admin(organization_id, current_user.user_id)
-
-        if not (is_sys_admin or is_org_admin):
-            raise HTTPException(
-                status_code=403,
-                detail="Not authorized to view this organization"
-            )
+        # Check permissions: system admins, org admins, and org members may fetch by id
+        if not is_sys_admin:
+            is_org_member = await is_organization_member(organization_id, current_user.user_id)
+            if not is_org_member:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to view this organization"
+                )
 
         ocr_catalog = await _organization_ocr_catalog()
         return ListOrganizationsResponse(organizations=[
