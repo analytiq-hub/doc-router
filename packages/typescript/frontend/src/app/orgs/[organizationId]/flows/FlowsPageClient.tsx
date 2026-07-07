@@ -144,6 +144,7 @@ export default function FlowsPageClient({
         <div className="flex gap-8">
           <button
             type="button"
+            data-tour="flows-tab"
             onClick={() => handleTabChange('flows')}
             className={`pb-4 px-1 relative font-semibold text-base ${
               tab === 'flows'

@@ -48,7 +48,6 @@ interface MenuItem {
   icon: React.ComponentType<SvgIconProps>;
   href: string;
   tooltip: string;
-  dataTour?: string;
 }
 
 interface LayoutProps {

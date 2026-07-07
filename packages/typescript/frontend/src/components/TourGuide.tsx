@@ -57,22 +57,6 @@ const TourGuide = () => {
         page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
       },
       {
-        id: 'prompt-schema',
-        title: 'Assign Schema',
-        content: 'Assign a schema to your prompt.',
-        selector: '[data-tour="prompt-schema-select"]',
-        position: 'top',
-        page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
-      },
-      {
-        id: 'prompt-model',
-        title: 'Assign Model',
-        content: 'Assign a model to your prompt.',
-        selector: '[data-tour="prompt-model-select"]',
-        position: 'top',
-        page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
-      },
-      {
         id: 'upload',
         title: 'Upload Docs',
         content: 'Upload your documents for processing.',
@@ -85,7 +69,7 @@ const TourGuide = () => {
         title: 'Documents',
         content: 'Click on a document to view the extracted data.',
         selector: '[data-tour="documents"]',
-        position: 'bottom',
+        position: 'right',
         page: `/orgs/${orgIdForTour}/docs?tab=documents`
       },
       {
@@ -95,6 +79,14 @@ const TourGuide = () => {
         selector: '[data-tour="tag-create"]',
         position: 'right',
         page: `/orgs/${orgIdForTour}/tags?tab=tag-create`
+      },
+      {
+        id: 'flows',
+        title: 'Flows',
+        content: 'Build visual workflows to automate document processing—connect triggers, AI steps, and integrations in the flow editor.',
+        selector: '[data-tour="flows-tab"]',
+        position: 'right',
+        page: `/orgs/${orgIdForTour}/flows?tab=flows`
       }
     ];
   }, [orgIdForTour]);
