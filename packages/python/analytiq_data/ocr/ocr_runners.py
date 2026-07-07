@@ -210,7 +210,7 @@ async def run_document_ocr(
         from analytiq_data.ocr.pymupdf_ocr import extract_pymupdf_pdf
 
         try:
-            payload = extract_pymupdf_pdf(pdf_bytes)
+            payload = await asyncio.to_thread(extract_pymupdf_pdf, pdf_bytes)
         except Exception as e:
             logger.error(
                 f"OCR engine pymupdf failed for org_id={org_id} document_id={document_id}: {e}"

@@ -6,10 +6,15 @@ used (no Tesseract). Output matches the pages-markdown shape used by Mistral/LLM
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import fitz  # PyMuPDF
 import pymupdf4llm
+
+# PyMuPDF/MuPDF keeps process-wide internal state; concurrent thread use is unsupported.
+# Serialize all pymupdf OCR extraction (typically via asyncio.to_thread).
+_PYMUPDF_LOCK = threading.Lock()
 
 
 def extract_pymupdf_pdf(pdf_bytes: bytes) -> dict[str, Any]:
@@ -18,26 +23,29 @@ def extract_pymupdf_pdf(pdf_bytes: bytes) -> dict[str, Any]:
 
     ``markdown`` is GitHub-flavored Markdown from PyMuPDF4LLM (headings, lists, tables
     where detectable), not raw ``Page.get_text()`` plain text.
-    """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    try:
-        chunks = pymupdf4llm.to_markdown(
-            doc,
-            show_progress=False,
-            use_ocr=False,
-            page_chunks=True,
-        )
-        pages: list[dict[str, Any]] = []
-        if isinstance(chunks, list):
-            for i, chunk in enumerate(chunks):
-                md = ""
-                if isinstance(chunk, dict):
-                    md = chunk.get("text") or ""
-                pages.append({"index": i, "markdown": md})
-        else:
-            # Unexpected shape; store whole document as page 0
-            pages.append({"index": 0, "markdown": str(chunks or "")})
 
-        return {"ocr_engine": "pymupdf", "pages": pages}
-    finally:
-        doc.close()
+    Safe to call from ``asyncio.to_thread``; at most one extraction runs at a time.
+    """
+    with _PYMUPDF_LOCK:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            chunks = pymupdf4llm.to_markdown(
+                doc,
+                show_progress=False,
+                use_ocr=False,
+                page_chunks=True,
+            )
+            pages: list[dict[str, Any]] = []
+            if isinstance(chunks, list):
+                for i, chunk in enumerate(chunks):
+                    md = ""
+                    if isinstance(chunk, dict):
+                        md = chunk.get("text") or ""
+                    pages.append({"index": i, "markdown": md})
+            else:
+                # Unexpected shape; store whole document as page 0
+                pages.append({"index": 0, "markdown": str(chunks or "")})
+
+            return {"ocr_engine": "pymupdf", "pages": pages}
+        finally:
+            doc.close()
