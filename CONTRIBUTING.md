@@ -15,7 +15,7 @@ Thank you for your interest in contributing to Smart Document Router! This docum
 
 ### Prerequisites
 - Node.js 18+ and npm
-- Python 3.9+
+- Python 3.11+
 - MongoDB
 - Docker (optional)
 
