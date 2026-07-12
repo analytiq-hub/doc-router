@@ -389,7 +389,7 @@ Default is `global`. LiteLLM uses this as `vertex_location` with `vertex_project
 2. Enable the provider.
 3. Enable models, for example:
   - `vertex_ai/gemini-2.5-flash` — strong quality/latency balance for extraction
-  - `vertex_ai/gemini-3.1-flash-lite-preview` — newer flash tier
+  - `vertex_ai/gemini-3.1-flash-lite` — newer flash tier
   - `vertex_ai/gemini-embedding-001` — embeddings for knowledge bases
 4. Run **Test** on `vertex_ai/gemini-2.5-flash`.
 
@@ -404,7 +404,7 @@ Default is `global`. LiteLLM uses this as `vertex_location` with `vertex_project
 | DocRouter UI | LLM Manager → Gemini            | GCP setup + LLM Manager → Vertex AI |
 
 
-For the best **quality/performance** combo on Vertex, start with `**vertex_ai/gemini-2.5-flash`**; move to `**vertex_ai/gemini-3.1-flash-lite-preview`** when you want the newest flash generation.
+For the best **quality/performance** combo on Vertex, start with `**vertex_ai/gemini-2.5-flash`**; move to `**vertex_ai/gemini-3.1-flash-lite`** when you want the newest flash generation.
 
 ---
 

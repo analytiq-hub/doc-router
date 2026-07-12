@@ -195,3 +195,78 @@ async def test_tool_executor_dispatch_error_json_is_failure(ctx: ad.flows.Execut
     assert out[0][0].json["success"] is False
     assert out[0][0].json["tool_result"] == {"error": "Knowledge base not found"}
     assert ctx.run_data["tool"]["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_all_items_from_input_combines_rows(ctx: ad.flows.ExecutionContext) -> None:
+    nodes, connections = _tool_graph(arguments_source="from_input")
+    exec_node = next(n for n in nodes if n["id"] == "exec")
+    exec_node["parameters"]["mode"] = "all_items"
+    ctx.tool_consumer_wiring = tool_consumer_wiring(nodes, connections)
+
+    items = [
+        ad.flows.FlowItem(json={"q": "first"}, binary={}, meta={}),
+        ad.flows.FlowItem(json={"q": "second"}, binary={}, meta={}),
+    ]
+
+    with patch(
+        "analytiq_data.flows.nodes.tool_executor.execute_tool_call",
+        new_callable=AsyncMock,
+        return_value='{"ok": true}',
+    ) as mock_dispatch:
+        out = await FlowsToolExecutorNode().execute(ctx, exec_node, [items])
+
+    assert len(out[0]) == 1
+    assert out[0][0].json["success"] is True
+    mock_dispatch.assert_awaited_once()
+    tc = mock_dispatch.await_args.args[0]
+    assert tc.arguments == {"items": [{"q": "first"}, {"q": "second"}]}
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_all_items_input_field_combines_rows(ctx: ad.flows.ExecutionContext) -> None:
+    nodes, connections = _tool_graph(arguments_source="input_field")
+    exec_node = next(n for n in nodes if n["id"] == "exec")
+    exec_node["parameters"]["mode"] = "all_items"
+    ctx.tool_consumer_wiring = tool_consumer_wiring(nodes, connections)
+
+    items = [
+        ad.flows.FlowItem(json={"tool_arguments": {"q": "alpha"}}, binary={}, meta={}),
+        ad.flows.FlowItem(json={"tool_arguments": {"q": "beta"}}, binary={}, meta={}),
+    ]
+
+    with patch(
+        "analytiq_data.flows.nodes.tool_executor.execute_tool_call",
+        new_callable=AsyncMock,
+        return_value='{"ok": true}',
+    ) as mock_dispatch:
+        out = await FlowsToolExecutorNode().execute(ctx, exec_node, [items])
+
+    assert len(out[0]) == 1
+    tc = mock_dispatch.await_args.args[0]
+    assert tc.arguments == {"items": [{"q": "alpha"}, {"q": "beta"}]}
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_per_item_dispatches_once_per_row(ctx: ad.flows.ExecutionContext) -> None:
+    nodes, connections = _tool_graph(arguments_source="from_input")
+    exec_node = next(n for n in nodes if n["id"] == "exec")
+    exec_node["parameters"]["mode"] = "per_item"
+    ctx.tool_consumer_wiring = tool_consumer_wiring(nodes, connections)
+
+    items = [
+        ad.flows.FlowItem(json={"q": "first"}, binary={}, meta={}),
+        ad.flows.FlowItem(json={"q": "second"}, binary={}, meta={}),
+    ]
+
+    with patch(
+        "analytiq_data.flows.nodes.tool_executor.execute_tool_call",
+        new_callable=AsyncMock,
+        return_value='{"echo": "x"}',
+    ) as mock_dispatch:
+        out = await FlowsToolExecutorNode().execute(ctx, exec_node, [items])
+
+    assert len(out[0]) == 2
+    assert mock_dispatch.await_count == 2
+    assert mock_dispatch.await_args_list[0].args[0].arguments == {"q": "first"}
+    assert mock_dispatch.await_args_list[1].args[0].arguments == {"q": "second"}

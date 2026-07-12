@@ -135,7 +135,7 @@ When choosing a model for `create_prompt` or `update_prompt`:
 |-----------|------------------------------------------|
 | `gemini/gemini-3-flash-preview` | `gemini/gemini-3-pro-preview` |
 | `gemini/gemini-2.5-flash` | `gemini/gemini-2.5-pro` |
-| `vertex_ai/gemini-3.1-flash-lite-preview` | `vertex_ai/gemini-3.1-pro-preview` |
+| `vertex_ai/gemini-3.1-flash-lite` | `vertex_ai/gemini-3.1-pro-preview` |
 | `gpt-4o-mini` | `gpt-5.1`, `gpt-5.2` |
 | `azure/gpt-4.1-nano` | — |
 | `mistral/mistral-tiny` | — |

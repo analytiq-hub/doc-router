@@ -59,8 +59,6 @@ async def setup_admin(analytiq_client):
         if await users.find_one({"email": admin_email}):
             return
 
-        await ad.llm.providers.setup_llm_providers(analytiq_client)
-
         hashed_password = hashpw(admin_password.encode(), gensalt(12))
         result = await users.insert_one({
             "email": admin_email,

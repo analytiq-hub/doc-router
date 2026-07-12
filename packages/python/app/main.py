@@ -94,6 +94,11 @@ async def lifespan(app):
 
     analytiq_client = ad.common.get_analytiq_client()
     await startup.setup_admin(analytiq_client)
+    # Re-sync LLM providers/models from source config on every startup so that
+    # code changes (new models, renames) propagate to the llm_providers
+    # collection. The upsert preserves user-set tokens, enabled models, and
+    # chat-agent selections, so it is safe to run unconditionally.
+    await ad.llm.providers.setup_llm_providers(analytiq_client)
     await startup.setup_api_creds(analytiq_client)
 
     # Initialize payments (Stripe sync only; indexes via ensure_runtime_indexes)

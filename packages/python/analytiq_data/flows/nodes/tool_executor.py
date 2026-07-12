@@ -62,6 +62,10 @@ class FlowsToolExecutorNode:
                 "type": "string",
                 "enum": ["per_item", "all_items"],
                 "default": "per_item",
+                "description": (
+                    "Per item runs one tool call for each inbound row. All items combines every row's "
+                    "arguments into a single tool call and produces one output row."
+                ),
                 "x-ui-widget": "select",
                 "x-ui-group": "Options",
             },
@@ -91,6 +95,28 @@ class FlowsToolExecutorNode:
             return dict(raw)
         args = params.get("arguments")
         return dict(args) if isinstance(args, dict) else {}
+
+    def _resolve_arguments_all_items(
+        self,
+        params: dict[str, Any],
+        items: list["ad.flows.FlowItem"],
+    ) -> dict[str, Any]:
+        src = params.get("arguments_source") or "fixed"
+        if src == "fixed":
+            args = params.get("arguments")
+            return dict(args) if isinstance(args, dict) else {}
+        if src == "from_input":
+            return {"items": [dict(it.json or {}) for it in items]}
+        if src == "input_field":
+            field = str(params.get("arguments_field") or "tool_arguments")
+            collected: list[dict[str, Any]] = []
+            for it in items:
+                raw = (it.json or {}).get(field)
+                if not isinstance(raw, dict):
+                    raise ValueError(f"item.json[{field!r}] must be an object")
+                collected.append(dict(raw))
+            return {"items": collected}
+        raise ValueError("parameters.arguments_source must be fixed, from_input, or input_field")
 
     async def _record_run_data(
         self,
@@ -153,19 +179,20 @@ class FlowsToolExecutorNode:
         registry = WiredToolRegistry(wiring)
 
         in_items = inputs[0] if inputs else []
-        if mode == "all_items":
-            in_items = in_items[:1]
-
         out: list["ad.flows.FlowItem"] = []
         upstream_snapshot = ad.flows.materialize_node_data(context.run_data)
-        for idx, item in enumerate(in_items):
+
+        async def _dispatch_one(
+            *,
+            item: "ad.flows.FlowItem",
+            args: dict[str, Any],
+            idx: int,
+        ) -> "ad.flows.FlowItem":
             dispatch_start = datetime.now(UTC)
             t0 = time.time()
             wired = None
-            args: dict[str, Any] = {}
             try:
                 wired = registry.resolve(tool_name)
-                args = self._resolve_arguments(params, item)
                 tc = NormalizedToolCall(id=f"exec-{idx}", name=tool_name, arguments=args)
                 raw = await execute_tool_call(
                     tc,
@@ -186,7 +213,6 @@ class FlowsToolExecutorNode:
                 if not continue_on_fail:
                     raise
                 tool_result = {"error": str(e)}
-                args = dict(params.get("arguments") or {}) if isinstance(params.get("arguments"), dict) else {}
                 success = False
 
             elapsed_ms = int((time.time() - t0) * 1000)
@@ -200,18 +226,25 @@ class FlowsToolExecutorNode:
                     elapsed_ms=elapsed_ms,
                 )
 
-            out.append(
-                ad.flows.FlowItem(
-                    json={
-                        "tool_name": tool_name,
-                        "arguments": args if success else (params.get("arguments") or {}),
-                        "tool_result": tool_result,
-                        "success": success,
-                    },
-                    binary=dict(item.binary or {}),
-                    meta={"source_node_id": node["id"], "item_index": idx},
-                    paired_item=idx,
-                )
+            return ad.flows.FlowItem(
+                json={
+                    "tool_name": tool_name,
+                    "arguments": args if success else (params.get("arguments") or {}),
+                    "tool_result": tool_result,
+                    "success": success,
+                },
+                binary=dict(item.binary or {}),
+                meta={"source_node_id": node["id"], "item_index": idx},
+                paired_item=item.paired_item if item.paired_item is not None else idx,
             )
+
+        if mode == "all_items":
+            item = in_items[0] if in_items else ad.flows.FlowItem(json={}, binary={}, meta={})
+            args = self._resolve_arguments_all_items(params, in_items)
+            out.append(await _dispatch_one(item=item, args=args, idx=0))
+        else:
+            for idx, item in enumerate(in_items):
+                args = self._resolve_arguments(params, item)
+                out.append(await _dispatch_one(item=item, args=args, idx=idx))
 
         return [out]

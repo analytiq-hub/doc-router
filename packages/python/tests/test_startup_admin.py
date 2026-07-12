@@ -20,15 +20,9 @@ async def test_setup_admin_skips_when_admin_exists():
         "run_pending_schema_migrations_if_needed",
         new_callable=AsyncMock,
     ) as run_pending:
-        with patch.object(
-            startup.ad.llm.providers,
-            "setup_llm_providers",
-            new_callable=AsyncMock,
-        ) as setup_llm:
-            await startup.setup_admin(client)
+        await startup.setup_admin(client)
 
     run_pending.assert_not_called()
-    setup_llm.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -53,15 +47,9 @@ async def test_setup_admin_runs_pending_migrations_when_admin_missing():
             "run_pending_schema_migrations_if_needed",
             new_callable=AsyncMock,
         ) as run_pending:
-            with patch.object(
-                startup.ad.llm.providers,
-                "setup_llm_providers",
-                new_callable=AsyncMock,
-            ) as setup_llm:
-                await startup.setup_admin(client)
+            await startup.setup_admin(client)
 
     run_pending.assert_awaited_once()
-    setup_llm.assert_awaited_once()
 
 
 @pytest.mark.asyncio

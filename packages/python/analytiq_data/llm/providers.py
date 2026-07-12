@@ -135,7 +135,7 @@ LITELLM_MODEL_PATCHES: dict = {
         "supports_url_context": True,
         "supports_native_streaming": True,
     },
-    "vertex_ai/gemini-3.1-flash-lite-preview": {
+    "vertex_ai/gemini-3.1-flash-lite": {
         "cache_read_input_token_cost": 2.5e-08,
         "cache_read_input_token_cost_per_audio_token": 5e-08,
         "input_cost_per_audio_token": 5e-07,
@@ -576,23 +576,23 @@ def get_llm_providers() -> dict:
             "litellm_models_available": [
                 "vertex_ai/gemini-2.5-flash",
                 "vertex_ai/gemini-2.5-pro",
-                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-flash-lite",
                 "vertex_ai/gemini-3.1-pro-preview",
                 "vertex_ai/gemini-embedding-001",
             ],
             "litellm_models_enabled": [
                 "vertex_ai/gemini-2.5-flash",
                 "vertex_ai/gemini-2.5-pro",
-                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-flash-lite",
                 "vertex_ai/gemini-3.1-pro-preview",
                 "vertex_ai/gemini-embedding-001",
             ],
             "litellm_models_chat_agent": [
-                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-flash-lite",
                 "vertex_ai/gemini-3.1-pro-preview",
             ],
             "litellm_models_ocr": [
-                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-flash-lite",
                 "vertex_ai/gemini-3.1-pro-preview",
             ],
             "enabled": False,

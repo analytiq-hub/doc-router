@@ -62,6 +62,7 @@
           "all_items"
         ],
         "default": "per_item",
+        "description": "Per item runs one tool call for each inbound row. All items combines every row's arguments into a single tool call and produces one output row.",
         "x-ui-widget": "select",
         "x-ui-group": "Options"
       }
