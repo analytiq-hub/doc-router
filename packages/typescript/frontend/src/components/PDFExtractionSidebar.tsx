@@ -1044,7 +1044,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
 
       // Create the download data
       const downloadData = {
-        prompt_id: promptId,
+        prompt_revid: result.prompt_revid,
+        prompt_id: result.prompt_id,
         document_id: id,
         organization_id: organizationId,
         extraction_result: result.updated_llm_result,
@@ -1087,7 +1088,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         }
 
         const downloadData = {
-          prompt_id: promptId,
+          prompt_revid: localResult.prompt_revid,
+          prompt_id: localResult.prompt_id,
           document_id: id,
           organization_id: organizationId,
           extraction_result: localResult.updated_llm_result,
