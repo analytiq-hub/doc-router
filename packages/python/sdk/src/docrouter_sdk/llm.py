@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .models.llm import (
     LLMChatModel,
     LLMEmbeddingModel,
@@ -47,12 +47,20 @@ class LLMAPI:
         )
         return LLMRunResponse(**data)
     
-    def get_result(self, organization_id: str, document_id: str, prompt_id: str = None, prompt_revid: str = None, prompt_revid_fallback: bool = False) -> LLMResult:
+    def get_result(
+        self,
+        organization_id: str,
+        document_id: str,
+        prompt_id: Optional[str] = None,
+        prompt_revid: Optional[str] = None,
+        prompt_revid_fallback: bool = False,
+        fallback: Optional[bool] = None,
+    ) -> LLMResult:
         """
         Get LLM results for a document
 
-        Either prompt_id or prompt_revid must be provided. If neither is given,
-        the virtual default prompt ("default") is retrieved.
+        Provide ``prompt_id`` or ``prompt_revid``; if neither is given, the virtual
+        default prompt ("default") is used.
 
         Args:
             organization_id: The organization ID
@@ -63,11 +71,17 @@ class LLMAPI:
                 single stable ID that survives prompt edits.
             prompt_revid: The prompt revision ID to retrieve
             prompt_revid_fallback: If True, return the latest available result for the
-                prompt_id behind the given prompt_revid
+                prompt behind the given prompt_revid
+            fallback: Deprecated alias for ``prompt_revid_fallback``, retained for
+                backward compatibility.
 
         Returns:
             LLMResult with analysis results
         """
+        # Backward-compat: `fallback` was renamed to `prompt_revid_fallback`.
+        if fallback is not None:
+            prompt_revid_fallback = fallback
+
         # Preserve historical behavior: with no prompt selector, target the default prompt.
         if prompt_id is None and prompt_revid is None:
             prompt_revid = "default"

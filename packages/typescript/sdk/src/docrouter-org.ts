@@ -9,6 +9,7 @@ import {
   GetDocumentResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
+  GetLLMResultParams,
   GetLLMResultResponse,
   BulkAnalyzeLLMResponse,
   BulkAnalyzeOCRResponse,
@@ -426,11 +427,17 @@ export class DocRouterOrg {
     );
   }
 
-  async getLLMResult(params: { documentId: string; promptId?: string; promptRevId?: string; promptRevIdFallback?: boolean; }): Promise<GetLLMResultResponse> {
-    const { documentId, promptId, promptRevId, promptRevIdFallback } = params;
+  async getLLMResult(params: GetLLMResultParams): Promise<GetLLMResultResponse> {
+    const { documentId, promptId, promptRevIdFallback, fallback } = params;
+    let { promptRevId } = params;
+    // Preserve historical behavior (and match the Python SDK): with no prompt selector,
+    // target the virtual default prompt so the server does not reject the request.
+    if (promptId === undefined && promptRevId === undefined) {
+      promptRevId = 'default';
+    }
     return this.http.get<GetLLMResultResponse>(
       `/v0/orgs/${this.organizationId}/llm/result/${documentId}`,
-      { params: { prompt_id: promptId, prompt_revid: promptRevId, prompt_revid_fallback: promptRevIdFallback } }
+      { params: { prompt_id: promptId, prompt_revid: promptRevId, prompt_revid_fallback: promptRevIdFallback ?? fallback } }
     );
   }
 

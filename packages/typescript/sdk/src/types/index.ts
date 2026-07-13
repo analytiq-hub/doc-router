@@ -609,7 +609,14 @@ export interface RunLLMResponse {
 
 export interface GetLLMResultParams {
   documentId: string;
-  promptRevId: string;
+  /**
+   * Stable prompt ID. When provided, returns the latest available result for this
+   * prompt regardless of version (promptRevId/promptRevIdFallback are ignored).
+   */
+  promptId?: string;
+  promptRevId?: string;
+  promptRevIdFallback?: boolean;
+  /** @deprecated Use promptRevIdFallback instead. Retained for backward compatibility. */
   fallback?: boolean;
 }
 

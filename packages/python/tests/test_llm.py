@@ -370,11 +370,11 @@ def test_llm_result_prompt_display_name():
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC),
     }
-    resp_default = _llm_result_response(raw_default, "default")
+    resp_default = _llm_result_response(raw_default)
     assert resp_default.prompt_display_name == "Document Summary"
 
     raw_other = {**raw_default, "prompt_revid": "abc123", "prompt_id": "pid"}
-    resp_other = _llm_result_response(raw_other, "abc123")
+    resp_other = _llm_result_response(raw_other)
     assert resp_other.prompt_display_name is None
 
 

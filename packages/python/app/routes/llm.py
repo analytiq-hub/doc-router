@@ -29,10 +29,14 @@ llm_router = APIRouter(tags=["llm"])
 DEFAULT_PROMPT_DISPLAY_NAME = "Document Summary"
 
 
-def _llm_result_response(raw: dict, prompt_revid: str) -> "LLMResult":
-    """Build LLMResult from DB document, excluding _id and setting prompt_display_name for default."""
+def _llm_result_response(raw: dict) -> "LLMResult":
+    """Build LLMResult from DB document, excluding _id and setting prompt_display_name for default.
+
+    The prompt revision is read from the stored result itself, so the default-prompt
+    display name is applied consistently regardless of how the result was looked up.
+    """
     response_data = {k: raw[k] for k in LLMResult.model_fields if k in raw}
-    if prompt_revid == "default":
+    if raw.get("prompt_revid") == "default":
         response_data["prompt_display_name"] = DEFAULT_PROMPT_DISPLAY_NAME
     return LLMResult(**response_data)
 
@@ -373,10 +377,7 @@ async def get_llm_result(
             )
         )
 
-    # Use the stored result's own revid so the default-prompt display name is applied
-    # correctly even when the caller looked up by prompt_id.
-    effective_revid = llm_result.get("prompt_revid", prompt_revid)
-    return _llm_result_response(llm_result, effective_revid)
+    return _llm_result_response(llm_result)
 
 @llm_router.post(
     "/v0/orgs/{organization_id}/llm/bulk-analyze",
@@ -436,7 +437,7 @@ async def update_llm_result(
         )
         
         updated = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid=prompt_revid)
-        return _llm_result_response(updated, prompt_revid)
+        return _llm_result_response(updated)
         
     except ValueError as e:
         raise HTTPException(

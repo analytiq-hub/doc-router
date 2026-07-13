@@ -851,12 +851,12 @@ const tools: Tool[] = [
       type: 'object',
       properties: {
         documentId: { type: 'string', description: 'ID of the document' },
-        promptRevId: { type: 'string', description: 'Version-specific prompt revision ID' },
         promptId: {
           type: 'string',
           description:
             'Stable prompt ID. When provided, returns the latest available result for this prompt regardless of version (promptRevId/promptRevIdFallback are ignored).',
         },
+        promptRevId: { type: 'string', description: 'Version-specific prompt revision ID' },
         promptRevIdFallback: {
           type: 'boolean',
           description: 'Fall back to the most recent available result for the prompt behind promptRevId',
@@ -2195,7 +2195,7 @@ This server provides access to DocRouter resources and tools.
 
 4. Get extraction results:
    \`\`\`
-   get_llm_result("doc123", "prompt456")
+   get_llm_result(documentId="doc123", promptRevId="prompt456")
    \`\`\`
 
 5. Validate a schema format:
