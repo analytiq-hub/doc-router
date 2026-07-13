@@ -133,7 +133,7 @@ models = client.llm.list_models()
 result = client.llm.run(organization_id, document_id, prompt_id="default", force=False)
 
 # Get LLM result
-llm_result = client.llm.get_result(organization_id, document_id, prompt_id="default")
+llm_result = client.llm.get_result(organization_id=organization_id, document_id=document_id, prompt_revid="default")
 
 # Update LLM result
 updated_result = client.llm.update_result(

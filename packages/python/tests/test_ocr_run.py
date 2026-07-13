@@ -239,7 +239,7 @@ async def test_run_ocr_force_propagates_to_llm(test_db, mock_auth, setup_test_mo
             await ad.msg_handlers.process_llm_msg(analytiq_client, m)
 
         # Verify cache is populated
-        cached = await ad.llm.get_llm_result(analytiq_client, doc_id, "default")
+        cached = await ad.llm.get_llm_result(analytiq_client, doc_id, prompt_revid="default")
         assert cached is not None, "LLM cache should be populated after initial run"
 
         await db["queues.llm"].delete_many({})

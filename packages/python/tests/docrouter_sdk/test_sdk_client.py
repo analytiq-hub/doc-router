@@ -254,7 +254,7 @@ async def test_llm_api(test_db, mock_auth, mock_docrouter_client):
         
         # Test: Get LLM result
         result_id = run_response["result_id"]
-        get_response = mock_docrouter_client.llm.get_result(TEST_ORG_ID, document_id, result_id)
+        get_response = mock_docrouter_client.llm.get_result(organization_id=TEST_ORG_ID, document_id=document_id, prompt_revid=result_id)
         assert get_response["status"] == "completed"
         assert "output" in get_response
         

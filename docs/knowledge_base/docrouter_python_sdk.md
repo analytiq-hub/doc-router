@@ -209,12 +209,20 @@ print(f"LLM Analysis status: {result.status}")
 
 ```python
 llm_result = client.llm.get_result(
-    organization_id,
-    document_id,
-    prompt_revid="default",  # The prompt revision ID to retrieve
-    fallback=False           # Whether to fallback to previous version if current not found
+    organization_id=organization_id,
+    document_id=document_id,
+    prompt_revid="default",       # The prompt revision ID to retrieve
+    prompt_revid_fallback=False   # Fall back to the latest available result for this prompt
 )
 print(f"LLM Result: {llm_result.llm_result}")
+
+# Stable lookup by prompt_id: returns the latest available result for the
+# prompt regardless of version. Survives prompt edits (no need to track revisions).
+llm_result = client.llm.get_result(
+    organization_id=organization_id,
+    document_id=document_id,
+    prompt_id="xyz789",  # Stable prompt ID; prompt_revid/fallback are ignored
+)
 print(f"Is verified: {llm_result.is_verified}")
 ```
 
@@ -459,7 +467,7 @@ llm_result = client.llm.run(organization_id, document_id, prompt_revid="default"
 print(f"LLM Analysis status: {llm_result.status}")
 
 # 5. Get LLM result
-result = client.llm.get_result(organization_id, document_id, prompt_revid="default")
+result = client.llm.get_result(organization_id=organization_id, document_id=document_id, prompt_revid="default")
 print(f"LLM Result: {result.llm_result}")
 ```
 

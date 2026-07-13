@@ -311,14 +311,44 @@ async def run_llm_chat_org(
 async def get_llm_result(
     organization_id: str,
     document_id: str,
-    prompt_revid: str = Query(default="default", description="The prompt revision ID to retrieve"),
-    fallback: bool = Query(default=False, description="Whether to fallback to the most recent available prompt revision result"),
+    prompt_id: Optional[str] = Query(
+        default=None,
+        description=(
+            "Stable prompt ID. When provided, returns the latest available result for this "
+            "prompt regardless of version, and prompt_revid/prompt_revid_fallback are ignored. "
+            "Use this to retrieve results with a single stable ID that survives prompt edits."
+        ),
+    ),
+    prompt_revid: Optional[str] = Query(default=None, description="The prompt revision ID to retrieve"),
+    prompt_revid_fallback: bool = Query(
+        default=False,
+        description="Whether to fall back to the most recent available result for the prompt behind prompt_revid",
+    ),
+    fallback: bool = Query(
+        default=False,
+        deprecated=True,
+        description="OBSOLETE: use prompt_revid_fallback instead. Retained for backward compatibility.",
+    ),
     current_user: User = Depends(get_org_user)
 ):
     """
     Retrieve existing LLM results for a document.
+
+    Either ``prompt_id`` or ``prompt_revid`` is required.
     """
-    logger.debug(f"get_llm_result() start: document_id: {document_id}, prompt_revid: {prompt_revid}")
+    # `fallback` is obsolete; honor it if set, but prefer `prompt_revid_fallback`.
+    effective_fallback = prompt_revid_fallback or fallback
+    logger.debug(
+        f"get_llm_result() start: document_id: {document_id}, prompt_id: {prompt_id}, "
+        f"prompt_revid: {prompt_revid}, prompt_revid_fallback: {effective_fallback}"
+    )
+
+    if prompt_id is None and prompt_revid is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Either prompt_id or prompt_revid is required",
+        )
+
     analytiq_client = ad.common.get_analytiq_client()
     
     # Verify document exists and user has access
@@ -326,14 +356,27 @@ async def get_llm_result(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    llm_result = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid, fallback)
+    llm_result = await ad.llm.get_llm_result(
+        analytiq_client,
+        document_id,
+        prompt_id=prompt_id,
+        prompt_revid=prompt_revid,
+        prompt_revid_fallback=effective_fallback,
+    )
     if not llm_result:
         raise HTTPException(
             status_code=404,
-            detail=f"LLM result not found for document_id: {document_id} prompt_revid: {prompt_revid} fallback: {fallback}"
+            detail=(
+                f"LLM result not found for document_id: {document_id} "
+                f"prompt_revid: {prompt_revid} prompt_id: {prompt_id} "
+                f"prompt_revid_fallback: {effective_fallback}"
+            )
         )
 
-    return _llm_result_response(llm_result, prompt_revid)
+    # Use the stored result's own revid so the default-prompt display name is applied
+    # correctly even when the caller looked up by prompt_id.
+    effective_revid = llm_result.get("prompt_revid", prompt_revid)
+    return _llm_result_response(llm_result, effective_revid)
 
 @llm_router.post(
     "/v0/orgs/{organization_id}/llm/bulk-analyze",
@@ -392,7 +435,7 @@ async def update_llm_result(
             is_verified=update.is_verified
         )
         
-        updated = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid)
+        updated = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid=prompt_revid)
         return _llm_result_response(updated, prompt_revid)
         
     except ValueError as e:

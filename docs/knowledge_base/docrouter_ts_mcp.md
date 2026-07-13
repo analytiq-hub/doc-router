@@ -225,8 +225,9 @@ Once configured, the following tools become available in your AI application:
 
 - `run_llm(documentId, promptRevId, force)` - Run AI extraction on a document
   - `force`: Whether to force re-extraction (default: false)
-- `get_llm_result(documentId, promptRevId, fallback)` - Get LLM extraction results
-  - `fallback`: Use fallback results if current not found (default: false)
+- `get_llm_result(documentId, promptId, promptRevId, promptRevIdFallback)` - Get LLM extraction results
+  - `promptId`: Stable prompt ID; returns the latest available result regardless of version
+  - `promptRevIdFallback`: Fall back to the most recent available result for the prompt behind `promptRevId` (default: false)
 - `update_llm_result(documentId, promptId, result, isVerified)` - Update LLM extraction results
 - `delete_llm_result(documentId, promptId)` - Delete LLM extraction results
 - `run_llm_chat(messages, model, temperature, max_tokens, stream)` - Run LLM chat

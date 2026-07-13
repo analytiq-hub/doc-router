@@ -851,10 +851,19 @@ const tools: Tool[] = [
       type: 'object',
       properties: {
         documentId: { type: 'string', description: 'ID of the document' },
-        promptRevId: { type: 'string', description: 'ID of the prompt' },
-        fallback: { type: 'boolean', description: 'Use fallback results', default: false },
+        promptRevId: { type: 'string', description: 'Version-specific prompt revision ID' },
+        promptId: {
+          type: 'string',
+          description:
+            'Stable prompt ID. When provided, returns the latest available result for this prompt regardless of version (promptRevId/promptRevIdFallback are ignored).',
+        },
+        promptRevIdFallback: {
+          type: 'boolean',
+          description: 'Fall back to the most recent available result for the prompt behind promptRevId',
+          default: false,
+        },
       },
-      required: ['documentId', 'promptRevId'],
+      required: ['documentId'],
     },
   },
   {
@@ -1503,8 +1512,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'get_llm_result': {
         const result = await docrouterClient.getLLMResult({
           documentId: getArg(args, 'documentId'),
-          promptRevId: getArg(args, 'promptRevId'),
-          fallback: getOptionalArg(args, 'fallback', false),
+          promptId: getOptionalArg(args, 'promptId', undefined),
+          promptRevId: getOptionalArg(args, 'promptRevId', undefined),
+          promptRevIdFallback: getOptionalArg(args, 'promptRevIdFallback', undefined),
         });
         return {
           content: [
@@ -2116,7 +2126,7 @@ This server provides access to DocRouter resources and tools.
 
 ### LLM
 - \`run_llm(documentId, promptRevId, force)\` - Run AI extraction
-- \`get_llm_result(documentId, promptRevId, fallback)\` - Get extraction results
+- \`get_llm_result(documentId, promptId, promptRevId, promptRevIdFallback)\` - Get extraction results
 - \`update_llm_result(documentId, promptId, result, isVerified)\` - Update results
 - \`delete_llm_result(documentId, promptId)\` - Delete results
 

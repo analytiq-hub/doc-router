@@ -426,11 +426,11 @@ export class DocRouterOrg {
     );
   }
 
-  async getLLMResult(params: { documentId: string; promptRevId: string; fallback?: boolean; }): Promise<GetLLMResultResponse> {
-    const { documentId, promptRevId, fallback } = params;
+  async getLLMResult(params: { documentId: string; promptId?: string; promptRevId?: string; promptRevIdFallback?: boolean; }): Promise<GetLLMResultResponse> {
+    const { documentId, promptId, promptRevId, promptRevIdFallback } = params;
     return this.http.get<GetLLMResultResponse>(
       `/v0/orgs/${this.organizationId}/llm/result/${documentId}`,
-      { params: { prompt_revid: promptRevId, fallback } }
+      { params: { prompt_id: promptId, prompt_revid: promptRevId, prompt_revid_fallback: promptRevIdFallback } }
     );
   }
 

@@ -156,7 +156,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         const listPromptsPromise = docRouterOrgApi.listPrompts({ document_id: id, limit: 100 });
         const defaultPromise = needDefault
           ? docRouterOrgApi
-              .getLLMResult({ documentId: id, promptRevId: 'default', fallback: false })
+              .getLLMResult({ documentId: id, promptRevId: 'default', promptRevIdFallback: false })
               .then((data): { success: true; data: GetLLMResultResponse } => ({ success: true, data }))
               .catch((error): { success: false; error: unknown } => ({ success: false, error }))
           : Promise.resolve<null>(null);
@@ -211,7 +211,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
           setLoadingPrompts(prev => new Set(prev).add('default'));
           try {
             const defaultResults = await docRouterOrgApi.getLLMResult({
-              documentId: id, promptRevId: 'default', fallback: false,
+              documentId: id, promptRevId: 'default', promptRevIdFallback: false,
             });
             setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
           } catch (error) {
@@ -251,7 +251,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         const results = await docRouterOrgApi.getLLMResult({
           documentId: id, 
           promptRevId: promptId,
-          fallback: true
+          promptRevIdFallback: true
         });
         setLlmResults(prev => ({
           ...prev,
@@ -297,7 +297,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       const result = await docRouterOrgApi.getLLMResult({
         documentId: id,
         promptRevId: promptId,
-        fallback: false
+        promptRevIdFallback: false
       });
       
       setLlmResults(prev => ({
@@ -343,7 +343,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       const result = await docRouterOrgApi.getLLMResult({
         documentId: id,
         promptRevId: promptId,
-        fallback: true
+        promptRevIdFallback: true
       });
       setRunInfoResult(result);
     } catch (err) {
@@ -1027,7 +1027,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       const result = await docRouterOrgApi.getLLMResult({
         documentId: id,
         promptRevId: promptId,
-        fallback: true
+        promptRevIdFallback: true
       });
 
       // Get prompt name for filename

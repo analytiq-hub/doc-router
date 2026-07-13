@@ -163,6 +163,7 @@ async def test_full_document_llm_processing_pipeline_inline(org_and_users, setup
         prompt_resp = client.post(f"/v0/orgs/{org_id}/prompts", json=prompt_data, headers=get_token_headers(admin["token"]))
         assert prompt_resp.status_code == 200, f"Failed to create prompt: {prompt_resp.text}"
         prompt_revid = prompt_resp.json()["prompt_revid"]
+        prompt_id = prompt_resp.json()["prompt_id"]
 
         # Upload a small PDF with the tag
         pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
@@ -215,6 +216,42 @@ async def test_full_document_llm_processing_pipeline_inline(org_and_users, setup
         assert extracted["invoice_number"] == "12345"
         assert extracted["total_amount"] == 1234.56
         assert extracted["vendor"]["name"] == "Acme Corp"
+
+        # Stable lookup by prompt_id returns the same result without knowing the revid
+        by_prompt_id_resp = client.get(
+            f"/v0/orgs/{org_id}/llm/result/{document_id}",
+            params={"prompt_id": prompt_id},
+            headers=get_token_headers(admin["token"]),
+        )
+        assert by_prompt_id_resp.status_code == 200, f"prompt_id lookup failed: {by_prompt_id_resp.text}"
+        by_prompt_id_result = by_prompt_id_resp.json()
+        assert by_prompt_id_result["prompt_revid"] == prompt_revid
+        assert by_prompt_id_result.get("prompt_display_name") is None
+
+        # prompt_revid_fallback=true resolves via the revision's prompt_id
+        fallback_resp = client.get(
+            f"/v0/orgs/{org_id}/llm/result/{document_id}",
+            params={"prompt_revid": prompt_revid, "prompt_revid_fallback": True},
+            headers=get_token_headers(admin["token"]),
+        )
+        assert fallback_resp.status_code == 200, fallback_resp.text
+        assert fallback_resp.json()["prompt_revid"] == prompt_revid
+
+        # The obsolete `fallback` param is still honored for backward compatibility
+        obsolete_fallback_resp = client.get(
+            f"/v0/orgs/{org_id}/llm/result/{document_id}",
+            params={"prompt_revid": prompt_revid, "fallback": True},
+            headers=get_token_headers(admin["token"]),
+        )
+        assert obsolete_fallback_resp.status_code == 200, obsolete_fallback_resp.text
+        assert obsolete_fallback_resp.json()["prompt_revid"] == prompt_revid
+
+        # Neither prompt_id nor prompt_revid provided -> 422
+        missing_selector_resp = client.get(
+            f"/v0/orgs/{org_id}/llm/result/{document_id}",
+            headers=get_token_headers(admin["token"]),
+        )
+        assert missing_selector_resp.status_code == 422, missing_selector_resp.text
 
         # Verify document state and metadata
         final_doc_resp = client.get(f"/v0/orgs/{org_id}/documents/{document_id}", headers=get_token_headers(admin["token"]))
@@ -273,6 +310,47 @@ async def test_full_document_llm_processing_pipeline_inline(org_and_users, setup
             headers=get_token_headers(admin["token"]) 
         )
         assert verify_delete_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_llm_result_by_prompt_id(test_db):
+    """get_llm_result(prompt_id=...) returns the latest version regardless of revid."""
+    from datetime import datetime, UTC
+
+    analytiq_client = ad.common.get_analytiq_client()
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+
+    document_id = str(ObjectId())
+    prompt_id = str(ObjectId())
+    base = {
+        "document_id": document_id,
+        "prompt_id": prompt_id,
+        "is_edited": False,
+        "is_verified": False,
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
+    }
+    await db.llm_runs.insert_one({
+        **base, "prompt_revid": "rev9", "prompt_version": 9,
+        "llm_result": {"v": 9}, "updated_llm_result": {"v": 9},
+    })
+    await db.llm_runs.insert_one({
+        **base, "prompt_revid": "rev10", "prompt_version": 10,
+        "llm_result": {"v": 10}, "updated_llm_result": {"v": 10},
+    })
+
+    # Stable prompt_id lookup returns the highest available version, ignoring revid.
+    result = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_id=prompt_id)
+    assert result is not None
+    assert result["prompt_version"] == 10
+    assert result["prompt_revid"] == "rev10"
+
+    # Exact revid lookup still targets that specific version.
+    result_v9 = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid="rev9")
+    assert result_v9 is not None and result_v9["prompt_version"] == 9
+
+    # Unknown prompt_id returns None.
+    assert await ad.llm.get_llm_result(analytiq_client, document_id, prompt_id=str(ObjectId())) is None
 
 
 def test_llm_result_prompt_display_name():

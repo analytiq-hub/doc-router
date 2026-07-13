@@ -500,7 +500,14 @@ const llmResult = await client.runLLM({
 const result = await client.getLLMResult({
   documentId: 'doc-123',
   promptRevId: 'prompt-123',
-  fallback: false // Use fallback results
+  promptRevIdFallback: false // Fall back to the latest available result for this prompt
+});
+
+// Stable lookup by promptId: returns the latest available result for the
+// prompt regardless of version (promptRevId/fallback are ignored).
+const stableResult = await client.getLLMResult({
+  documentId: 'doc-123',
+  promptId: 'xyz789'
 });
 
 // Update LLM result

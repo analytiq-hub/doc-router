@@ -928,7 +928,7 @@ async def notify_llm_completed_docrouter_event(
     """Enqueue ``llm.completed`` flow triggers for a document/prompt pair."""
 
     if llm_run_id is None or llm_result is None:
-        row = await get_llm_result(analytiq_client, document_id, prompt_revid)
+        row = await get_llm_result(analytiq_client, document_id, prompt_revid=prompt_revid)
         if row:
             if llm_run_id is None:
                 llm_run_id = str(row["_id"])
@@ -976,7 +976,7 @@ async def run_llm(
 
     # Check for existing result unless force is True
     if not force:
-        existing_result = await get_llm_result(analytiq_client, document_id, prompt_revid)
+        existing_result = await get_llm_result(analytiq_client, document_id, prompt_revid=prompt_revid)
         if existing_result:
             logger.info(f"Using cached LLM result for doc_id/prompt_revid {document_id}/{prompt_revid}")
             return existing_result["llm_result"]
@@ -1393,24 +1393,50 @@ async def run_llm(
 
 async def get_llm_result(analytiq_client,
                          document_id: str,
-                         prompt_revid: str,
-                         fallback: bool = False) -> dict | None:
+                         prompt_id: str | None = None,
+                         prompt_revid: str | None = None,
+                         prompt_revid_fallback: bool = False) -> dict | None:
     """
     Retrieve the latest LLM result from MongoDB.
-    
+
+    Lookup modes (checked in order):
+    1. prompt_id provided: return the latest available result for that stable
+       prompt_id, regardless of version (prompt_revid/prompt_revid_fallback are ignored).
+       This lets callers persist a single stable ID and always get whatever
+       result the document currently has for that prompt.
+    2. prompt_revid_fallback=True: resolve prompt_id from prompt_revid, then return the
+       latest available result for that prompt_id.
+    3. otherwise: return the result for the exact prompt_revid.
+
     Args:
         analytiq_client: The AnalytiqClient instance
         document_id: The document ID
-        prompt_revid: The prompt revision ID
-        fallback: If True, return the latest LLM result available for the prompt_id
-    
+        prompt_id: Stable prompt ID; when provided, return the latest available
+            result for this prompt regardless of version
+        prompt_revid: The prompt revision ID (required unless prompt_id is given)
+        prompt_revid_fallback: If True, return the latest LLM result available for
+            the prompt_id behind the given prompt_revid
+
     Returns:
         dict | None: The latest LLM result if found, None otherwise
     """
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
-    
-    if not fallback:
+
+    if prompt_id is not None:
+        # Return the latest available result for the stable prompt_id.
+        return await db.llm_runs.find_one(
+            {
+                "document_id": document_id,
+                "prompt_id": prompt_id,
+            },
+            sort=[("prompt_version", -1)]
+        )
+
+    if prompt_revid is None:
+        raise ValueError("get_llm_result requires either prompt_revid or prompt_id")
+
+    if not prompt_revid_fallback:
         result = await db.llm_runs.find_one(
             {
                 "document_id": document_id,

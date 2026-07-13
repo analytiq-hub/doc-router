@@ -86,7 +86,7 @@ async def get_extraction_result(context: dict, params: dict) -> dict[str, Any]:
         return {"extraction": working_state["extraction"], "prompt_revid": prompt_revid}
     try:
         row = await ad.llm.get_llm_result(
-            context["analytiq_client"], document_id, prompt_revid, fallback=True
+            context["analytiq_client"], document_id, prompt_revid=prompt_revid, prompt_revid_fallback=True
         )
         if not row:
             return {"error": f"No extraction result for prompt_revid={prompt_revid}"}
@@ -145,7 +145,7 @@ async def update_extraction_field(context: dict, params: dict) -> dict[str, Any]
     prompt_revid = working_state.get("prompt_revid") or "default"
     # Get current full result
     row = await ad.llm.get_llm_result(
-        context["analytiq_client"], document_id, prompt_revid, fallback=False
+        context["analytiq_client"], document_id, prompt_revid=prompt_revid, prompt_revid_fallback=False
     )
     if not row:
         return {"error": "No extraction result to update"}

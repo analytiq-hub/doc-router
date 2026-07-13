@@ -133,7 +133,7 @@ async def test_textract_and_llm_default_pipeline_sdk(test_db, mock_auth, setup_t
 
         # Check if LLM default prompt has run and retrieve the result using SDK
         try:
-            llm_result_data = mock_docrouter_client.llm.get_result(TEST_ORG_ID, document_id, prompt_revid="default")
+            llm_result_data = mock_docrouter_client.llm.get_result(organization_id=TEST_ORG_ID, document_id=document_id, prompt_revid="default")
 
             if llm_result_data:
                 logger.info("LLM default prompt has completed")
@@ -343,7 +343,7 @@ async def test_full_document_llm_processing_pipeline_sdk(org_and_users, setup_te
 
         while retry_count < max_retries:
             try:
-                llm_result = mock_docrouter_client.llm.get_result(org_id, document_id, prompt_revid=prompt_revid)
+                llm_result = mock_docrouter_client.llm.get_result(organization_id=org_id, document_id=document_id, prompt_revid=prompt_revid)
 
                 if llm_result:
                     logger.info(f"LLM result found: {llm_result}")
@@ -457,7 +457,7 @@ async def test_full_document_llm_processing_pipeline_sdk(org_and_users, setup_te
         
         # Verify the LLM result was actually deleted
         try:
-            verify_delete_result = mock_docrouter_client.llm.get_result(org_id, document_id, prompt_revid=prompt_revid)
+            verify_delete_result = mock_docrouter_client.llm.get_result(organization_id=org_id, document_id=document_id, prompt_revid=prompt_revid)
             assert verify_delete_result is None, "LLM result should no longer exist after deletion"
         except Exception:
             # Expected behavior - result should not exist

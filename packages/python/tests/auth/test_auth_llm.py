@@ -37,7 +37,7 @@ async def test_llm_permissions(org_and_users, test_db):
     assert resp.status_code in (401, 403), f"Outsider should NOT be able to run LLM, got {resp.status_code}: {resp.text}"
 
     # --- LLM RESULT GET ---
-    url_result = f"/v0/orgs/{org_id}/llm/result/{doc_id}"
+    url_result = f"/v0/orgs/{org_id}/llm/result/{doc_id}?prompt_revid=default"
     resp = client.get(url_result, headers=get_token_headers(admin["token"]))
     assert resp.status_code in (200, 404), f"Admin should be able to get LLM result, got {resp.status_code}: {resp.text}"
 

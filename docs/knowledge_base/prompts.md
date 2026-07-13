@@ -615,7 +615,32 @@ DocRouter maintains prompt versioning:
 - Each prompt update creates a new version
 - `prompt_version` increments with each change
 - `prompt_revid` uniquely identifies each version
+- `prompt_id` is the stable identifier that never changes across versions
 - Previous versions remain accessible for historical processing
+
+### Retrieving results with a stable ID
+
+`GET /v0/orgs/{organization_id}/llm/result/{document_id}` accepts a `prompt_id`
+query parameter. When supplied, it returns the latest available result for that
+stable prompt, regardless of which version produced it — `prompt_revid` and
+`prompt_revid_fallback` are ignored. This lets integrations persist a single
+`prompt_id` and keep working after a prompt is edited (v9 → v10), without tracking
+which revision was used:
+
+```bash
+# Stable: always returns whatever result the document has for this prompt
+curl "$API/v0/orgs/$ORG/llm/result/$DOC?prompt_id=$PROMPT_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The other lookup modes remain available:
+
+- `?prompt_revid=<revid>` — exact result for one specific version.
+- `?prompt_revid=<revid>&prompt_revid_fallback=true` — latest result for the prompt
+  behind that revision (equivalent to `prompt_id` but requires a valid revision ID as input).
+
+**Either `prompt_id` or `prompt_revid` is required** — there is no default. To
+retrieve the virtual default prompt result, pass `?prompt_revid=default`.
 
 ---
 

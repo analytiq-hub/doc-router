@@ -47,20 +47,37 @@ class LLMAPI:
         )
         return LLMRunResponse(**data)
     
-    def get_result(self, organization_id: str, document_id: str, prompt_revid: str = "default", fallback: bool = False) -> LLMResult:
+    def get_result(self, organization_id: str, document_id: str, prompt_id: str = None, prompt_revid: str = None, prompt_revid_fallback: bool = False) -> LLMResult:
         """
         Get LLM results for a document
-        
+
+        Either prompt_id or prompt_revid must be provided. If neither is given,
+        the virtual default prompt ("default") is retrieved.
+
         Args:
             organization_id: The organization ID
             document_id: The document ID
+            prompt_id: Stable prompt ID. When provided, returns the latest available
+                result for this prompt regardless of version (prompt_revid/
+                prompt_revid_fallback are ignored). Use this to retrieve results with a
+                single stable ID that survives prompt edits.
             prompt_revid: The prompt revision ID to retrieve
-            
+            prompt_revid_fallback: If True, return the latest available result for the
+                prompt_id behind the given prompt_revid
+
         Returns:
             LLMResult with analysis results
         """
-        params = {"prompt_revid": prompt_revid, "fallback": fallback}
-        
+        # Preserve historical behavior: with no prompt selector, target the default prompt.
+        if prompt_id is None and prompt_revid is None:
+            prompt_revid = "default"
+
+        params = {"prompt_revid_fallback": prompt_revid_fallback}
+        if prompt_id is not None:
+            params["prompt_id"] = prompt_id
+        if prompt_revid is not None:
+            params["prompt_revid"] = prompt_revid
+
         data = self.client.request(
             "GET",
             f"/v0/orgs/{organization_id}/llm/result/{document_id}",

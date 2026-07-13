@@ -308,7 +308,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
       const result = await docRouterOrgApi.getLLMResult({
         documentId: id,
         promptRevId: promptRevId,
-        fallback: true
+        promptRevIdFallback: true
       });
       
       setLlmResults(prev => ({
