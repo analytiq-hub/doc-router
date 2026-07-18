@@ -8,6 +8,42 @@ import SettingsLayout, {
   settingsPageTitleClass,
 } from '@/components/SettingsLayout';
 
+/** Parse API datetimes; timezone-less values are treated as UTC. */
+function parseApiDate(value: string): Date | null {
+  const raw = value.trim();
+  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(raw);
+  const iso = hasTz ? raw : `${raw}Z`;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Format last-checked etc. in the browser's local timezone. */
+function formatLocalDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = parseApiDate(value);
+  if (!date) return value;
+  return date.toLocaleString(undefined, {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  });
+}
+
+/**
+ * Format license start/expiry as the UTC calendar date so it matches the
+ * date entered when generating (stored as midnight UTC on that day).
+ */
+function formatLicenseCalendarDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = parseApiDate(value);
+  if (!date) return value;
+  return date.toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  });
+}
+
 const LicensePage: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [license, setLicense] = useState<LicenseAdminView | null>(null);
@@ -98,11 +134,11 @@ const LicensePage: React.FC = () => {
               </span>
               <span className="text-gray-500">Customer</span>
               <span>{license.customer_name || '—'}</span>
+              <span className="text-gray-500">Start</span>
+              <span>{formatLicenseCalendarDate(license.not_before)}</span>
               <span className="text-gray-500">Expires</span>
               <span>
-                {license.expires_at
-                  ? new Date(license.expires_at).toLocaleString()
-                  : '—'}
+                {formatLicenseCalendarDate(license.expires_at)}
                 {license.days_remaining != null
                   ? ` (${license.days_remaining} days remaining)`
                   : ''}
@@ -134,11 +170,7 @@ const LicensePage: React.FC = () => {
                 )}
               </span>
               <span className="text-gray-500">Last checked</span>
-              <span>
-                {license.checked_at
-                  ? new Date(license.checked_at).toLocaleString()
-                  : '—'}
-              </span>
+              <span>{formatLocalDateTime(license.checked_at)}</span>
             </div>
             {license.message && (
               <p className="text-gray-600">{license.message}</p>

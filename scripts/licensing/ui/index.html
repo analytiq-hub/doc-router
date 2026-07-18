@@ -142,6 +142,13 @@
       .grid { grid-template-columns: 1fr; }
     }
     .field { margin-bottom: 1rem; }
+    .help {
+      display: block;
+      margin-top: 0.35rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
     .checks {
       display: flex;
       gap: 1rem;
@@ -271,7 +278,22 @@
             <input id="customer_name" type="text" value="Acme Corp" />
           </div>
           <div class="field">
-            <label for="expires_in_days">Expires in (days)</label>
+            <label for="start_date">Start date</label>
+            <input
+              id="start_date"
+              type="text"
+              placeholder="7/1/2024 or 2024-07-01"
+              autocomplete="off"
+            />
+            <span class="help">
+              When the license becomes valid (<code>not_before</code>). May be in the
+              past or future. Prefer <strong>MM/DD/YYYY</strong> (month/day/year), e.g.
+              <code>7/1/2024</code>. <code>YYYY-MM-DD</code> (e.g. <code>2024-07-01</code>)
+              and other common formats also work. Ambiguous numbers are read as month first.
+            </span>
+          </div>
+          <div class="field">
+            <label for="expires_in_days">Expires in (days from start)</label>
             <input id="expires_in_days" type="number" min="1" max="3650" value="365" />
           </div>
           <div class="field">
@@ -358,7 +380,8 @@ cp /tmp/dr-lic/license-public.pem \
         <h2>Generate a license</h2>
         <ol>
           <li>Open the <strong>Generate</strong> tab.</li>
-          <li>Fill customer fields, expiry, and features (<code>documents</code>, <code>flows</code>).</li>
+          <li>Fill customer fields, <strong>start date</strong>, duration, and features (<code>documents</code>, <code>flows</code>).</li>
+          <li>Start date may be past or future; prefer <code>MM/DD/YYYY</code> (e.g. <code>7/1/2024</code>) or <code>YYYY-MM-DD</code>.</li>
           <li>Optionally bind to an installation ID from the customer’s <strong>Settings → License</strong> page.</li>
           <li>Click <strong>Generate license</strong> and copy the <code>DRLIC1.…</code> token.</li>
         </ol>
@@ -465,6 +488,7 @@ cp /tmp/dr-lic/license-public.pem \
         license_id: $("license_id").value.trim(),
         customer_id: $("customer_id").value.trim(),
         customer_name: $("customer_name").value.trim(),
+        start_date: $("start_date").value.trim(),
         expires_in_days: Number($("expires_in_days").value) || 365,
         grace_days: Number($("grace_days").value) || 0,
         features,
@@ -472,6 +496,11 @@ cp /tmp/dr-lic/license-public.pem \
         limits_users: users ? Number(users) : null,
         limits_workspaces: workspaces ? Number(workspaces) : null,
       };
+
+      if (!body.start_date) {
+        showMsg($("genMsg"), "Start date is required (e.g. 7/1/2024 or 2024-07-01).", "error");
+        return;
+      }
 
       $("btnGenerate").disabled = true;
       try {
@@ -482,7 +511,13 @@ cp /tmp/dr-lic/license-public.pem \
         });
         const data = await res.json();
         if (!res.ok) {
-          showMsg($("genMsg"), data.detail || JSON.stringify(data), "error");
+          const detail = data.detail;
+          const errText = typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+              : JSON.stringify(data);
+          showMsg($("genMsg"), errText, "error");
           $("genOut").hidden = true;
           $("btnCopy").disabled = true;
           return;
@@ -547,6 +582,13 @@ cp /tmp/dr-lic/license-public.pem \
     });
 
     loadStatus();
+
+    // Default start date to today as M/D/YYYY
+    (function setDefaultStartDate() {
+      const now = new Date();
+      $("start_date").value =
+        (now.getMonth() + 1) + "/" + now.getDate() + "/" + now.getFullYear();
+    })();
   </script>
 </body>
 </html>

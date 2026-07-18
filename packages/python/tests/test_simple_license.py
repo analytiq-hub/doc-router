@@ -219,3 +219,25 @@ async def test_wrong_product(test_db, mock_auth, license_keypair):
         json={"license_key": token},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_clear_checked_at_on_restart(test_db, mock_auth, license_keypair):
+    _, priv_pem, _ = license_keypair
+    token = issue_token(priv_pem, make_claims())
+    client.put("/v0/account/license", headers=get_auth_headers(), json={"license_key": token})
+
+    doc = await ad.licensing.get_license_document()
+    assert doc is not None and doc.get("checked_at") is not None
+
+    await ad.licensing.clear_license_checked_at()
+    ad.licensing.invalidate_license_cache()
+
+    doc = await ad.licensing.get_license_document()
+    assert doc is not None
+    assert doc.get("checked_at") is None
+
+    status = client.get("/v0/account/license", headers=get_auth_headers())
+    assert status.status_code == 200
+    assert status.json().get("checked_at") is None
+

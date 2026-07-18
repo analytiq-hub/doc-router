@@ -24,6 +24,7 @@ import {
 import { SvgIconProps } from '@mui/material';
 import TourGuide from '@/components/TourGuide';
 import SidebarNavTooltip from '@/components/SidebarNavTooltip';
+import LicenseBanner from '@/components/LicenseBanner';
 
 // First, let's fix the type errors (exported for use in doc viewer page)
 export interface PDFViewerControlsType {
@@ -253,6 +254,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </div>
       </header>
+
+      {status === 'authenticated' && <LicenseBanner />}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}

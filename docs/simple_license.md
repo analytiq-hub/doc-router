@@ -534,8 +534,9 @@ that is the recovery path.
 
 ### Banner
 
-Optional shell banner when status is `grace` / `expired` / `invalid` for
-authenticated users: “Contact your administrator” / link to License for admins.
+Shell banner under the main header when `GET …/license/status` reports `grace`,
+`expired`, or `invalid` (authenticated users). Admins get a link to
+**Settings → License**; others see “Contact your administrator.”
 
 Optional: hide Documents / Flows nav when the corresponding feature is absent
 (status-driven); API still enforces.

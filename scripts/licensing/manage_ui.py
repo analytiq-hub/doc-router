@@ -32,6 +32,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # noqa: E402
     Ed25519PublicKey,
 )
 
+from dateutil import parser as date_parser
+
 from analytiq_data.licensing.claims import (  # noqa: E402
     DEFAULT_GRACE_DAYS,
     FEATURE_DOCUMENTS,
@@ -101,8 +103,11 @@ class GenerateRequest(BaseModel):
     customer_id: str = Field(..., min_length=1)
     customer_name: str = Field(..., min_length=1)
     product: str = PRODUCT_NAME
-    issued_at: Optional[str] = None
-    not_before: Optional[str] = None
+    start_date: str = Field(
+        ...,
+        min_length=1,
+        description="License start (not_before). Accepts common date formats.",
+    )
     expires_at: Optional[str] = None
     expires_in_days: int = Field(default=365, ge=1, le=3650)
     grace_days: int = Field(default=DEFAULT_GRACE_DAYS, ge=0, le=365)
@@ -117,13 +122,36 @@ class ReviewRequest(BaseModel):
     installation_id: Optional[str] = None
 
 
-def _parse_iso(value: Optional[str], fallback: datetime) -> datetime:
-    if not value or not value.strip():
-        return fallback
-    raw = value.strip().replace("Z", "+00:00")
-    dt = datetime.fromisoformat(raw)
+def _parse_flexible_date(value: str, *, end_of_day: bool = False) -> datetime:
+    """Parse a human date string into an aware UTC datetime.
+
+    Ambiguous numeric dates (e.g. 7/1/2024) are interpreted as MM/DD/YYYY
+    (month first), matching US-style entry.
+
+    Date-only inputs become midnight UTC on that calendar day (not "now"'s
+    clock time — dateutil would otherwise fill hour/minute from the present).
+    """
+    raw = (value or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Start date is required")
+    # default=… forces missing time fields to 00:00:00 instead of datetime.now().
+    default = datetime(2000, 1, 1, 0, 0, 0)
+    try:
+        dt = date_parser.parse(raw, dayfirst=False, yearfirst=False, default=default)
+    except (ValueError, OverflowError, TypeError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not parse date {value!r}. "
+                "Try MM/DD/YYYY (e.g. 7/1/2024) or YYYY-MM-DD (e.g. 2024-07-01)."
+            ),
+        ) from e
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    if end_of_day and dt.hour == 0 and dt.minute == 0 and dt.second == 0 and dt.microsecond == 0:
+        dt = dt.replace(hour=23, minute=59, second=59)
     return dt
 
 
@@ -163,12 +191,19 @@ async def status() -> dict[str, Any]:
 async def generate(body: GenerateRequest) -> dict[str, Any]:
     key = _load_private_key()
     now = datetime.now(timezone.utc)
-    issued = _parse_iso(body.issued_at, now)
-    not_before = _parse_iso(body.not_before, issued)
+    start = _parse_flexible_date(body.start_date)
+    not_before = start
+    issued = now
     if body.expires_at:
-        expires = _parse_iso(body.expires_at, now + timedelta(days=body.expires_in_days))
+        expires = _parse_flexible_date(body.expires_at, end_of_day=True)
     else:
-        expires = issued + timedelta(days=body.expires_in_days)
+        expires = start + timedelta(days=body.expires_in_days)
+
+    if expires <= not_before:
+        raise HTTPException(
+            status_code=400,
+            detail="Expiry must be after the start date.",
+        )
 
     features = [f for f in body.features if f]
     limits: dict[str, Any] = {}

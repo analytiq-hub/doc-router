@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from .claims import LicenseClaims
 from .store import (
     bootstrap_license_if_needed,
+    clear_license_checked_at,
     ensure_installation_id,
     get_license_document,
     put_license_key_raw,
@@ -223,15 +224,23 @@ async def _load_status(*, force: bool = False) -> tuple[LicenseStatus, Optional[
             except LicenseVerifyError:
                 claims = None
 
-        # Persist state if drifted (e.g. first read after bootstrap)
+        # Prefer the stored last-check time from Mongo (set by checker / PUT).
+        stored_checked_at = (doc or {}).get("checked_at")
+        if isinstance(stored_checked_at, datetime) and stored_checked_at.tzinfo is None:
+            stored_checked_at = stored_checked_at.replace(tzinfo=timezone.utc)
+        status.checked_at = stored_checked_at
+
+        # Persist state if drifted (e.g. first read after bootstrap). Do not
+        # treat a missing checked_at as a reason to stamp "now" — restart clears
+        # checked_at until the checker runs.
         stored_state = (doc or {}).get("state")
-        if stored_state != status.state or (doc or {}).get("checked_at") is None:
+        if stored_state != status.state:
             await update_license_state(
                 state=status.state,
                 state_code=status.code,
                 state_message=status.message,
+                set_checked_at=False,
             )
-            status.checked_at = _utcnow()
 
     _cached_at = now_mono
     _cached_status = status
@@ -259,16 +268,20 @@ async def get_verified_claims() -> Optional[LicenseClaims]:
 
 async def refresh_license_state() -> LicenseStatus:
     """Re-read Mongo, verify, update state document, refresh cache."""
+    global _cached_at, _cached_status, _cached_claims
     async with _cache_lock:
         invalidate_license_cache()
-        status, _ = await _load_status(force=True)
+        status, claims = await _load_status(force=True)
         await update_license_state(
             state=status.state,
             state_code=status.code,
             state_message=status.message,
+            set_checked_at=True,
         )
         status.checked_at = _utcnow()
+        _cached_at = time.monotonic()
         _cached_status = status
+        _cached_claims = claims
         return status
 
 
@@ -310,10 +323,21 @@ async def _checker_loop(stop: asyncio.Event, interval: float) -> None:
 
 
 async def start_license_checker() -> None:
-    """Bootstrap key if needed and start the periodic API checker."""
+    """Bootstrap key if needed and start the periodic API checker.
+
+    Clears ``checked_at`` on each process start so "Last checked" does not carry
+    over from a previous DocRouter process; the first checker tick then stamps
+    a fresh value.
+    """
     global _checker_task, _checker_stop
 
     await bootstrap_license_if_needed()
+    try:
+        await clear_license_checked_at()
+        invalidate_license_cache()
+    except Exception:
+        logger.exception("Failed to clear license checked_at on startup")
+
     try:
         await refresh_license_state()
     except Exception:

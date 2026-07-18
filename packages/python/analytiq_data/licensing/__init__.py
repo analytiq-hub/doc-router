@@ -24,6 +24,7 @@ from .store import (
     ensure_installation_id,
     get_license_document,
     bootstrap_license_if_needed,
+    clear_license_checked_at,
 )
 from .verifier import (
     LicenseVerifyError,
@@ -42,6 +43,7 @@ __all__ = [
     "LicenseStatus",
     "LicenseVerifyError",
     "bootstrap_license_if_needed",
+    "clear_license_checked_at",
     "ensure_installation_id",
     "evaluate_license_key",
     "get_cached_status",

@@ -66,19 +66,28 @@ async def update_license_state(
     state: str,
     state_code: Optional[str] = None,
     state_message: Optional[str] = None,
+    set_checked_at: bool = True,
 ) -> None:
     await ensure_installation_id()
+    fields: dict[str, Any] = {
+        "state": state,
+        "state_code": state_code,
+        "state_message": state_message,
+    }
+    if set_checked_at:
+        fields["checked_at"] = _utcnow()
     await _db()[LICENSE_COLLECTION].update_one(
         {"_id": LICENSE_DOC_ID},
-        {
-            "$set": {
-                "state": state,
-                "state_code": state_code,
-                "state_message": state_message,
-                "checked_at": _utcnow(),
-            }
-        },
+        {"$set": fields},
         upsert=True,
+    )
+
+
+async def clear_license_checked_at() -> None:
+    """Clear last-checked timestamp (e.g. on API process restart)."""
+    await _db()[LICENSE_COLLECTION].update_one(
+        {"_id": LICENSE_DOC_ID},
+        {"$unset": {"checked_at": ""}},
     )
 
 
