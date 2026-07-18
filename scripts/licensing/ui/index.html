@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DocRouter License Manager</title>
+  <style>
+    :root {
+      --bg: #f4f4f1;
+      --surface: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --line: #d8d8d2;
+      --accent: #1f4d3a;
+      --accent-ink: #f7faf8;
+      --danger: #8b1e1e;
+      --ok: #1f4d3a;
+      --warn: #7a5b16;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, #e7efe9 0%, transparent 55%),
+        var(--bg);
+      min-height: 100vh;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(8px);
+      padding: 1.25rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    .status-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+    .status-bar code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--ink);
+    }
+    .pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border: 1px solid var(--line);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pill.ok { border-color: var(--ok); color: var(--ok); }
+    .pill.bad { border-color: var(--danger); color: var(--danger); }
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 1.25rem;
+    }
+    .tabs button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 0.65rem 1rem;
+      font: inherit;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tabs button.active {
+      color: var(--ink);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 1.25rem;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="datetime-local"],
+    textarea,
+    select {
+      width: 100%;
+      font: inherit;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+    }
+    textarea {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      min-height: 7rem;
+      resize: vertical;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .field { margin-bottom: 1rem; }
+    .checks {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin: 0.25rem 0 1rem;
+    }
+    .checks label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 0;
+      color: var(--ink);
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 0.5rem;
+    }
+    button.primary {
+      appearance: none;
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+      padding: 0.6rem 1rem;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.ghost {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 0.55rem 0.9rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    .msg {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--line);
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.error { border-color: #e2b4b4; background: #fbf1f1; color: var(--danger); }
+    .msg.ok { border-color: #b7d0c4; background: #f2f8f5; color: var(--ok); }
+    .msg.warn { border-color: #e2d4a8; background: #fbf7eb; color: var(--warn); }
+    pre.out {
+      margin: 1rem 0 0;
+      padding: 1rem;
+      background: #111;
+      color: #e8e8e3;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      overflow: auto;
+      max-height: 20rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .docs h2 {
+      font-size: 1.05rem;
+      margin: 1.5rem 0 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .docs h2:first-child { margin-top: 0; }
+    .docs p, .docs li {
+      color: var(--ink);
+      line-height: 1.55;
+      font-size: 0.95rem;
+    }
+    .docs code, .docs pre {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+    }
+    .docs pre {
+      background: #1b1b1b;
+      color: #ecece6;
+      padding: 0.9rem 1rem;
+      overflow: auto;
+    }
+    .docs .note {
+      border-left: 3px solid var(--accent);
+      padding: 0.5rem 0 0.5rem 0.85rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap" style="padding-top:0;padding-bottom:0">
+      <h1>DocRouter license manager</h1>
+      <p>Local-only tool to generate and review offline product licenses. Private key never leaves this machine.</p>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="status-bar" id="statusBar">
+      <span>Loading…</span>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" class="active" data-tab="generate" role="tab">Generate</button>
+      <button type="button" data-tab="review" role="tab">Review</button>
+      <button type="button" data-tab="docs" role="tab">Documentation</button>
+    </div>
+
+    <section id="panel-generate" class="panel active" role="tabpanel">
+      <div class="card">
+        <div class="grid">
+          <div class="field">
+            <label for="license_id">License ID</label>
+            <input id="license_id" type="text" value="lic_dev_001" />
+          </div>
+          <div class="field">
+            <label for="customer_id">Customer ID</label>
+            <input id="customer_id" type="text" value="acme" />
+          </div>
+          <div class="field">
+            <label for="customer_name">Customer name</label>
+            <input id="customer_name" type="text" value="Acme Corp" />
+          </div>
+          <div class="field">
+            <label for="expires_in_days">Expires in (days)</label>
+            <input id="expires_in_days" type="number" min="1" max="3650" value="365" />
+          </div>
+          <div class="field">
+            <label for="grace_days">Grace days after expiry</label>
+            <input id="grace_days" type="number" min="0" max="365" value="7" />
+          </div>
+          <div class="field">
+            <label for="installation_id">Installation ID (optional bind)</label>
+            <input id="installation_id" type="text" placeholder="inst_… from Settings → License" />
+          </div>
+          <div class="field">
+            <label for="limits_users">Max users (optional, not enforced yet)</label>
+            <input id="limits_users" type="number" min="1" placeholder="unlimited" />
+          </div>
+          <div class="field">
+            <label for="limits_workspaces">Max workspaces (optional, not enforced yet)</label>
+            <input id="limits_workspaces" type="number" min="1" placeholder="unlimited" />
+          </div>
+        </div>
+
+        <label>Features</label>
+        <div class="checks">
+          <label><input type="checkbox" id="feat_documents" checked /> documents</label>
+          <label><input type="checkbox" id="feat_flows" checked /> flows</label>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="primary" id="btnGenerate">Generate license</button>
+          <button type="button" class="ghost" id="btnCopy" disabled>Copy token</button>
+        </div>
+        <div id="genMsg" hidden class="msg"></div>
+        <pre class="out" id="genOut" hidden></pre>
+      </div>
+    </section>
+
+    <section id="panel-review" class="panel" role="tabpanel">
+      <div class="card">
+        <div class="field">
+          <label for="review_key">License token</label>
+          <textarea id="review_key" placeholder="DRLIC1.…"></textarea>
+        </div>
+        <div class="field">
+          <label for="review_installation_id">Expected installation ID (optional)</label>
+          <input id="review_installation_id" type="text" placeholder="Leave blank to skip bind check" />
+        </div>
+        <div class="actions">
+          <button type="button" class="primary" id="btnReview">Review license</button>
+        </div>
+        <div id="revMsg" hidden class="msg"></div>
+        <pre class="out" id="revOut" hidden></pre>
+      </div>
+    </section>
+
+    <section id="panel-docs" class="panel docs" role="tabpanel">
+      <div class="card">
+        <h2>What this tool is</h2>
+        <p>
+          An internal, localhost-only UI for signing DocRouter product licenses
+          (<code>DRLIC1.…</code>) and inspecting existing tokens. It is not part of the
+          customer product. The signing private key stays on your machine.
+        </p>
+
+        <h2>One-time key setup</h2>
+        <p>Generate an Ed25519 keypair (from the repo root, venv active):</p>
+        <pre>python scripts/licensing/generate_keys.py --out-dir /tmp/dr-lic
+mkdir -p ~/.ssh
+cp /tmp/dr-lic/license-private.pem ~/.ssh/docrouter-license-private.pem
+chmod 600 ~/.ssh/docrouter-license-private.pem
+cp /tmp/dr-lic/license-public.pem \
+  packages/python/analytiq_data/licensing/keys/license-public.pem</pre>
+        <p class="note">
+          Commit only the <strong>public</strong> key with the product. Never commit the private key.
+          Customer deployments verify tokens with the packaged public key.
+        </p>
+
+        <h2>Start this UI</h2>
+        <pre>python scripts/licensing/manage_ui.py
+# open http://127.0.0.1:8765</pre>
+        <p>
+          Defaults to <code>~/.ssh/docrouter-license-private.pem</code>.
+          Override with <code>--private-key</code> / <code>--password</code> if needed.
+        </p>
+
+        <h2>Generate a license</h2>
+        <ol>
+          <li>Open the <strong>Generate</strong> tab.</li>
+          <li>Fill customer fields, expiry, and features (<code>documents</code>, <code>flows</code>).</li>
+          <li>Optionally bind to an installation ID from the customer’s <strong>Settings → License</strong> page.</li>
+          <li>Click <strong>Generate license</strong> and copy the <code>DRLIC1.…</code> token.</li>
+        </ol>
+        <p>
+          CLI equivalent:
+        </p>
+        <pre>python scripts/licensing/issue_license.py \
+  --claims claims.json \
+  --private-key ~/.ssh/docrouter-license-private.pem</pre>
+
+        <h2>Install / view a license (customer product)</h2>
+        <ol>
+          <li>Sign in as a <strong>system admin</strong>.</li>
+          <li>Go to <strong>Settings → System → License</strong>.</li>
+          <li>Paste the token and save. Status shows customer, expiry, features, and installation ID.</li>
+          <li>Or bootstrap on first start with <code>LICENSE_KEY</code> / <code>LICENSE_FILE</code> (see <code>docs/env.md</code>).</li>
+        </ol>
+        <p class="note">
+          No key in Mongo → product is ungated (SaaS / fresh install). Installing a key turns
+          enforcement on. Expired/invalid keys disable most of the HTTP API but still allow
+          auth and this License settings page so admins can upload a replacement.
+        </p>
+
+        <h2>Review a license</h2>
+        <p>
+          Use the <strong>Review</strong> tab to paste any <code>DRLIC1</code> token. Verification
+          uses the public key derived from your local private key (so it must match the key that
+          signed the token). You will see decoded claims plus mode
+          (<code>licensed</code> / <code>grace</code> / <code>expired</code> / <code>invalid</code>).
+        </p>
+
+        <h2>Claims reference</h2>
+        <pre>{
+  "license_id": "lic_01acme",
+  "customer_id": "acme",
+  "customer_name": "Acme Corp",
+  "product": "docrouter",
+  "issued_at": "2026-07-18T00:00:00Z",
+  "not_before": "2026-07-18T00:00:00Z",
+  "expires_at": "2027-07-18T00:00:00Z",
+  "grace_days": 7,
+  "features": ["documents", "flows"],
+  "limits": { "users": 50, "workspaces": 10 },
+  "deployment": { "installation_id": "inst_…" }
+}</pre>
+        <p>
+          Full design: <code>docs/simple_license.md</code>.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let lastToken = "";
+
+    document.querySelectorAll(".tabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+        btn.classList.add("active");
+        $("panel-" + btn.dataset.tab).classList.add("active");
+      });
+    });
+
+    async function loadStatus() {
+      const bar = $("statusBar");
+      try {
+        const res = await fetch("/api/status");
+        const data = await res.json();
+        const pill = data.private_key_present && !data.error
+          ? '<span class="pill ok">key ready</span>'
+          : '<span class="pill bad">key missing</span>';
+        bar.innerHTML =
+          pill +
+          "<span>Private key: <code>" + escapeHtml(data.private_key_path) + "</code></span>" +
+          (data.error ? "<span>" + escapeHtml(data.error) + "</span>" : "");
+      } catch (e) {
+        bar.innerHTML = '<span class="pill bad">offline</span> <span>Could not reach API</span>';
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function showMsg(el, text, kind) {
+      el.hidden = false;
+      el.className = "msg " + (kind || "");
+      el.textContent = text;
+    }
+
+    $("btnGenerate").addEventListener("click", async () => {
+      const features = [];
+      if ($("feat_documents").checked) features.push("documents");
+      if ($("feat_flows").checked) features.push("flows");
+
+      const users = $("limits_users").value;
+      const workspaces = $("limits_workspaces").value;
+      const body = {
+        license_id: $("license_id").value.trim(),
+        customer_id: $("customer_id").value.trim(),
+        customer_name: $("customer_name").value.trim(),
+        expires_in_days: Number($("expires_in_days").value) || 365,
+        grace_days: Number($("grace_days").value) || 0,
+        features,
+        installation_id: $("installation_id").value.trim() || null,
+        limits_users: users ? Number(users) : null,
+        limits_workspaces: workspaces ? Number(workspaces) : null,
+      };
+
+      $("btnGenerate").disabled = true;
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showMsg($("genMsg"), data.detail || JSON.stringify(data), "error");
+          $("genOut").hidden = true;
+          $("btnCopy").disabled = true;
+          return;
+        }
+        lastToken = data.license_key;
+        showMsg($("genMsg"), "License generated. Copy the token below and paste it in Settings → License.", "ok");
+        $("genOut").hidden = false;
+        $("genOut").textContent = data.license_key + "\n\n" + JSON.stringify(data.claims, null, 2);
+        $("btnCopy").disabled = false;
+      } catch (e) {
+        showMsg($("genMsg"), String(e), "error");
+      } finally {
+        $("btnGenerate").disabled = false;
+      }
+    });
+
+    $("btnCopy").addEventListener("click", async () => {
+      if (!lastToken) return;
+      await navigator.clipboard.writeText(lastToken);
+      showMsg($("genMsg"), "Token copied to clipboard.", "ok");
+    });
+
+    $("btnReview").addEventListener("click", async () => {
+      const body = {
+        license_key: $("review_key").value.trim(),
+        installation_id: $("review_installation_id").value.trim() || null,
+      };
+      $("btnReview").disabled = true;
+      try {
+        const res = await fetch("/api/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showMsg($("revMsg"), data.detail || JSON.stringify(data), "error");
+          $("revOut").hidden = true;
+          return;
+        }
+        const mode = data.status && data.status.mode;
+        const kind = data.ok && (mode === "licensed" || mode === "grace")
+          ? "ok"
+          : mode === "expired"
+            ? "warn"
+            : "error";
+        const summary = data.ok
+          ? "Signature OK · mode=" + (mode || "?") + (data.message ? " · " + data.message : "")
+          : (data.code || "ERROR") + ": " + (data.message || "Invalid");
+        showMsg($("revMsg"), summary, kind);
+        $("revOut").hidden = false;
+        $("revOut").textContent = JSON.stringify(
+          { claims: data.claims, status: data.status },
+          null,
+          2
+        );
+      } catch (e) {
+        showMsg($("revMsg"), String(e), "error");
+      } finally {
+        $("btnReview").disabled = false;
+      }
+    });
+
+    loadStatus();
+  </script>
+</body>
+</html>
