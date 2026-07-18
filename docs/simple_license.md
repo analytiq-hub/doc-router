@@ -248,7 +248,11 @@ license.
 ```bash
 # scripts/licensing/generate_keys.py
 # scripts/licensing/issue_license.py --claims claims.json
+# scripts/licensing/manage_ui.py   # localhost UI (Generate / Review / Docs)
+#   default private key: ~/.ssh/docrouter-license-private.pem
 ```
+
+See also `scripts/licensing/README.md`.
 
 Dependency: `cryptography` (already used by the repo).
 
