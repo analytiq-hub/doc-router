@@ -29,6 +29,8 @@ import {
   GCPConfig,
   SystemSettings,
   SystemSettingsUpdate,
+  LicenseStatus,
+  LicenseAdminView,
   // Invitation types
   InvitationResponse,
   CreateInvitationRequest,
@@ -253,6 +255,21 @@ export class DocRouterAccount {
 
   async updateSystemSettings(update: SystemSettingsUpdate): Promise<SystemSettings> {
     return this.http.patch<SystemSettings>('/v0/account/system_settings', update);
+  }
+
+  // --------------- Product license ---------------
+  async getLicenseStatus(): Promise<LicenseStatus> {
+    return this.http.get<LicenseStatus>('/v0/account/license/status');
+  }
+
+  async getLicense(): Promise<LicenseAdminView> {
+    return this.http.get<LicenseAdminView>('/v0/account/license');
+  }
+
+  async updateLicense(licenseKey: string): Promise<LicenseAdminView> {
+    return this.http.put<LicenseAdminView>('/v0/account/license', {
+      license_key: licenseKey,
+    });
   }
 
   // --------------- Invitations ---------------

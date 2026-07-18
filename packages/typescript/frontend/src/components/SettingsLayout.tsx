@@ -10,6 +10,7 @@ import {
   Group as UsersIcon,
   Build as DevelopmentIcon,
   Settings as SystemIcon,
+  VpnKey as LicenseIcon,
 } from '@mui/icons-material';
 import type { SvgIconProps } from '@mui/material';
 import SidebarNavTooltip from '@/components/SidebarNavTooltip';
@@ -88,6 +89,13 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
           href: '/settings/account/users',
           id: 'system_users',
           icon: UsersIcon,
+          adminOnly: true,
+        },
+        {
+          name: 'License',
+          href: '/settings/account/license',
+          id: 'system_license',
+          icon: LicenseIcon,
           adminOnly: true,
         },
         {

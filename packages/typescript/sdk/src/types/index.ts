@@ -1235,6 +1235,32 @@ export interface SystemSettingsUpdate {
   n_flow_run_workers?: number;
 }
 
+/** Safe license status (any authenticated user). */
+export interface LicenseStatus {
+  valid: boolean;
+  mode: 'licensed' | 'grace' | 'expired' | 'unlicensed' | 'invalid' | string;
+  license_id?: string | null;
+  customer_name?: string | null;
+  issued_at?: string | null;
+  not_before?: string | null;
+  expires_at?: string | null;
+  grace_days?: number | null;
+  days_remaining?: number | null;
+  in_grace: boolean;
+  features: string[];
+  limits: Record<string, number | null | undefined>;
+  installation_id?: string | null;
+  state: 'ok' | 'disabled' | string;
+  checked_at?: string | null;
+  code?: string | null;
+  message?: string | null;
+}
+
+/** Admin license view including masked key preview. */
+export interface LicenseAdminView extends LicenseStatus {
+  masked_key?: string | null;
+}
+
 // Knowledge Base types
 export type ChunkerType = "token" | "word" | "sentence" | "recursive";
 export type KBStatus = "indexing" | "active" | "error";

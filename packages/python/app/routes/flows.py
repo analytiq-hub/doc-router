@@ -25,12 +25,16 @@ from analytiq_data.docrouter_flows.document_flow_sidebar import (
 from analytiq_data.docrouter_flows.bulk_analyze import bulk_analyze_flow_executions
 
 from app.auth import get_org_user
+from app.licensing_deps import require_feature
 from app.models import User
 
 
 
 logger = logging.getLogger(__name__)
-flows_router = APIRouter(tags=["flows"])
+flows_router = APIRouter(
+    tags=["flows"],
+    dependencies=[Depends(require_feature("flows"))],
+)
 
 # Pinned binary uploads: refuse bodies over this size; only ``MAX + 1`` bytes are read from the stream.
 MAX_PIN_UPLOAD_BYTES = 50 * 1024 * 1024

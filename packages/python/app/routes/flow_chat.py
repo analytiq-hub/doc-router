@@ -15,9 +15,10 @@ from pydantic import BaseModel, Field
 import analytiq_data as ad
 from analytiq_data.flows.agent_loop.stream import ndjson_line
 from app.auth import User, get_org_user
+from app.licensing_deps import require_feature
 from app.routes.flows import FlowRevisionSnapshotRequest, _get_db, _now, _resolve_flow_revid_lineage
 
-chat_router = APIRouter()
+chat_router = APIRouter(dependencies=[Depends(require_feature("flows"))])
 logger = logging.getLogger(__name__)
 
 

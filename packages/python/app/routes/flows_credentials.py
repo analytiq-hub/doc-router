@@ -23,11 +23,15 @@ from analytiq_data.flows.credential_fields import (
     merge_credential_fields_update,
 )
 from app.auth import get_org_user
+from app.licensing_deps import require_feature
 from app.models import User
 
 logger = logging.getLogger(__name__)
 
-flow_credentials_router = APIRouter(tags=["credentials"])
+flow_credentials_router = APIRouter(
+    tags=["credentials"],
+    dependencies=[Depends(require_feature("flows"))],
+)
 
 
 class CredentialKindSummary(BaseModel):

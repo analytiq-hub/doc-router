@@ -3,6 +3,7 @@ import logging
 from . import agent
 from . import cloud
 from . import crypto
+from . import licensing
 from . import llm
 from . import migrations
 from . import mongodb

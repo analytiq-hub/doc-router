@@ -20,13 +20,17 @@ from bson import ObjectId
 import analytiq_data as ad
 from analytiq_data.common.doc import get_mime_type
 from app.auth import get_org_user
+from app.licensing_deps import require_feature
 from app.models import User
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-documents_router = APIRouter(tags=["documents"])
+documents_router = APIRouter(
+    tags=["documents"],
+    dependencies=[Depends(require_feature("documents"))],
+)
 
 # Document models
 class DocumentUpload(BaseModel):

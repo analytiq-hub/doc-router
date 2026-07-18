@@ -1,9 +1,8 @@
 # Simple product license (periodic check + feature gates)
 
-Simpler alternative to [license.md](./license.md): an **Ed25519-signed offline
-license**, checked by a **background task**, that **disables the HTTP API** when
-invalid or expired — while **always allowing** system admins to view status and
-upload / replace the key in the UI.
+Plan for an **Ed25519-signed offline license**, checked by a **background task**,
+that **disables the HTTP API** when invalid or expired — while **always allowing**
+system admins to view status and upload / replace the key in the UI.
 
 When a valid license is installed, it also gates two product capabilities via
 claims: **`documents`** and **`flows`**. Quantitative caps (**max users**,
@@ -30,7 +29,6 @@ claims: **`documents`** and **`flows`**. Quantitative caps (**max users**,
 
 **Related docs:**
 
-- [Fuller license plan](./license.md) (broader catalog / page limits — not required here)
 - [On-prem installation architecture](./on_prem_installation_architecture.md)
 - [Environment variables](./env.md)
 
@@ -90,8 +88,7 @@ replace them.
 
 ## Non-goals
 
-- Broad feature catalog (`sso`, `audit_logs`, `premium_connectors`, page quotas,
-  etc.) — stay with `documents` + `flows` until needed.
+- Per-feature or per-limit commercial entitlements beyond `documents` / `flows`.
 - Enforcing **max users / max workspaces** in v1 (schema reserved; see Later).
 - Online activation / revocation lists.
 - Hardware / hostname / pod binding.
@@ -139,20 +136,15 @@ Workers
 
 ---
 
-## How this differs from `license.md`
+## Design notes (kept simple on purpose)
 
-| Concern | This plan | `license.md` |
-|---------|-----------|--------------|
-| Enforcement | Expiry middleware + 2 feature deps | Many features + quantitative limits |
-| Workers | Unaffected; never check license | Same service used on worker call sites |
-| Check cadence | Periodic API background task (+ immediate on PUT) | Cached verify on call sites (5m TTL) |
-| Expiry UX | API disabled after expiry (optional short grace) | Soft grace then hard restrict with banners |
-| Feature catalog | `documents`, `flows` (+ later user/workspace caps) | Broader catalog + page quotas |
-| Complexity | Low–medium | Higher |
-
-Prefer this plan when the commercial need is “valid license, with documents
-and/or flows, lock API on expiry.” Prefer `license.md` when selling a large
-edition matrix and usage caps.
+| Concern | Choice |
+|---------|--------|
+| Enforcement | Expiry middleware + `documents` / `flows` feature deps |
+| Workers | Unaffected; never check license |
+| Check cadence | Periodic API background task (+ immediate on PUT) |
+| Expiry UX | API disabled after expiry (optional short grace) |
+| Feature catalog | `documents`, `flows` (+ later user/workspace caps) |
 
 ---
 
@@ -694,7 +686,7 @@ Use a temporary Ed25519 keypair in tests.
 - Gating or pausing workers on expiry.
 - Per-request calls to an external license server.
 - Binding to container/pod identity.
-- Expanding into the full `license.md` catalog before product needs it.
+- Expanding the feature catalog before product needs it.
 - Enforcing `limits.users` / `limits.workspaces` before the Later phase is
   explicitly scheduled (but do accept them in the token).
 
@@ -708,7 +700,7 @@ Use a temporary Ed25519 keypair in tests.
 - Read/export carve-outs while expired (if not done in v1).
 - Public key rotation procedure.
 - Clock watermark against rolling the host clock back.
-- Page-per-year or other usage quotas (see [license.md](./license.md) if needed).
+- Page-per-year or other usage quotas.
 
 When extending later, keep local Ed25519 verification as the trust root; any
 future online check-in should return a short-lived signed entitlement, never a

@@ -184,6 +184,32 @@ The following environment variables are used for various LLM providers:
 - **Purpose**: Password for the default system administrator
 - **Usage**: System initialization (`packages/python/app/startup.py`)
 
+## Product license
+
+### `LICENSE_PUBLIC_KEY_PATH`
+- **Purpose**: Override path to the Ed25519 public key PEM used to verify `DRLIC1` license tokens
+- **Default**: packaged key at `analytiq_data/licensing/keys/license-public.pem`
+- **Usage**: Tests and alternate key material (`packages/python/analytiq_data/licensing/`)
+
+### `LICENSE_KEY`
+- **Purpose**: Bootstrap raw license token into Mongo if no `license_key` is stored yet
+- **Default**: unset
+- **Usage**: On-prem install / first API start (`ad.licensing.bootstrap_license_if_needed`)
+
+### `LICENSE_FILE`
+- **Purpose**: Same as `LICENSE_KEY`, but read the token from a file path
+- **Default**: unset
+
+### `LICENSE_CHECK_INTERVAL_SECONDS`
+- **Purpose**: How often the API process re-verifies the stored license and updates `state`
+- **Default**: `300`
+- **Usage**: Background license checker in FastAPI lifespan
+
+### `INSTALLATION_ID`
+- **Purpose**: Seed the stable deployment installation id once (otherwise a UUID is generated)
+- **Default**: unset
+- **Usage**: License bind claim `deployment.installation_id`
+
 ## Worker Configuration
 
 ### `DOCROUTER_WORKERS_ENABLED`

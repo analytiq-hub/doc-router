@@ -48,6 +48,8 @@ from app.routes.agent import agent_router
 from app.routes.flows import flows_router
 from app.routes.flow_chat import chat_router
 from app.routes.flows_credentials import flow_credentials_router
+from app.routes.license import license_router
+from app.licensing_gate import LicenseGateMiddleware
 import analytiq_data as ad
 
 # Set up the environment variables. This reads the .env file.
@@ -110,6 +112,8 @@ async def lifespan(app):
     if os.getenv("FLOW_SCHEDULER_ENABLED", "1") == "1":
         await ad.flows.start_flow_trigger_service(analytiq_client)
 
+    await ad.licensing.start_license_checker()
+
     # Recover stale queue messages and orphaned flow runs, then start background workers.
     await ad.system.workers.recover_on_worker_startup(analytiq_client)
 
@@ -130,6 +134,7 @@ async def lifespan(app):
         await asyncio.gather(worker_supervisor, return_exceptions=True)
 
     await ad.flows.stop_flow_trigger_service()
+    await ad.licensing.stop_license_checker()
 
     await ad.mongodb.close_shared_async_client()
 
@@ -155,6 +160,9 @@ cors_origins_extra = [o for o in os.getenv("CORS_ORIGINS_EXTRA", "").split(",") 
 cors_origins = list(CORS_ORIGINS_DEF) + cors_origins_extra
 logger.info(f"CORS allowed origins: {cors_origins}")
 
+# License expiry gate innermost relative to CORS so 403 responses still get CORS headers.
+app.add_middleware(LicenseGateMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -178,6 +186,7 @@ app.include_router(aws_router)
 app.include_router(gcp_router)
 app.include_router(azure_router)
 app.include_router(system_settings_router)
+app.include_router(license_router)
 app.include_router(oauth_router)
 app.include_router(orgs_router)
 app.include_router(users_router)

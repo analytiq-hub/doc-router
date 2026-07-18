@@ -16,13 +16,17 @@ from fastapi.responses import JSONResponse
 # Local imports
 import analytiq_data as ad
 from app.auth import get_org_user
+from app.licensing_deps import require_feature
 from app.models import User
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-ocr_router = APIRouter(tags=["ocr"])
+ocr_router = APIRouter(
+    tags=["ocr"],
+    dependencies=[Depends(require_feature("documents"))],
+)
 
 # OCR models
 class GetOCRMetadataResponse(BaseModel):
