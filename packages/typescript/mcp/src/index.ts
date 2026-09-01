@@ -1401,6 +1401,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
           
           // Write file to disk
+          if (fileResult.content === null) {
+            throw new Error(`No file content returned for document ${documentId}`);
+          }
           const fileBuffer = Buffer.from(fileResult.content);
           writeFileSync(finalPath, fileBuffer);
           
