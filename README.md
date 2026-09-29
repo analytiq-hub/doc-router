@@ -56,3 +56,4 @@ The script prints URLs and sign-in credentials after `up`. More detail: [Docker 
 * Development
   * [Environment Variables Guide](./docs/env.md)
   * [Database Migrations Guide](./backend/analytiq_data/migrations/MIGRATIONS.md)
+
