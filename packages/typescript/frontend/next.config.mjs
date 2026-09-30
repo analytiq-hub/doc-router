@@ -6,12 +6,26 @@ import TerserPlugin from 'terser-webpack-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Hostnames (no scheme/port) that may load the dev server, taken from the top-level .env
+// so remote dev access doesn't need a hardcoded IP.
+const devOriginHosts = (urls) => {
+  const hosts = new Set(['127.0.0.1']);
+  for (const url of urls) {
+    try {
+      hosts.add(new URL(url).hostname);
+    } catch {
+      // Unset or relative (e.g. '/fastapi') — nothing to add
+    }
+  }
+  return [...hosts];
+};
+
 const nextConfig = {
   env: {
     NEXT_PUBLIC_FASTAPI_FRONTEND_URL: process.env.PUBLIC_API_URL || '/fastapi',
   },
   output: 'standalone',
-  allowedDevOrigins: ['127.0.0.1'],
+  allowedDevOrigins: devOriginHosts([process.env.NEXTAUTH_URL, process.env.PUBLIC_API_URL]),
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],
   // Include files from monorepo parent for file: dependencies (production build)
   outputFileTracingRoot: path.join(__dirname, '..'),
