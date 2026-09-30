@@ -41,6 +41,7 @@ async def get_s3_bucket_name(analytiq_client) -> str:
             return aws_config["s3_bucket_name"]
     except Exception as e:
         logger.warning(f"Could not get S3 bucket name from database: {e}")
+    return os.getenv("AWS_S3_BUCKET_NAME") or None
 
 class SyncAWSClient:
     def __init__(self, analytiq_client, region_name: str = "us-east-1"):
@@ -155,6 +156,10 @@ class AsyncAWSClient:
       config — static, used by Bedrock via litellm. Never rotated by assume-role refresh.
     - Track B (assumed role): ``AioDeferredRefreshableCredentials`` on a stable
       ``aioboto3.Session`` — used by ``client()`` for service API calls.
+
+    When no static keys are configured, both tracks fall back to the boto3 default
+    credential chain (env vars, shared config, EC2/ECS instance profile) — the
+    instance role is used directly, with no assume-role hop.
     """
 
     def __init__(self, analytiq_client, region_name: str = "us-east-1"):
@@ -169,9 +174,6 @@ class AsyncAWSClient:
         self.aws_access_key_id = aws_keys["aws_access_key_id"]
         self.aws_secret_access_key = aws_keys["aws_secret_access_key"]
 
-        if not self.aws_access_key_id or not self.aws_secret_access_key:
-            raise Exception(f"AWS credentials not configured. Cannot create async AWS client.")
-
         # Track B: async assume-role session for service clients
         self.assume_role_arn = None
         self._source_credentials = None
@@ -180,6 +182,13 @@ class AsyncAWSClient:
         self._aio_session = None
         self.session = None
         self.s3_bucket_name = None
+
+        if not self.aws_access_key_id or not self.aws_secret_access_key:
+            # No static keys in cloud_config: try the boto3 default credential
+            # chain (env vars, shared config, EC2/ECS instance profile) instead.
+            await self._setup_default_chain_session()
+            self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
+            return
 
         try:
             await self._setup_assumed_role_session()
@@ -194,6 +203,31 @@ class AsyncAWSClient:
                 region_name=self.region_name,
             )
             self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
+
+    async def _setup_default_chain_session(self) -> None:
+        """Use the boto3 default credential chain (instance profile, env vars, ~/.aws).
+
+        Verifies the chain with one STS GetCallerIdentity call so a missing
+        credential source fails loudly at init with a troubleshootable error,
+        not deep inside the first S3/Textract call.
+        """
+        session = aioboto3.Session(region_name=self.region_name)
+        try:
+            async with session.client("sts") as sts_client:
+                identity = await sts_client.get_caller_identity()
+        except Exception as e:
+            raise Exception(
+                "AWS credentials not configured. No static access keys found in the "
+                "cloud_config collection (set via Settings > Account > Development, or "
+                "AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in .env before first startup), "
+                "and the boto3 default credential chain (env vars, ~/.aws/credentials, "
+                f"EC2/ECS instance profile) yielded no usable credentials: {e}"
+            ) from e
+        logger.info(
+            f"Async AWS client using default credential chain "
+            f"(e.g. instance profile), identity: {identity['Arn']}"
+        )
+        self.session = session
 
     async def _resolve_assume_role_arn(self) -> str:
         """One-shot sync STS lookup for role ARN (off event loop)."""

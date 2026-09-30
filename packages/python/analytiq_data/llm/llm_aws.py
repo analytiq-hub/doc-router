@@ -21,7 +21,12 @@ async def add_aws_params(analytiq_client, params: dict) -> None:
     import analytiq_data as ad
 
     aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-    params["aws_access_key_id"] = aws_client.aws_access_key_id
-    params["aws_secret_access_key"] = aws_client.aws_secret_access_key
+    if aws_client.aws_access_key_id and aws_client.aws_secret_access_key:
+        params["aws_access_key_id"] = aws_client.aws_access_key_id
+        params["aws_secret_access_key"] = aws_client.aws_secret_access_key
+    else:
+        # No static keys configured — let litellm's boto3 resolve the default
+        # credential chain (env vars, instance profile).
+        logger.debug("add_aws_params: no static AWS keys; using default credential chain")
     params["aws_region_name"] = aws_client.region_name
     logger.debug(f"add_aws_params: region={aws_client.region_name}")

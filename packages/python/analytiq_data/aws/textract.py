@@ -330,9 +330,13 @@ async def run_textract(analytiq_client,
                             f"{analytiq_client.name}: {prefix_part}uploading to S3 "
                             f"(blob_bytes={len(blob)}, s3://{s3_bucket_name}/{s3_key})"
                         )
-                        await s3_client.put_object(
-                            Bucket=s3_bucket_name, Key=s3_key, Body=blob
-                        )
+                        put_kwargs = {"Bucket": s3_bucket_name, "Key": s3_key, "Body": blob}
+                        # Optional server-side encryption header (e.g. "aws:kms"), for
+                        # deployments where an org policy denies unencrypted PutObject.
+                        s3_sse = os.getenv("AWS_S3_SSE")
+                        if s3_sse:
+                            put_kwargs["ServerSideEncryption"] = s3_sse
+                        await s3_client.put_object(**put_kwargs)
                         upload_secs = loop.time() - upload_started_at
                         logger.info(
                             f"{analytiq_client.name}: {prefix_part}uploaded to S3 "
