@@ -17,6 +17,7 @@ import {
 } from '@/utils/api';
 import { Tag } from '@docrouter/sdk';
 import { isColorLight } from '@/utils/colors';
+import { randomUUID } from '@/utils/uuid';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from './TagSelector';
 
@@ -56,7 +57,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newRows: PendingUploadFile[] = acceptedFiles.map((file) => ({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       file,
     }));
     setFiles((prev) => [...prev, ...newRows]);
