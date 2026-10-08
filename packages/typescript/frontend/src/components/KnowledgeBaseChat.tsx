@@ -437,7 +437,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       <div className="bg-gradient-to-r bg-blue-600 px-3 sm:px-6 py-2 sm:py-4 sm:rounded-t-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
-            <h2 className="text-base sm:text-xl font-semibold text-white truncate shrink-0">
+            <h2 className="text-base sm:text-xl font-semibold text-white truncate min-w-0">
               Chat with Knowledge Base
             </h2>
             <ThreadDropdown
@@ -452,13 +452,13 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               }}
             />
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 sm:ml-2">
             {availableModels.length > 0 && (
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isStreaming}
-                className="flex-1 sm:flex-none px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="flex-1 sm:flex-none min-w-0 sm:max-w-[18rem] truncate px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
               >
                 {availableModels.map(model => (
                   <option key={model} value={model}>{model}</option>

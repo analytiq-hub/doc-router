@@ -103,14 +103,14 @@ export default function ThreadDropdown({
   const triggerSub = currentThread ? relativeTime(currentThread.updated_at) : '';
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative min-w-0 max-w-full" ref={ref}>
       <button
         type="button"
         onClick={() => {
           if (!open) onOpen?.();
           setOpen((o) => !o);
         }}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 min-w-0 max-w-[200px]"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 min-w-0 max-w-full sm:max-w-[200px]"
         title="Conversation history"
       >
         <HistoryIcon sx={{ fontSize: 18 }} className="shrink-0 text-gray-500" />
