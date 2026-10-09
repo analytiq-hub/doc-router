@@ -113,7 +113,8 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
             onClick={() => handleEdit(params.row)}
           >
             <div
-              className={`px-2 py-1 leading-none rounded shadow-sm ${textColor}`}
+              className={`px-2 py-1 leading-none rounded shadow-sm truncate ${textColor}`}
+              title={params.row.name}
               style={{
                 backgroundColor: bgColor,
               }}
@@ -130,8 +131,10 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       flex: 2,
       minWidth: 120,
       renderCell: (params) => (
-        <div className="flex items-center h-full w-full">
-          {params.row.description ?? ''}
+        <div className="flex items-center h-full w-full min-w-0">
+          <span className="truncate" title={params.row.description ?? ''}>
+            {params.row.description ?? ''}
+          </span>
         </div>
       ),
     },
@@ -160,7 +163,9 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       renderCell: (params: GridRenderCellParams) => {
         const anyParams = params as unknown as { row?: { created_at?: unknown } };
         if (!anyParams?.row?.created_at) return '';
-        return <div className="flex items-center h-full text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
+        return <div className="flex items-center h-full min-w-0 text-gray-600">
+            <span className="truncate">{formatLocalDate(anyParams.row.created_at as string)}</span>
+          </div>;
       },
     },
     {
