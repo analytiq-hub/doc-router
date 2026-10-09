@@ -742,18 +742,14 @@ async def list_llm_models(
 
         # Separate chat and embedding models
         for model in models:
-            max_input_tokens = 0
-            input_cost_per_token = 0
-            output_cost_per_token = 0
-            
-            if model in litellm.model_cost:
-                max_input_tokens = litellm.model_cost[model].get("max_input_tokens", 0)
-                input_cost_per_token = litellm.model_cost[model].get("input_cost_per_token", 0)
-                output_cost_per_token = litellm.model_cost[model].get("output_cost_per_token", 0)
+            cost = litellm.model_cost.get(model, {})
+            max_input_tokens = cost.get("max_input_tokens", 0)
+            input_cost_per_token = cost.get("input_cost_per_token", 0)
+            output_cost_per_token = cost.get("output_cost_per_token", 0)
 
             # Check if it's a chat model or embedding model
             if ad.llm.is_chat_model(model):
-                max_output_tokens = litellm.model_cost[model].get("max_output_tokens", 0)
+                max_output_tokens = cost.get("max_output_tokens", 0)
                 chat_model = LLMChatModel(
                     litellm_model=model,
                     litellm_provider=provider["litellm_provider"],
@@ -771,9 +767,7 @@ async def list_llm_models(
                 try:
                     model_info = litellm.get_model_info(model)
                     dimensions = model_info.get("output_vector_size", 0)
-                    input_cost_per_token_batches = 0.0
-                    if model in litellm.model_cost:
-                        input_cost_per_token_batches = litellm.model_cost[model].get("input_cost_per_token_batches", 0.0)
+                    input_cost_per_token_batches = cost.get("input_cost_per_token_batches", 0.0)
                     embedding_model = LLMEmbeddingModel(
                         litellm_model=model,
                         litellm_provider=provider["litellm_provider"],

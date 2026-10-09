@@ -13,7 +13,7 @@ from typing import Optional
 # Third-party imports
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from bson import ObjectId
-from jose import jwt
+import jwt
 from pydantic import BaseModel
 
 # Local imports

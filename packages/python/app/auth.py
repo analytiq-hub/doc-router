@@ -11,7 +11,8 @@ from fastapi import (
     FastAPI, HTTPException, Depends, Security, Request, Header
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from dotenv import load_dotenv
 
 # Local imports
@@ -107,7 +108,7 @@ async def get_session_user(credentials: HTTPAuthorizationCredentials = Security(
             token_type="jwt"
         )
 
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(
             status_code=401,
             detail="Invalid session token. Only browser sessions are allowed for this endpoint."

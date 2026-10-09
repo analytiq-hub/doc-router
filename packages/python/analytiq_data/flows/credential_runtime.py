@@ -22,7 +22,7 @@ import httpx
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 from jinja2 import Environment, Undefined
-from jose import jwt
+import jwt
 
 import analytiq_data as ad
 
