@@ -349,7 +349,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         const tooltip = formattedDate;
         return (
           <div title={tooltip} className="flex items-center h-full w-full min-w-0">
-            <span className="truncate">{formattedDate}</span>
+            <span className="truncate min-w-0">{formattedDate}</span>
           </div>
         );
       },
@@ -371,11 +371,11 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           return (
             <div 
               key={tag.id}
-              className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center min-w-0`}
+              className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center min-w-0 overflow-hidden`}
               style={{ backgroundColor: bgColor }}
               title={tag.name}
             >
-              <span className="truncate">{tag.name}</span>
+              <span className="truncate min-w-0">{tag.name}</span>
             </div>
           );
         };
