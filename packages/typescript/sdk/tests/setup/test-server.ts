@@ -152,8 +152,8 @@ export class TestServer {
 
     console.log('Creating virtual environment...');
     // Create virtual environment in docrouter_ts_sdk directory
-    // Try python3.11 first, then fallback to python3.9, then python3
-    const pythonVersions = ['python3.13', 'python3.11', 'python3.9', 'python3'];
+    // Try python3.14 first, then fall back to older versions, then python3
+    const pythonVersions = ['python3.14', 'python3.13', 'python3.11', 'python3.9', 'python3'];
     let venvCreated = false;
     
     for (const pythonCmd of pythonVersions) {
@@ -170,7 +170,7 @@ export class TestServer {
     }
     
     if (!venvCreated) {
-      throw new Error('No suitable Python version found. Tried: python3.11, python3.9, python3');
+      throw new Error(`No suitable Python version found. Tried: ${pythonVersions.join(', ')}`);
     }
 
     // Install requirements from packages directory using uv pip install with virtual environment
