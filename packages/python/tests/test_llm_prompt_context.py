@@ -192,7 +192,7 @@ async def test_build_prompt_context_pdf_toggle_off_skips_attachment(test_db, moc
         patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
         patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="P"),
         patch("analytiq_data.llm.llm.get_file_attachment", new=attach),
-        patch("litellm.utils.supports_pdf_input", return_value=True),
+        patch("analytiq_data.llm.llm.supports_pdf_input", return_value=True),
     ):
         messages, _, used = await _build_prompt_context(
             analytiq_client, doc, "r", TEST_ORG_ID, "SYS", "openai", "gpt-4o", "k"
@@ -217,7 +217,7 @@ async def test_build_prompt_context_pdf_file_block_non_openai(test_db, mock_auth
         patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
         patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="Z"),
         patch("analytiq_data.llm.llm.get_file_attachment", new_callable=AsyncMock, return_value=(pdf_bytes, "x.pdf")),
-        patch("litellm.utils.supports_pdf_input", return_value=True),
+        patch("analytiq_data.llm.llm.supports_pdf_input", return_value=True),
     ):
         messages, _, prompt_used = await _build_prompt_context(
             analytiq_client, doc, "r", TEST_ORG_ID, "SYS", "anthropic", "claude-sonnet-4-20250514", "k"
@@ -245,7 +245,7 @@ async def test_build_prompt_context_pdf_openai_uploads_file(test_db, mock_auth, 
         patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
         patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="Z"),
         patch("analytiq_data.llm.llm.get_file_attachment", new_callable=AsyncMock, return_value=(pdf_bytes, "q.pdf")),
-        patch("litellm.utils.supports_pdf_input", return_value=True),
+        patch("analytiq_data.llm.llm.supports_pdf_input", return_value=True),
         patch("analytiq_data.llm.llm._litellm_acreate_file_with_retry", new=mock_create),
     ):
         messages, _, _ = await _build_prompt_context(
@@ -271,7 +271,7 @@ async def test_build_prompt_context_pdf_embedded_when_no_vision(test_db, mock_au
         patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
         patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="Z"),
         patch("analytiq_data.llm.llm.get_file_attachment", new_callable=AsyncMock, return_value=(pdf_bytes, "z.pdf")),
-        patch("litellm.utils.supports_pdf_input", return_value=False),
+        patch("analytiq_data.llm.llm.supports_pdf_input", return_value=False),
     ):
         messages, _, _ = await _build_prompt_context(
             analytiq_client, doc, "r", TEST_ORG_ID, "SYS", "openai", "some-text-model", "k"
@@ -295,7 +295,7 @@ async def test_build_prompt_context_xai_embeds_pdf_even_if_vision_supported(test
         patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
         patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="Z"),
         patch("analytiq_data.llm.llm.get_file_attachment", new_callable=AsyncMock, return_value=(pdf_bytes, "x.pdf")),
-        patch("litellm.utils.supports_pdf_input", return_value=True),
+        patch("analytiq_data.llm.llm.supports_pdf_input", return_value=True),
     ):
         messages, _, _ = await _build_prompt_context(
             analytiq_client, doc, "r", TEST_ORG_ID, "SYS", "xai", "grok-2-latest", "k"
