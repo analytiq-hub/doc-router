@@ -279,7 +279,8 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const filteredPrompts = prompts;
 
   // Define columns for the data grid
-  const columns: GridColDef[] = [
+  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: 'name',
       headerName: 'Prompt',
@@ -423,7 +424,8 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         </div>
       ),
     },
-  ];
+  ], [router, organizationId]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <div className="p-4 w-full">

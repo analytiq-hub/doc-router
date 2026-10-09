@@ -203,7 +203,8 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   };
 
   // Define columns for the data grid
-  const columns: GridColDef[] = [
+  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: 'name',
       headerName: 'Form Name',
@@ -317,9 +318,8 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       width: 200,
       headerAlign: 'left',
       align: 'left',
-      valueGetter: (params: GridRenderCellParams) => {
-        const anyParams = params as unknown as { row?: { created_at?: unknown }; value?: unknown };
-        const v = (anyParams.row?.created_at ?? anyParams.value) as string | Date | null | undefined;
+      valueGetter: (value: unknown, row: { created_at?: unknown }) => {
+        const v = (row?.created_at ?? value) as string | Date | null | undefined;
         if (!v) return null;
         if (v instanceof Date) return v;
         const d = new Date(v);
@@ -359,7 +359,8 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         </div>
       ),
     },
-  ];
+  ], [router, organizationId]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <div className="p-4 mx-auto">

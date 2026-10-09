@@ -305,7 +305,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   }, []);
 
   // Define all columns
-  const allColumns: GridColDef[] = [
+  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
+  const allColumns = useMemo<GridColDef[]>(() => [
     {
       field: 'document_name',
       headerName: 'Document Name',
@@ -326,10 +327,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       headerName: 'Upload Date', // Renamed column
       type: 'dateTime',
       flex: .65, // Slightly wider than before
-      valueGetter: (params: GridRenderCellParams) => {
-        // DataGrid calls valueGetter from multiple contexts; `row` may be undefined.
-        const anyParams = params as unknown as { row?: { upload_date?: unknown }, value?: unknown };
-        const v = (anyParams.row?.upload_date ?? anyParams.value) as string | Date | null | undefined;
+      valueGetter: (value: unknown, row: { upload_date?: unknown }) => {
+        const v = (row?.upload_date ?? value) as string | Date | null | undefined;
         if (!v) return null;
         if (v instanceof Date) return v;
         const d = new Date(v);
@@ -448,12 +447,16 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         </div>
       ),
     },
-  ];
+  ], [tags, organizationId]);
+  /* eslint-enable react-hooks/exhaustive-deps */
   
   // Filter columns based on screen size
-  const columns = isSmallScreen 
-    ? allColumns.filter(col => ['document_name', 'tag_ids', 'actions'].includes(col.field))
-    : allColumns;
+  const columns = useMemo(
+    () => isSmallScreen
+      ? allColumns.filter(col => ['document_name', 'tag_ids', 'actions'].includes(col.field))
+      : allColumns,
+    [isSmallScreen, allColumns]
+  );
 
   const handleCloseTagEditor = () => {
     setIsTagEditorOpen(false);

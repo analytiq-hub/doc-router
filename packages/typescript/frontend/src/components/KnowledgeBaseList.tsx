@@ -210,7 +210,8 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   };
 
   // Define columns for the data grid
-  const columns: GridColDef[] = [
+  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
+  const columns = useMemo<GridColDef[]>(() => [
     {
       field: 'name',
       headerName: 'Name',
@@ -279,8 +280,8 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       headerName: 'Model',
       width: 180,
       renderCell: (params) => (
-        <div className="flex items-center h-full w-full text-sm text-gray-600">
-          {params.row.embedding_model}
+        <div title={params.row.embedding_model} className="flex items-center h-full w-full min-w-0 text-sm text-gray-600">
+          <span className="truncate min-w-0">{params.row.embedding_model}</span>
         </div>
       ),
     },
@@ -302,10 +303,11 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             key={tag.id}
             className={`px-2 py-1 rounded text-xs ${
               isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-            } flex items-center whitespace-nowrap`}
+            } flex items-center min-w-0 overflow-hidden whitespace-nowrap`}
             style={{ backgroundColor: tag.color }}
+            title={tag.name}
           >
-            {tag.name}
+            <span className="truncate min-w-0">{tag.name}</span>
           </div>
         );
 
@@ -314,10 +316,10 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         }
 
         const content = (
-          <div className="flex gap-1 items-center h-full">
+          <div className="flex gap-1 items-center h-full w-full min-w-0">
             {tagChip(firstTag)}
             {hasMoreTags && (
-              <span className="text-gray-500 text-sm">...</span>
+              <span className="text-gray-500 text-sm shrink-0">...</span>
             )}
           </div>
         );
@@ -349,7 +351,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
                 },
               }}
             >
-              <div className="w-full flex items-center h-full">
+              <div className="w-full min-w-0 flex items-center h-full">
                 {content}
               </div>
             </Tooltip>
@@ -366,9 +368,8 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       width: 200,
       headerAlign: 'left',
       align: 'left',
-      valueGetter: (params: GridRenderCellParams) => {
-        const anyParams = params as unknown as { row?: { created_at?: unknown }; value?: unknown };
-        const v = (anyParams.row?.created_at ?? anyParams.value) as string | Date | null | undefined;
+      valueGetter: (value: unknown, row: { created_at?: unknown }) => {
+        const v = (row?.created_at ?? value) as string | Date | null | undefined;
         if (!v) return null;
         if (v instanceof Date) return v;
         const d = new Date(v);
@@ -405,7 +406,8 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         </div>
       ),
     },
-  ];
+  ], [availableTags, organizationId, router]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <div className="p-4 w-full">
@@ -461,17 +463,21 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             sortingMode="server"
             sortModel={sortModel}
             onSortModelChange={(model) => {
-              setSortModel(model.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field)));
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              const next = model.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field));
+              if (JSON.stringify(next) === JSON.stringify(sortModel)) return;
+              setSortModel(next);
+              setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
             }}
             filterMode="server"
             filterModel={filterModel}
             onFilterModelChange={(model) => {
-              setFilterModel({
+              const next = {
                 ...model,
                 items: model.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
-              });
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              };
+              if (JSON.stringify(next) === JSON.stringify(filterModel)) return;
+              setFilterModel(next);
+              setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
             }}
             paginationMode="server"
             paginationModel={paginationModel}
