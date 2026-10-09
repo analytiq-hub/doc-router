@@ -59,7 +59,7 @@ import {
   type FlowPaletteSectionId,
 } from './flowPaletteGroups';
 import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
-import { useStableFlowRfCanvasRegistration } from './useStableFlowRfCanvasRegistration';
+import { RF_CANVAS_EDGE_TYPES, RF_CANVAS_NODE_TYPES } from './useStableFlowRfCanvasRegistration';
 import {
   FlowCanvasActionsProvider,
   FlowExecutionVisualProvider,
@@ -381,7 +381,6 @@ const FlowEditor: React.FC<{
   onExecuteStep,
   flowOrgApi = null,
 }) => {
-  const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const flowNameById = useOrgFlowNameMap(flowOrgApi);
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [paletteDrilledSection, setPaletteDrilledSection] = useState<FlowPaletteSectionId | null>(null);
@@ -1255,8 +1254,8 @@ const FlowEditor: React.FC<{
               className="h-full w-full"
               nodes={nodesWithPinnedFlag}
               edges={canvasEdges}
-              nodeTypes={rfCanvasNodeTypes}
-              edgeTypes={rfCanvasEdgeTypes}
+              nodeTypes={RF_CANVAS_NODE_TYPES}
+              edgeTypes={RF_CANVAS_EDGE_TYPES}
               onNodesChange={handleRfNodesChange}
               onEdgesChange={(changes: EdgeChange[]) => {
                 prepareEdgeChanges(changes);

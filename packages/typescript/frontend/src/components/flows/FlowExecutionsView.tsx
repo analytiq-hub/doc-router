@@ -22,7 +22,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import './flows-canvas.css';
 import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
-import { useStableFlowRfCanvasRegistration } from './useStableFlowRfCanvasRegistration';
+import { RF_CANVAS_EDGE_TYPES, RF_CANVAS_NODE_TYPES } from './useStableFlowRfCanvasRegistration';
 import { FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS } from './flowUiClasses';
 import FlowLogsPanel from './FlowLogsPanel';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
@@ -137,7 +137,6 @@ const FlowExecutionsView: React.FC<{
   /** When true, omit top border (workspace header above already divides the pane). */
   suppressTopChrome?: boolean;
 }> = ({ orgApi, flowId, nodeTypes, fallbackNodes, fallbackEdges, onEditFlowNode, suppressTopChrome }) => {
-  const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const [list, setList] = useState<FlowExecutionSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -628,8 +627,8 @@ const FlowExecutionsView: React.FC<{
                   className="h-full w-full flex-1 min-h-0"
                   nodes={viewNodes as Node<FlowRfNodeData>[]}
                   edges={canvasEdges}
-                  nodeTypes={rfCanvasNodeTypes}
-                  edgeTypes={rfCanvasEdgeTypes}
+                  nodeTypes={RF_CANVAS_NODE_TYPES}
+                  edgeTypes={RF_CANVAS_EDGE_TYPES}
                   nodesConnectable={false}
                   elementsSelectable
                   onNodeDoubleClick={onNodeDoubleClick}
