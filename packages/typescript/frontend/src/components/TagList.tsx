@@ -160,7 +160,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       renderCell: (params: GridRenderCellParams) => {
         const anyParams = params as unknown as { row?: { created_at?: unknown } };
         if (!anyParams?.row?.created_at) return '';
-        return <div className="text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
+        return <div className="flex items-center h-full text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
       },
     },
     {
