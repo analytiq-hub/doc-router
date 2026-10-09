@@ -247,7 +247,8 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       align: 'left',
       renderCell: (params) => (
         <div 
-          className="text-blue-600 cursor-pointer hover:underline"
+          className="text-blue-600 cursor-pointer hover:underline truncate"
+          title={params.row.name}
           onClick={() => handleEdit(params.row)}
         >
           {params.row.name}
@@ -269,7 +270,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         return (
           <div className="flex flex-col justify-center w-full h-full">
             {fields.map((field, index) => (
-              <div key={index} className="text-sm text-gray-600 leading-6">
+              <div key={index} className="text-sm text-gray-600 leading-6 truncate" title={`${field.name}: ${field.type}`}>
                 {`${field.name}: ${field.type}`}
               </div>
             ))}
@@ -302,7 +303,9 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       renderCell: (params: GridRenderCellParams) => {
         const anyParams = params as unknown as { row?: { created_at?: unknown } };
         if (!anyParams?.row?.created_at) return '';
-        return <div className="text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
+        return <div className="flex items-center h-full min-w-0 text-gray-600">
+          <span className="truncate">{formatLocalDate(anyParams.row.created_at as string)}</span>
+        </div>;
       },
     },
     {

@@ -313,6 +313,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       renderCell: (params) => {
         return (
           <Link href={`/orgs/${organizationId}/docs/${params.row.id}`}
+            title={params.value}
+            className="block truncate"
             style={{ color: 'blue', textDecoration: 'underline' }}>
             {params.value}
           </Link>
@@ -346,8 +348,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         const formattedDate = formatLocalDate(anyParams.row.upload_date as string);
         const tooltip = formattedDate;
         return (
-          <div title={tooltip}>
-            {formattedDate}
+          <div title={tooltip} className="flex items-center h-full w-full min-w-0">
+            <span className="truncate">{formattedDate}</span>
           </div>
         );
       },
@@ -369,10 +371,11 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           return (
             <div 
               key={tag.id}
-              className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center`}
+              className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center min-w-0`}
               style={{ backgroundColor: bgColor }}
+              title={tag.name}
             >
-              {tag.name}
+              <span className="truncate">{tag.name}</span>
             </div>
           );
         };
@@ -382,10 +385,10 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         }
 
         const content = (
-          <div className="flex gap-1 items-center h-full">
+          <div className="flex gap-1 items-center h-full w-full min-w-0">
             {tagChip(firstTag)}
             {hasMoreTags && (
-              <span className="text-gray-500 text-sm">...</span>
+              <span className="text-gray-500 text-sm shrink-0">...</span>
             )}
           </div>
         );
@@ -417,7 +420,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
                 },
               }}
             >
-              <div className="w-full flex items-center h-full">
+              <div className="w-full flex items-center h-full min-w-0">
                 {content}
               </div>
             </Tooltip>

@@ -288,10 +288,10 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       align: 'left',
       renderCell: (params) => (
         <div 
-          className="text-blue-600 cursor-pointer hover:underline flex items-center h-full"
+          className="text-blue-600 cursor-pointer hover:underline flex items-center h-full w-full min-w-0"
           onClick={() => handleEdit(params.row)}
         >
-          {params.row.name}
+          <span className="truncate" title={params.row.name}>{params.row.name}</span>
         </div>
       ),
     },
@@ -305,10 +305,12 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         // Retrieve schema name using schema_id and schema_version from preloaded schemas
         const schemaName = getSchemaName(params.row.schema_id, params.row.schema_version);
         return (
-          <div className="text-gray-600 flex items-center h-full">
-            {(params.row.schema_id && (schemaName !== '-')) 
-              ? `${schemaName}:v${params.row.schema_version}`
-              : '-'}
+          <div className="text-gray-600 flex items-center h-full w-full min-w-0">
+            <span className="truncate">
+              {(params.row.schema_id && (schemaName !== '-')) 
+                ? `${schemaName}:v${params.row.schema_version}`
+                : '-'}
+            </span>
           </div>
         );
       },
@@ -320,8 +322,8 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
-        <div className="text-gray-600 flex items-center h-full">
-          {params.row.model || DEFAULT_LLM_MODEL}
+        <div className="text-gray-600 flex items-center h-full w-full min-w-0">
+          <span className="truncate">{params.row.model || DEFAULT_LLM_MODEL}</span>
         </div>
       ),
     },
@@ -343,10 +345,11 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             key={tag.id}
             className={`px-2 py-1 rounded text-xs ${
               isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-            } flex items-center`}
+            } flex items-center min-w-0`}
             style={{ backgroundColor: tag.color }}
+            title={tag.name}
           >
-            {tag.name}
+            <span className="truncate">{tag.name}</span>
           </div>
         );
 
@@ -355,10 +358,10 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         }
 
         const content = (
-          <div className="flex gap-1 items-center h-full">
+          <div className="flex gap-1 items-center h-full w-full min-w-0">
             {tagChip(firstTag)}
             {hasMoreTags && (
-              <span className="text-gray-500 text-sm">...</span>
+              <span className="text-gray-500 text-sm shrink-0">...</span>
             )}
           </div>
         );
@@ -390,7 +393,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
                 },
               }}
             >
-              <div className="w-full flex items-center h-full">
+              <div className="w-full flex items-center h-full min-w-0">
                 {content}
               </div>
             </Tooltip>
