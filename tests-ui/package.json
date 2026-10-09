@@ -29,7 +29,7 @@
     "dom-mousemove-dispatcher": "^1.0.1",
     "dom-plane": "^1.0.2",
     "dom-set": "^1.1.1",
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.4.16",
     "downloadjs": "^1.4.7",
     "dragula": "^3.7.3",
     "eventemitter2": "^5.0.1",
@@ -100,5 +100,9 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "overrides": {
+    "ip-address": "^10.7.3",
+    "js-yaml": "^4.1.0"
+  }
 }

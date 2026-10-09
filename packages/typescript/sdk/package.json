@@ -64,6 +64,9 @@
   "peerDependencies": {
     "typescript": ">=4.9.0"
   },
+  "overrides": {
+    "js-yaml": "^4.1.0"
+  },
   "engines": {
     "node": ">=16.0.0"
   },
