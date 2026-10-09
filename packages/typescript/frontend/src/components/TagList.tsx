@@ -29,7 +29,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [total, setTotal] = useState(0);
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'id', sort: 'desc' }]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
