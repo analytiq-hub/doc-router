@@ -97,7 +97,7 @@ const processQueue = (error: Error | null = null) => {
 };
 
 // Store the toast ID outside the interceptor
-let sessionExpiredToastId: React.ReactText | null = null;
+let sessionExpiredToastId: string | number | null = null;
 
 // Add a response interceptor that handles all errors
 api.interceptors.response.use(
