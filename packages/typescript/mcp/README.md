@@ -425,6 +425,17 @@ README.md             # This file
 2. **Organization Access**: You need publish permissions for the `@docrouter` organization
 3. **Clean Working Directory**: All changes should be committed
 
+### SDK Dependency
+
+The MCP server depends on `@docrouter/sdk` by semver range (e.g. `^2.0.0`), and the SDK is published separately from `../sdk`. For local development, `make setup` installs the in-repo SDK with `npm install --no-save ../sdk`, so the MCP server builds against the current SDK source even before that SDK version is on npm.
+
+When the MCP server uses SDK features that are not yet published:
+
+1. Bump and publish the SDK first (see `../sdk/README.md`)
+2. Update the `@docrouter/sdk` range in this `package.json` to the new version
+3. Run `npm install` here to refresh `package-lock.json` from the registry
+4. Publish the MCP server
+
 ### Publishing Steps
 
 #### 1. Login to npm

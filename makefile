@@ -119,7 +119,8 @@ deploy-dev: setup-python
 setup-typescript: setup-python
 	# Install and build all TypeScript packages
 	cd packages/typescript/sdk && npm install && npm run build
-	cd packages/typescript/mcp && npm install && npm run build
+	# --no-save links the in-repo SDK even if its version is not yet published to npm
+	cd packages/typescript/mcp && npm install --no-save ../sdk && npm run build
 	cd packages/typescript/frontend && npm install
 
 # Legacy deployment
