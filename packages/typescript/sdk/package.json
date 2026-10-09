@@ -1,6 +1,6 @@
 {
   "name": "@docrouter/sdk",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "TypeScript SDK for DocRouter API",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -23,7 +23,7 @@
     "test:unit": "TEST_TYPE=unit jest tests/unit src/__tests__",
     "test:integration": "TEST_TYPE=integration jest tests/integration",
     "test:all": "npm run test:unit && npm run test:integration",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src",
     "type-check": "tsc --noEmit",
     "prepare": "npm run build",
     "prepublishOnly": "npm run test:all && npm run lint && npm run type-check",
@@ -48,12 +48,14 @@
     "mongodb": "^7.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.0.10",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
     "eslint": "^9.39.2",
+    "globals": "^14.0.0",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.6",
     "tsup": "^8.5.1",

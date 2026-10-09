@@ -58,8 +58,6 @@ import {
   UsageRangeResponse,
   // Knowledge Bases
   KnowledgeBase,
-  KnowledgeBaseConfig,
-  KnowledgeBaseUpdate,
   ListKnowledgeBasesParams,
   ListKnowledgeBasesResponse,
   GetKnowledgeBaseParams,
@@ -70,7 +68,6 @@ import {
   ListKBDocumentsResponse,
   ListKBDocumentChunksParams,
   ListKBChunksResponse,
-  KBSearchRequest,
   KBSearchResponse,
   SearchKnowledgeBaseParams,
   ReconcileKnowledgeBaseParams,
@@ -96,16 +93,13 @@ import {
   WebhookEndpoint,
   CreateWebhookParams,
   UpdateWebhookParams,
-  WebhookDelivery,
   WebhookDeliveryDetail,
   ListWebhookDeliveriesParams,
   ListWebhookDeliveriesResponse,
   // Flows
-  FlowNodeType,
   ListNodeTypesResponse,
   FlowHeader,
   FlowRevision,
-  FlowRevisionSummary,
   FlowListItem,
   ListFlowsResponse,
   ListRevisionsResponse,
@@ -235,7 +229,6 @@ export class DocRouterOrg {
     // Debug aid: helps verify sort/filters reach the HTTP layer.
     // Safe in prod (no secrets), but noisy; can be removed once stable.
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line no-console
       console.debug('DocRouterOrg.listDocuments params', queryParams);
     }
 
