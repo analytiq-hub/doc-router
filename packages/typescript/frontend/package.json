@@ -23,7 +23,7 @@
     "@headlessui/react": "^2.2.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.2.0",
-    "@monaco-editor/react": "^4.6.0",
+    "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.1.4",
     "@mui/material": "^6.1.1",
     "@mui/x-data-grid": "^8.29.3",
@@ -44,13 +44,13 @@
     "next-auth": "^4.24.13",
     "react": "^19",
     "react-data-grid": "^7.0.0-beta.47",
-    "react-diff-viewer-continued": "^3.4.0",
+    "react-diff-viewer-continued": "^4.4.0",
     "react-dom": "^19",
     "react-dropzone": "^14.2.9",
     "react-hot-toast": "^2.5.1",
     "react-markdown": "^9.0.1",
     "react-pdf": "^9.1.1",
-    "react-resizable-panels": "^2.1.4",
+    "react-resizable-panels": "^2.1.9",
     "react-table": "^7.8.0",
     "react-toastify": "^11.0.5",
     "reactflow": "^11.11.4",
@@ -78,6 +78,10 @@
     "cookie": ">=0.7.0",
     "dompurify": ">=3.3.4",
     "postcss-selector-parser": ">=7.1.6",
-    "quill": "^2.0.3"
+    "quill": "^2.0.3",
+    "react-table": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    }
   }
 }
