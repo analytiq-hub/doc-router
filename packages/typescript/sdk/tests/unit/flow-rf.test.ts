@@ -196,7 +196,7 @@ describe('flow-rf', () => {
         position: { x: 500, y: 200 },
         data: {
           ...n.data,
-          flowNode: { ...n.data.flowNode, position: [500, 200] },
+          flowNode: { ...n.data.flowNode, position: [500, 200] as [number, number] },
         },
       })),
     };
