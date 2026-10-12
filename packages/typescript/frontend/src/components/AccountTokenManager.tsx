@@ -136,7 +136,7 @@ const AccountTokenManager: React.FC = () => {
 
       <Dialog open={openModal} onClose={() => setOpenModal(false)}>
         <DialogTitle>Generate Account Token</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ pt: 2.5 }}>
           <TextField
             autoFocus
             margin="dense"

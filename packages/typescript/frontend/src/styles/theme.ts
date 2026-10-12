@@ -36,7 +36,8 @@ const theme = createTheme({
     },
     text: {
       primary: colors.stone[700],
-      secondary: colors.gray[100],
+      // MUI InputLabel and Typography use secondary; must contrast with background.paper.
+      secondary: colors.gray[600],
     },
   },
   components: {

@@ -149,7 +149,7 @@ const OrganizationTokenManager: React.FC = () => {
 
       <Dialog open={openModal} onClose={() => setOpenModal(false)}>
         <DialogTitle>Generate Organization Token</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ pt: 2.5 }}>
           <TextField
             autoFocus
             margin="dense"
