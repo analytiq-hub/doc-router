@@ -40,7 +40,8 @@ def setup_env():
     # This allows CI to set directConnection=true in the URI
     if "MONGODB_URI" not in os.environ:
         os.environ["MONGODB_URI"] = "mongodb://localhost:27017"
-    os.environ["NEXTAUTH_SECRET"] = "test_secret_key_for_tests"
+    # >= 32 bytes so PyJWT HS256 does not warn about short HMAC keys in tests.
+    os.environ["NEXTAUTH_SECRET"] = "test_secret_key_for_tests_32bytes_min!!"
 
 # Set test environment variables
 setup_env()

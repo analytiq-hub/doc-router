@@ -144,7 +144,7 @@ jobs:
       env:
         ENV: pytest
         MONGODB_URI: mongodb://localhost:27017/?directConnection=true
-        NEXTAUTH_SECRET: test_secret_key_for_ci
+        NEXTAUTH_SECRET: test_secret_key_for_ci_32bytes_min!!
       run: |
         pytest tests/ -v 
     

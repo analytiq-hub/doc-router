@@ -3,7 +3,8 @@ AES-256-CFB secret encryption with random IVs, plus an HMAC fingerprint for
 ciphertext-free lookups.
 """
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
+from cryptography.hazmat.decrepit.ciphers import modes
 from cryptography.hazmat.backends import default_backend
 import base64
 import hashlib

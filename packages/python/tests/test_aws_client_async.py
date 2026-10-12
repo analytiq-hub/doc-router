@@ -146,6 +146,8 @@ async def test_aioboto3_session_yields_async_client_context():
     cm = session.client("s3")
     assert hasattr(cm, "__aenter__")
     assert type(cm).__name__ == "ClientCreatorContext"
+    async with cm as client:
+        assert client is not None
 
 
 @pytest.mark.asyncio
