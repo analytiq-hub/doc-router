@@ -11,11 +11,14 @@ This module lives at ``analytiq_data.kb_search_indexes`` (not under ``kb/``) so 
 without loading the heavy ``analytiq_data.kb`` package.
 """
 
+KB_VECTOR_INDEX_NAME = "kb_vector_index"
+KB_LEXICAL_INDEX_NAME = "kb_lexical_index"
+
 
 def kb_vector_search_index_definition(embedding_dimensions: int) -> dict:
     """Vector Search index definition (same shape as createSearchIndexes ``indexes[]`` item)."""
     return {
-        "name": "kb_vector_index",
+        "name": KB_VECTOR_INDEX_NAME,
         "type": "vectorSearch",
         "definition": {
             "fields": [
@@ -41,7 +44,7 @@ def kb_lexical_search_index_definition() -> dict:
     Filter paths align with ``build_vector_search_filter`` / ``$search`` compound filters.
     """
     return {
-        "name": "kb_lexical_index",
+        "name": KB_LEXICAL_INDEX_NAME,
         "type": "search",
         "definition": {
             "mappings": {
@@ -49,11 +52,12 @@ def kb_lexical_search_index_definition() -> dict:
                 "fields": {
                     "chunk_text": {"type": "string"},
                     "heading_path": {"type": "string"},
-                    "organization_id": {"type": "string"},
+                    # token (not string) so Atlas Search ``equals`` / ``in`` match exactly
+                    "organization_id": {"type": "token"},
                     "metadata_snapshot": {
                         "type": "document",
                         "fields": {
-                            "tag_ids": {"type": "objectId"},
+                            "tag_ids": {"type": "token"},
                             "upload_date": {"type": "date"},
                         },
                     },

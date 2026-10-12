@@ -169,21 +169,15 @@ def build_vector_search_filter(
     return filter_dict, post_filter
 
 
-def _coerce_object_id_list(values: Any) -> List[Any]:
-    """Normalize tag id values for Atlas Search ``in`` operator."""
+def _coerce_token_string_list(values: Any) -> List[str]:
+    """Normalize filter values for Atlas Search token fields (``equals`` / ``in``)."""
     if not isinstance(values, list):
         values = [values]
-    out: List[Any] = []
+    out: List[str] = []
     for v in values:
-        if isinstance(v, ObjectId):
-            out.append(v)
-        elif isinstance(v, str):
-            try:
-                out.append(ObjectId(v))
-            except Exception:
-                out.append(v)
-        else:
-            out.append(v)
+        if v is None:
+            continue
+        out.append(str(v))
     return out
 
 
@@ -194,15 +188,15 @@ def build_atlas_search_filter_clauses(filter_dict: Dict[str, Any]) -> List[Dict[
         return clauses
     oid = filter_dict.get("organization_id")
     if oid is not None:
-        clauses.append({"equals": {"path": "organization_id", "value": oid}})
+        clauses.append({"equals": {"path": "organization_id", "value": str(oid)}})
     if "metadata_snapshot.tag_ids" in filter_dict:
         v = filter_dict["metadata_snapshot.tag_ids"]
         if isinstance(v, dict) and "$in" in v:
-            vals = _coerce_object_id_list(v["$in"])
+            vals = _coerce_token_string_list(v["$in"])
         elif isinstance(v, list):
-            vals = _coerce_object_id_list(v)
+            vals = _coerce_token_string_list(v)
         else:
-            vals = _coerce_object_id_list([v])
+            vals = _coerce_token_string_list([v])
         clauses.append({"in": {"path": "metadata_snapshot.tag_ids", "value": vals}})
     if "metadata_snapshot.upload_date" in filter_dict:
         df = filter_dict["metadata_snapshot.upload_date"]
@@ -216,8 +210,16 @@ def build_atlas_search_filter_clauses(filter_dict: Dict[str, Any]) -> List[Dict[
     return clauses
 
 
+_LEXICAL_TEXT_PATHS = ("chunk_text", "heading_path")
+
+
+def _lexical_text_must_clause(query_text: str) -> Dict[str, Any]:
+    """Full-text clause over chunk body and heading breadcrumb (title-only sections)."""
+    return {"text": {"query": query_text.strip(), "path": list(_LEXICAL_TEXT_PATHS)}}
+
+
 def _lexical_search_stage(query_text: str, search_filter: Dict[str, Any]) -> Dict[str, Any]:
-    must = [{"text": {"query": query_text, "path": "chunk_text"}}]
+    must = [_lexical_text_must_clause(query_text)]
     clauses = build_atlas_search_filter_clauses(search_filter)
     compound: Dict[str, Any] = {"must": must}
     if clauses:
@@ -428,7 +430,7 @@ async def search_knowledge_base(
     Search a knowledge base: hybrid retrieval ($rankFusion over lexical + vector) when the query
     is non-empty. Falls back to vector-only if the query is empty or $rankFusion is unavailable.
 
-    ``min_vector_score`` on the KB applies only on that vector-only path (empty query or fusion failure).
+    ``min_vector_score`` on the KB applies only for intentional vector-only browse (empty query).
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     
@@ -505,7 +507,9 @@ async def search_knowledge_base(
     w_lex, w_sem = _fusion_heuristic_weights(query)
 
     search_results: List[Dict[str, Any]] = []
+    ran_hybrid = False
     if use_hybrid:
+        ran_hybrid = True
         try:
             pipeline = _hybrid_rank_fusion_pipeline(
                 query_text=query,
@@ -535,7 +539,7 @@ async def search_knowledge_base(
                 raise
 
     if not use_hybrid:
-        min_vs = kb.get("min_vector_score")
+        min_vs = kb.get("min_vector_score") if not query.strip() else None
         pipeline = _vector_only_pipeline(
             query_embedding=query_embedding,
             search_filter=search_filter,
@@ -545,6 +549,26 @@ async def search_knowledge_base(
             skip=skip,
             top_k=top_k,
             min_vector_score=min_vs,
+        )
+        search_results = await _execute_vector_search_with_retry(
+            vectors_collection,
+            pipeline,
+            top_k,
+            kb_id,
+        )
+    elif ran_hybrid and not search_results:
+        logger.warning(
+            f"Hybrid search returned no results for KB {kb_id}; retrying vector-only"
+        )
+        pipeline = _vector_only_pipeline(
+            query_embedding=query_embedding,
+            search_filter=search_filter,
+            post_filter=post_filter,
+            branch_limit=branch_limit,
+            num_candidates=num_candidates,
+            skip=skip,
+            top_k=top_k,
+            min_vector_score=None,
         )
         search_results = await _execute_vector_search_with_retry(
             vectors_collection,

@@ -72,7 +72,7 @@ class KnowledgeBaseConfig(BaseModel):
         default=None,
         ge=0.0,
         le=1.0,
-        description="When search uses vector-only (empty query or $rankFusion unavailable): drop chunks below this cosine similarity",
+        description="For empty-query vector-only browse: drop chunks below this cosine similarity",
     )
     chunking_preset: Optional[ChunkingPresetName] = Field(
         default="structured_doc",

@@ -9,6 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 
 import analytiq_data as ad
+from analytiq_data.kb_search_index_ensure import ensure_all_kb_search_indexes
 from analytiq_data.kb_search_indexes import kb_lexical_search_index_definition
 
 logger = logging.getLogger(__name__)
@@ -2735,6 +2736,125 @@ class AddKbLexicalSearchIndexes(Migration):
             return False
 
 
+class FixKbLexicalSearchIndexFilterFields(Migration):
+    """Re-map lexical index filter fields as token so ``equals`` / ``in`` match stored string ids."""
+
+    def __init__(self):
+        super().__init__(
+            description=(
+                "Fix kb_lexical_index organization_id and metadata_snapshot.tag_ids mappings "
+                "for Atlas Search compound filters"
+            )
+        )
+
+    async def _apply_lexical_definition(self, db, coll_name: str, definition: dict) -> bool:
+        try:
+            await db.command({
+                "updateSearchIndex": coll_name,
+                "name": "kb_lexical_index",
+                "definition": definition,
+            })
+            logger.info(f"Updated kb_lexical_index mappings on {coll_name}")
+            return True
+        except Exception as e:
+            logger.warning(
+                f"updateSearchIndex failed on {coll_name} ({str(e)[:200]}), recreating index"
+            )
+            try:
+                await db.command({
+                    "dropSearchIndex": coll_name,
+                    "name": "kb_lexical_index",
+                })
+            except Exception as drop_err:
+                logger.warning(f"dropSearchIndex on {coll_name}: {drop_err}")
+            try:
+                await db.command({
+                    "createSearchIndexes": coll_name,
+                    "indexes": [{
+                        "name": "kb_lexical_index",
+                        "type": "search",
+                        "definition": definition,
+                    }],
+                })
+                logger.info(f"Recreated kb_lexical_index on {coll_name}")
+                return True
+            except Exception as create_err:
+                logger.error(f"Failed to recreate kb_lexical_index on {coll_name}: {create_err}")
+                return False
+
+    async def up(self, db) -> bool:
+        try:
+            definition = kb_lexical_search_index_definition()["definition"]
+            kbs = await db.knowledge_bases.find({}, projection={"_id": 1}).to_list(length=None)
+            collections = set(await db.list_collection_names())
+            for kb in kbs:
+                coll_name = f"kb_vectors_{str(kb['_id'])}"
+                if coll_name not in collections:
+                    continue
+                if not await self._apply_lexical_definition(db, coll_name, definition):
+                    return False
+            return True
+        except Exception as e:
+            logger.error(f"FixKbLexicalSearchIndexFilterFields failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        legacy_definition = {
+            "mappings": {
+                "dynamic": False,
+                "fields": {
+                    "chunk_text": {"type": "string"},
+                    "heading_path": {"type": "string"},
+                    "organization_id": {"type": "string"},
+                    "metadata_snapshot": {
+                        "type": "document",
+                        "fields": {
+                            "tag_ids": {"type": "objectId"},
+                            "upload_date": {"type": "date"},
+                        },
+                    },
+                }
+            }
+        }
+        try:
+            kbs = await db.knowledge_bases.find({}, projection={"_id": 1}).to_list(length=None)
+            collections = set(await db.list_collection_names())
+            for kb in kbs:
+                coll_name = f"kb_vectors_{str(kb['_id'])}"
+                if coll_name not in collections:
+                    continue
+                if not await self._apply_lexical_definition(db, coll_name, legacy_definition):
+                    return False
+            return True
+        except Exception as e:
+            logger.error(f"FixKbLexicalSearchIndexFilterFields down failed: {e}")
+            return False
+
+
+class EnsureKbSearchIndexes(Migration):
+    """Create missing kb_vector_index / kb_lexical_index after restore or mongot catalog loss."""
+
+    def __init__(self):
+        super().__init__(
+            description=(
+                "Ensure kb_vector_index and kb_lexical_index exist on each kb_vectors_* collection"
+            )
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            summary = await ensure_all_kb_search_indexes(db)
+            logger.info(f"EnsureKbSearchIndexes summary: {summary}")
+            return True
+        except Exception as e:
+            logger.error(f"EnsureKbSearchIndexes failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        # Do not drop search indexes on revert (data plane safety).
+        return True
+
+
 class AddAgentThreadsIndexes(Migration):
     def __init__(self):
         super().__init__(
@@ -3453,6 +3573,8 @@ MIGRATIONS = [
     AddFlowExecutionsFlowsCredentialsListIndexes(),
     AddAccessTokenFingerprint(),
     RenameFlowTriggersEventTypeField(),
+    FixKbLexicalSearchIndexFilterFields(),
+    EnsureKbSearchIndexes(),
     # Add more migrations here
 ]
 
