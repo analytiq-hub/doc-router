@@ -138,6 +138,7 @@ helm upgrade --install "$RELEASE" \
   --set config.environment="${ENV:-prod}" \
   --set config.appBucketName="$AWS_S3_BUCKET_NAME" \
   --set config.region="$REGION" \
+  --set-string config.s3ServerSideEncryption="${AWS_S3_SSE:-}" \
   --set config.nextauthUrl="https://$APP_HOST" \
   --set config.publicApiUrl="https://$APP_HOST${FASTAPI_ROOT_PATH:-/fastapi}" \
   --atomic \

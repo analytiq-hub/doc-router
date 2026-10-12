@@ -15,6 +15,9 @@ data:
   N_UVICORN_WORKERS: {{ .Values.config.nUvicornWorkers | quote }}
   AWS_S3_BUCKET_NAME: {{ .Values.config.appBucketName | quote }}
   AWS_REGION: {{ .Values.config.region | quote }}
+{{- if .Values.config.s3ServerSideEncryption }}
+  AWS_S3_SSE: {{ .Values.config.s3ServerSideEncryption | quote }}
+{{- end }}
   CORS_ORIGINS_EXTRA: {{ .Values.config.corsOriginsExtra | quote }}
 {{- if .Values.config.flowCodeExternalAllow }}
   FLOW_CODE_EXTERNAL_ALLOW: {{ .Values.config.flowCodeExternalAllow | quote }}

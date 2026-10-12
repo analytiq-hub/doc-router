@@ -39,6 +39,7 @@ config:
   nUvicornWorkers: "1"                   # OS processes for FastAPI (--workers); use 1 with --reload locally
   appBucketName: ""                     # AWS S3 bucket for document storage
   region: ""                            # AWS region
+  s3ServerSideEncryption: ""            # optional; SSE header on S3 uploads: "aws:kms" or "AES256"
   corsOriginsExtra: ""                  # comma-separated extra CORS origins, e.g. https://make.powerautomate.com
   flowCodeExternalAllow: ""             # optional; flows.code third-party module allowlist, e.g. fitz
   flowCodeBuiltinsDeny: ""              # optional; flows.code builtins deny list override

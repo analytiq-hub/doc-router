@@ -105,6 +105,7 @@ helm upgrade --install "$RELEASE" "$CHART_DIR" \
   --set image.frontend.tag="$IMAGE_TAG" \
   --set image.backend.tag="$IMAGE_TAG" \
   --set config.publicApiUrl="http://localhost/fastapi" \
+  --set-string config.s3ServerSideEncryption="${AWS_S3_SSE:-}" \
   --atomic \
   --timeout 5m \
   --wait
