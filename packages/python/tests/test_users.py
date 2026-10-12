@@ -6,7 +6,7 @@ import logging
 
 # Import shared test utilities
 from .conftest_utils import (
-    client, TEST_ORG_ID, 
+    client, TEST_ORG_ID,
     get_auth_headers
 )
 import analytiq_data as ad
@@ -56,6 +56,39 @@ async def test_list_users(test_db, mock_auth):
         pass  # mock_auth fixture handles cleanup
     
     logger.info(f"test_list_users() end")
+
+
+@pytest.mark.asyncio
+async def test_list_users_tolerates_null_email(test_db, mock_auth):
+    """Users without email (e.g. legacy OAuth adapter rows) must not break list_users."""
+    null_email_user_id = str(ObjectId())
+    await test_db.users.insert_one({
+        "_id": ObjectId(null_email_user_id),
+        "email": None,
+        "name": "Incomplete Account",
+        "role": "user",
+        "created_at": datetime.now(UTC),
+    })
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(TEST_ORG_ID)},
+        {"$push": {"members": {"user_id": null_email_user_id, "role": "user"}}},
+    )
+
+    list_response = client.get(
+        f"/v0/account/users?organization_id={TEST_ORG_ID}",
+        headers=get_auth_headers(),
+    )
+    assert list_response.status_code == 200
+    users = list_response.json()["users"]
+    incomplete = next(u for u in users if u["id"] == null_email_user_id)
+    assert incomplete["email"] == ""
+
+    all_users_response = client.get(
+        "/v0/account/users?limit=100",
+        headers=get_auth_headers(),
+    )
+    assert all_users_response.status_code == 200
+
 
 @pytest.mark.asyncio
 async def test_user_lifecycle(test_db, mock_auth):

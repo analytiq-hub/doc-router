@@ -12,13 +12,14 @@ from enum import Enum
 # Third-party imports
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, BackgroundTasks
 from bson import ObjectId
+from bson.errors import InvalidId
 from pydantic import BaseModel
 from bcrypt import hashpw, gensalt
 
 # Local imports
 import analytiq_data as ad
 from app import email_utils
-from app.auth import get_admin_user
+from app.auth import get_admin_user, get_current_user, is_system_admin, is_organization_admin
 from app.models import User
 from app.routes.payments import sync_customer
 
@@ -236,12 +237,31 @@ async def verify_email(token: str, background_tasks: BackgroundTasks):
 @emails_router.post("/v0/account/email/invitations", response_model=InvitationResponse, tags=["account/email"])
 async def create_invitation(
     invitation: CreateInvitationRequest,
-    current_user: User = Depends(get_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Create a new invitation (admin only)"""
+    """Create a new invitation (system admin, or org admin for org invitations)."""
     logger.info(f"Got invitation request: {invitation}")
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
+
+    org_oid = None
+    if invitation.organization_id:
+        try:
+            org_oid = ObjectId(invitation.organization_id)
+        except InvalidId:
+            raise HTTPException(status_code=400, detail="Invalid organization_id")
+
+    is_sys_admin = await is_system_admin(current_user.user_id)
+    if invitation.organization_id:
+        if not is_sys_admin and not await is_organization_admin(
+            invitation.organization_id, current_user.user_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to invite users to this organization",
+            )
+    elif not is_sys_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
 
     # Check if email already registered, if so, set user_exists to True
     existing_user = await db.users.find_one({"email": invitation.email})
@@ -254,8 +274,8 @@ async def create_invitation(
         if invitation.organization_id:
             # Check if user is already in the organization
             org = await db.organizations.find_one({
-                "_id": ObjectId(invitation.organization_id),
-                "members.user_id": existing_user["_id"]
+                "_id": org_oid,
+                "members.user_id": str(existing_user["_id"]),
             })
             if org:
                 raise HTTPException(status_code=400, detail="User is already a member of this organization")
@@ -263,12 +283,6 @@ async def create_invitation(
             # User already exists, and this is not an org invitation
             raise HTTPException(status_code=400, detail="User already exists")
 
-    if await db.users.find_one({"email": invitation.email}):
-        raise HTTPException(
-            status_code=400,
-            detail="Email already registered for invitation"
-        )
-        
     # If there's an existing pending invitation for the same organization, invalidate it
     query = {
         "email": invitation.email,
@@ -308,7 +322,7 @@ async def create_invitation(
     if invitation.organization_id:
         invitation_doc["organization_id"] = invitation.organization_id
         
-        org = await db.organizations.find_one({"_id": ObjectId(invitation.organization_id)})
+        org = await db.organizations.find_one({"_id": org_oid})
         if org:
             organization_name = org["name"]
     

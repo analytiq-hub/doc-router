@@ -8,8 +8,8 @@ import logging
 
 # Import shared test utilities
 from .conftest_utils import (
-    client, TEST_ORG_ID, 
-    get_auth_headers
+    client, TEST_ORG_ID,
+    get_auth_headers, get_token_headers,
 )
 import analytiq_data as ad
 
@@ -243,4 +243,116 @@ async def test_invitation_lifecycle(test_db, mock_auth, mock_send_email):
         # Clean up - we'll use the database directly to ensure cleanup
         await test_db.invitations.delete_many({"email": "invited@example.com"})
     
-    logger.info(f"test_invitation_lifecycle() end") 
+    logger.info(f"test_invitation_lifecycle() end")
+
+
+@pytest.mark.asyncio
+async def test_org_admin_can_invite_to_own_organization(
+    org_and_users, test_db, mock_send_email,
+):
+    """Organization admins (non-system) may invite new users into their org."""
+    org_id = org_and_users["org_id"]
+    org_admin = org_and_users["admin"]
+
+    await test_db.users.update_one(
+        {"_id": ObjectId(org_admin["id"])},
+        {"$set": {"role": "user"}},
+    )
+
+    from app.main import app
+    app.dependency_overrides.clear()
+
+    try:
+        response = client.post(
+            "/v0/account/email/invitations",
+            json={
+                "email": "new-member@example.com",
+                "organization_id": org_id,
+            },
+            headers=get_token_headers(org_admin["account_token"]),
+        )
+        assert response.status_code == 200
+        assert response.json()["email"] == "new-member@example.com"
+        assert mock_send_email.called
+    finally:
+        app.dependency_overrides.clear()
+        await test_db.invitations.delete_many({"email": "new-member@example.com"})
+
+
+@pytest.mark.asyncio
+async def test_org_admin_cannot_invite_to_other_organization(
+    org_and_users, test_db, mock_send_email,
+):
+    """Organization admins cannot invite users into organizations they do not administer."""
+    org_admin = org_and_users["admin"]
+
+    await test_db.users.update_one(
+        {"_id": ObjectId(org_admin["id"])},
+        {"$set": {"role": "user"}},
+    )
+
+    from app.main import app
+    app.dependency_overrides.clear()
+
+    try:
+        response = client.post(
+            "/v0/account/email/invitations",
+            json={
+                "email": "cross-org@example.com",
+                "organization_id": TEST_ORG_ID,
+            },
+            headers=get_token_headers(org_admin["account_token"]),
+        )
+        assert response.status_code == 403
+        assert not mock_send_email.called
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_org_invitation_rejects_existing_member(
+    org_and_users, test_db, mock_send_email,
+):
+    """Inviting an email that already belongs to a member must fail before sending mail."""
+    org_id = org_and_users["org_id"]
+    org_admin = org_and_users["admin"]
+
+    await test_db.users.update_one(
+        {"_id": ObjectId(org_admin["id"])},
+        {"$set": {"role": "user"}},
+    )
+
+    from app.main import app
+    app.dependency_overrides.clear()
+
+    try:
+        response = client.post(
+            "/v0/account/email/invitations",
+            json={
+                "email": "org-member@example.com",
+                "organization_id": org_id,
+            },
+            headers=get_token_headers(org_admin["account_token"]),
+        )
+        assert response.status_code == 400
+        assert "already a member" in response.json()["detail"].lower()
+        assert not mock_send_email.called
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_create_invitation_rejects_invalid_organization_id(
+    mock_auth, mock_send_email,
+):
+    response = client.post(
+        "/v0/account/email/invitations",
+        json={
+            "email": "someone@example.com",
+            "organization_id": "not-a-valid-object-id",
+        },
+        headers=get_auth_headers(),
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid organization_id"
+    assert not mock_send_email.called

@@ -125,12 +125,19 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const mistralEnabled = organization?.ocr_catalog?.mistral_enabled !== false
   const mistralVertexEnabled = organization?.ocr_catalog?.mistral_vertex_enabled === true
 
-  // Filter current organization members
+  // Filter members for the grid (include unsaved adds not yet returned by listUsers)
   const filteredMembers = members.filter(member => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) {
+      return true;
+    }
     const user = allUsers.find(u => u.id === member.user_id);
-    return user && (
-      user.name?.toLowerCase().includes(memberSearch.toLowerCase()) || 
-      user.email.toLowerCase().includes(memberSearch.toLowerCase())
+    if (!user) {
+      return true;
+    }
+    return (
+      user.name?.toLowerCase().includes(q) ||
+      user.email.toLowerCase().includes(q)
     );
   });
 
@@ -313,15 +320,36 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     });
   };
 
-  const handleAddMember = async (userId: string): Promise<void> => {
+  const handleAddMember = async (userId: string, user?: User): Promise<void> => {
     // Prevent adding members to individual organizations
     if (type === 'individual') {
       toast.error('Individual organizations cannot have multiple members');
       return;
     }
 
-    if (!members.some(member => member.user_id === userId)) {
-      setMembers(prev => [...prev, { user_id: userId, role: 'user' }]);
+    if (members.some(member => member.user_id === userId)) {
+      return;
+    }
+
+    setMembers(prev => [...prev, { user_id: userId, role: 'user' }]);
+
+    if (user) {
+      setAllUsers(prev =>
+        prev.some(u => u.id === userId) ? prev : [...prev, user]
+      );
+      return;
+    }
+
+    try {
+      const usersResponse = await docRouterAccountApi.listUsers({ user_id: userId });
+      const fetched = usersResponse.users[0];
+      if (fetched) {
+        setAllUsers(prev =>
+          prev.some(u => u.id === userId) ? prev : [...prev, fetched]
+        );
+      }
+    } catch (error) {
+      console.error('Failed to load user details for new member:', error);
     }
   };
 

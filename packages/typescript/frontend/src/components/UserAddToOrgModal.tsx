@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 interface UserAddToOrgModalProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (userId: string) => Promise<void>;
+  onAdd: (userId: string, user?: User) => Promise<void>;
   organizationId: string;
   currentMembers: string[];
 }
@@ -62,7 +62,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
       );
 
       if (existingUser) {
-        await onAdd(existingUser.id);
+        await onAdd(existingUser.id, existingUser);
       } else {
         await docRouterAccountApi.createInvitation({
           email,
@@ -81,9 +81,9 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
     }
   };
 
-  const handleSelectUser = async (userId: string) => {
+  const handleSelectUser = async (user: User) => {
     try {
-      await onAdd(userId);
+      await onAdd(user.id, user);
       onClose();
     } catch (error) {
       toast.error('Failed to add user: ' + error);
@@ -111,7 +111,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
                   <button
                     key={user.id}
                     type="button"
-                    onClick={() => handleSelectUser(user.id)}
+                    onClick={() => handleSelectUser(user)}
                     className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between"
                   >
                     <div>

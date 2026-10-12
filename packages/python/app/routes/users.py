@@ -57,6 +57,25 @@ class ListUsersResponse(BaseModel):
     total_count: int
     skip: int
 
+
+def _user_document_to_response(user: dict) -> UserResponse:
+    """Map a MongoDB user document to API response (tolerates missing/null email)."""
+    email = user.get("email")
+    if not email:
+        logger.warning(f"User {user.get('_id')} has no email in database")
+        email = ""
+    return UserResponse(
+        id=str(user["_id"]),
+        email=email,
+        name=user.get("name"),
+        role=user.get("role", "user"),
+        email_verified=user.get("email_verified"),
+        created_at=user.get("created_at", datetime.now(UTC)),
+        has_password=bool(user.get("password")),
+        has_seen_tour=user.get("has_seen_tour"),
+    )
+
+
 # User endpoints
 @users_router.get("/v0/account/users", response_model=ListUsersResponse, tags=["account/users"])
 async def list_users(
@@ -121,15 +140,7 @@ async def list_users(
                 )
                 
         ret = ListUsersResponse(
-            users=[UserResponse(
-                id=str(user["_id"]),
-                email=user["email"],
-                name=user.get("name"),
-                role=user.get("role", "user"),
-                email_verified=user.get("email_verified"),
-                created_at=user.get("created_at", datetime.now(UTC)),
-                has_password=bool(user.get("password"))
-            )],
+            users=[_user_document_to_response(user)],
             total_count=1,
             skip=0
         )
@@ -193,18 +204,7 @@ async def list_users(
     users = await db.users.find(final_query).skip(skip).limit(limit).to_list(None)
 
     ret = ListUsersResponse(
-        users=[
-            UserResponse(
-                id=str(user["_id"]),
-                email=user["email"],
-                name=user.get("name"),
-                role=user.get("role", "user"),
-                email_verified=user.get("email_verified"),
-                created_at=user.get("created_at", datetime.now(UTC)),
-                has_password=bool(user.get("password"))
-            )
-            for user in users
-        ],
+        users=[_user_document_to_response(user) for user in users],
         total_count=total_count,
         skip=skip
     )
@@ -346,15 +346,7 @@ async def update_user(
             detail="User not found"
         )
     
-    return UserResponse(
-        id=str(result["_id"]),
-        email=result["email"],
-        name=result.get("name"),
-        role=result.get("role", "user"),
-        email_verified=result.get("email_verified"),
-        created_at=result.get("created_at", datetime.now(UTC)),
-        has_password=bool(result.get("password"))
-    )
+    return _user_document_to_response(result)
 
 @users_router.delete("/v0/account/users/{user_id}", tags=["account/users"])
 async def delete_user(
