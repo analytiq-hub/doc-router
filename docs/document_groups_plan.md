@@ -180,7 +180,7 @@ Group values can contain `/` and other characters that proxies decode unreliably
 | `GET`  | `/v0/orgs/{org}/groups/values?key=&group_filter=&value_search=&skip=&limit=&sort=` plus the document filters | The aggregation in 2.2. `group_filter` holds the parent levels for nested group-by. |
 | `GET`  | `/v0/orgs/{org}/groups/item?key=&value=` | One group: counts, `display_name`, `restricted`, and (phase 3) `my_role`. |
 | `PUT`  | `/v0/orgs/{org}/groups/item?key=&value=` | Set `display_name`. Org admin only. |
-| `DELETE` | `/v0/orgs/{org}/groups/item?key=&value=&cascade=false` | Delete the group record, and with `cascade=true` its documents too (2.6). |
+| `DELETE` | `/v0/orgs/{org}/groups/item?key=&value=&group_filter=&cascade=false` | Delete the `(key, value)` row; with `cascade=true`, delete documents in `group_filter` scope (2.6). |
 | `GET`  | `/v0/orgs/{org}/groups/results?group_filter=&prompt_id=` | Group results view (section 6). |
 | `POST` | `/v0/orgs/{org}/groups/runs` | Start a group prompt run (section 5). Body: `{ group_filter, prompt_id }`. |
 | `GET`  | `/v0/orgs/{org}/groups/runs?group_filter=&prompt_id=` | Get the latest group runs for that scope. |
@@ -210,22 +210,17 @@ Pydantic models go in `app/routes/groups.py`: `GroupKey`, `GroupFilterEntry`, `G
 - Undeclared-key grouping is admin-only, and rejects invalid keys
 - `GET /documents?group_filter=...` with one and two levels, and a malformed `group_filter` returns `400`
 - Bulk OCR, LLM, flows, delete, and metadata update respect `group_filter` on the server (mirror existing tests that assert `metadata_search` on bulk paths)
-- Group delete (2.6): without `cascade`, documents and their metadata are untouched and only the row goes. With `cascade=true`, every document in the group is deleted with all its data (`delete_doc_full`), and documents outside the group are untouched. A rerun after a simulated crash finishes the job.
+- Group delete (2.6): record-only vs `cascade=true` with `group_filter` scope, `delete_doc_full`, and worker retry; nested slice deletes only matching documents.
 - Cross-org isolation: values from org A never appear in org B
 - Phase 2: `POST/GET /groups/runs` and `GET /groups/results` with a two-level `group_filter` match the same documents as the grid
 
 ### 2.6 Group delete
 
-`DELETE /groups/item?key=&value=&cascade=false`
+`DELETE /groups/item?key=&value=&group_filter=&cascade=false` — `key`/`value` identify the `groups` row (leaf level when nested). `group_filter` is required for `cascade=true` and must end with that `(key, value)` (1.6).
 
-- **Default (`cascade=false`):** delete the `groups` row only, which removes the display name and (phase 3) any restriction. Documents keep their metadata and stay in the group, because membership comes from metadata. The group still appears in the values list as long as documents have the value. If there is no row, the call is a no-op that returns `204`.
-- **`cascade=true`:** delete the row and every document whose `metadata.<key>` equals the value. The UI shows the document count and requires the user to type the value to confirm.
-  - The documents are deleted in the background: the route enqueues a `group_delete` worker message with the key and value and returns `202`. The worker deletes matching documents in batches, re-querying each time, so a crash or retry carries on where it stopped. Documents uploaded with the value while the job runs are deleted too.
-  - Each document goes through a new `ad.common.delete_doc_full` helper, which cascade delete makes a **phase 1** requirement. Today the cleanup is split between the `DELETE /documents/{id}` route (original file, PDF rendition, `flow_results`) and `ad.common.delete_doc` (`llm_runs`, OCR, KB index and vectors). Several collections keyed by document are missed altogether, so a deleted document's data survives even now. `delete_doc_full` removes all of it: the files, OCR, `llm_runs`, `flow_results`, flow executions and their blobs, form submissions, KB entries and vectors, agent threads, and webhook deliveries. The single-document delete route and bulk delete switch to it as well.
-  - Group runs (`group_llm_runs`) for the group are deleted as well.
-- **Permissions:**
-  - Phase 1: deleting the row requires org admin, because it holds the display name, which only admins set. Cascade requires org admin.
-  - Phase 3: deleting the row of a restricted group requires `manager`, and goes through the widening rule (4.4), because removing the restriction can widen access. Cascade requires org admin, or `manager` on the group **and** visibility of every document in it. If any document is hidden from the caller (because another restricted group covers it), return `403` and tell the user to ask an org admin.
+- **Default (`cascade=false`):** delete the row only (display name and phase 3 restriction). Documents unchanged. No row → `204`.
+- **`cascade=true`:** delete the row and every document matching `group_filter_to_match(group_filter)`. UI confirms with slice count and typed leaf value. Enqueue `group_delete` (`group_filter_key`, idempotent `job_id`) → `202`; worker batch-deletes via `delete_doc_full` (phase 1 requirement: also wire single-doc and bulk delete to `delete_doc_full`). Remove matching `group_llm_runs`.
+- **Permissions:** Phase 1: org admin only. Phase 3: row delete per §4.1/§4.4 (`manager`, widening rule); cascade = org admin, or `manager` on the leaf group with visibility of every document in the `group_filter` scope—else `403`.
 
 ## 3. Frontend: group-by on the documents page (phase 1)
 
@@ -253,7 +248,7 @@ In `packages/typescript/frontend/src/components/groups/`:
   Selecting a row sets `group` in the URL.
 - **Second level.** When `group_by2` is set, the selected value expands to show its sub-values. They come from the same endpoint with the parent level passed as `group_filter`. Selecting a sub-value sends both levels as `group_filter` to `listDocuments`. This is how drawer, then file, then folder browsing works without folders.
 - **`GroupHeader.tsx`** sits above the grid when a value is selected. It shows the key label, the value, the `display_name` (editable by org admins only), the counts, and buttons for **Run prompt on group** (phase 2), **Results** (phase 2), **Access…** (phase 3, managers only) and **Delete group…**.
-- **`GroupDeleteDialog.tsx`** opens from **Delete group…**. By default it deletes only the group record and says that the documents stay. A "Also delete the N documents in this group" checkbox switches to `cascade=true`, and then the user must type the value to confirm. Shown to org admins in phase 1. In phase 3 it is also shown to group managers, following the permissions in 2.6.
+- **`GroupDeleteDialog.tsx`**: record-only vs cascade over current `groupFilter` (2.6); confirm by typing the leaf value. Admins in phase 1; managers too in phase 3 when §2.6 allows.
 
 ### 3.3 Changes to existing components
 
@@ -275,11 +270,10 @@ In `packages/typescript/frontend/src/components/groups/`:
 |-----------|--------|
 | `viewer`  | See the group's documents, OCR text, extraction results, group runs and the group results view. Download files. |
 | `editor`  | Everything a viewer can. Upload into the group (set the key to this value), rename documents, edit their tags and metadata, edit extraction results, run OCR, LLM, flows and group runs, delete documents, and move documents in or out (subject to 4.4). |
-| `manager` | Everything an editor can. Change `restricted` and `acl`, and delete the group record (2.6). |
+| `manager` | Everything an editor can. Change `restricted` and `acl`, delete the group record (2.6), and cascade-delete when §2.6 allows. |
 
-Setting `display_name` is reserved for org admins on every group, restricted or not.
+Org admins set `display_name` and declare `group_keys`. Org admins always have `manager` on every group.
 
-- **Org admins** always have `manager` on every group. This keeps them able to recover a group whose managers have all left.
 - **Org members** have `editor` on unrestricted groups, which matches today's behavior.
 - **API tokens** are tied to a user (`access_tokens.user_id`), so a token has exactly that user's permissions. This also covers the MCP server and the SDKs.
 - Principals are users only in the first version. The `acl` entry shape leaves room for a team principal type later.
@@ -322,14 +316,11 @@ Changing a declared key's value, or removing it, moves the document out of one g
 
 | Action | Requires |
 |--------|----------|
-| Upload with a value for a declared key | `editor` on that group if it is restricted |
-| Change a declared key from `a` to `b` | `editor` on group `a` and on group `b` |
-| Remove a declared key's value | `editor` on the old group |
-| Change `display_name` | Org admin |
-| Change `restricted` or `acl` | `manager` on the group |
-| Delete the group record, or delete with cascade | See 2.6 |
-| Start a group prompt run | `editor` on each restricted `(key, value)` in `group_filter`, and the caller can see every document in the scope. Otherwise `403` with "the group includes documents you cannot access" (4.5). |
+| Upload / change / remove a declared metadata key | `editor` on each affected restricted `(key, value)` (old and new when both apply) |
+| Group record, ACL, cascade delete | §4.1 roles and §2.6 |
+| Start or read a group prompt run | §4.5 |
 | Declare or remove group keys | Org admin |
+| Set `display_name` | Org admin |
 
 **Widening rule:** if a write would let more people see the document, it also requires `manager` on every restricted group the document is leaving. The test is that the document's new `group_readers` is not a subset of the old one, with `null` counting as everyone. Without this rule, any editor could leak a restricted file by editing its claim number, or by sending a `PUT` with partial metadata that drops the key (2.4).
 
@@ -337,15 +328,15 @@ Changing a declared key's value, or removing it, moves the document out of one g
 
 ### 4.5 Enforcement points
 
-This is most of the work in phase 3. Documents are reached through many routes, not only `documents.py`.
+Phase 3 is mostly wiring visibility everywhere documents are read or listed.
 
-- **One helper for single documents.** Add `ad.common.get_doc_for_user(analytiq_client, organization_id, document_id, user, min_role)` in `common/doc.py`. It loads the document, applies the visibility rule, and checks the role for writes. It returns `404` both when the document does not exist and when the caller cannot see it, so the API does not reveal that restricted documents exist. Every route with `{document_id}` in its path uses it.
-- **One filter for lists.** `build_docs_match_query` and `list_docs` get a keyword-only, required `visibility` argument built from the current user (`Visibility.for_user(user, org)` or `Visibility.system()`). Making it required means every existing call site has to be updated, and none can be missed by accident.
-- **Group endpoints.** `groups/values` counts include only visible documents. A restricted group that the caller has no ACL entry on is omitted from the values list, including restricted groups with no documents yet. Org admins see every group, so they can manage access and pre-restricted empty groups. Users in a group's ACL see it as usual. `groups/item`, `groups/results` and `groups/runs` return `404` for callers with no access.
-- **Group prompt runs** (section 5) store the multi-document LLM output on the group. Reading a run requires `viewer` on the group, **and** the caller must be able to see every document in the run's `document_ids` snapshot. Otherwise the output could reveal content from documents in another restricted group. If any document is hidden from the caller, return the run's metadata with the result withheld and the message "includes documents you cannot access".
-- **Routes to audit** (each has `{document_id}` endpoints or document lists): `documents.py`, `ocr.py`, `llm.py` (including bulk analyze and bulk run), `forms.py` (form submissions per document: `GET` and `DELETE /forms/submissions/{document_id}` currently skip the document check entirely), `prompts.py`, `flows.py` (run on document, plus the org-wide executions list, execution detail, blob download and resume, which read `flow_executions` without loading the document even though the trigger holds the file name, tags, metadata and LLM result), `knowledge_bases.py` (KB document lists and counts, search, chat), `webhooks.py` (delivery list, detail and retry, whose stored payloads hold document name, tags, metadata and LLM output), `agent.py` (document chat; agent tools such as `get_ocr_text` and `get_extraction_result` rely on the route-level check), and the new `groups.py`. **Dashboard / home counts** are computed in the frontend from list APIs; once those lists honor `visibility`, dashboard numbers follow without a separate backend audit.
-- **Knowledge base search and chat.** Vector hits carry `document_id`. Post-filter hits against the caller's visibility, and over-fetch to make up for dropped hits. KB search is also reached from the KB tool inside extraction (`llm/llm.py`) and the flow agent tool (`flows/agent_loop/dispatch.py`), so the post-filter belongs in `search_knowledge_base` itself.
-- **Workers, flows and webhooks** run as the system and are configured by org admins, so they can read every document. That is acceptable, because admins already see everything. User-facing views of their output, such as flow execution lists, must still hide entries for documents the caller cannot see.
+- **`get_doc_for_user(..., min_role)`** in `common/doc.py`: load doc, apply visibility, check role for writes; `404` if missing or invisible. Every `{document_id}` route uses it.
+- **Required `visibility`** on `build_docs_match_query` / `list_docs` (`Visibility.for_user` or `Visibility.system()`), so list call sites cannot skip the filter. Frontend dashboard counts follow list APIs automatically.
+- **Group endpoints:** counts and lists respect visibility; omit restricted values the caller is not in (org admins see all, including empty pre-restricted groups). `groups/item`, `groups/results`, `groups/runs` → `404` when no access.
+- **Group runs:** start requires `editor` on each restricted entry in `group_filter` and visibility of every document in the scope—else `403`. Read requires `viewer` on each restricted entry in the run's filter **and** visibility of every `document_ids` snapshot member—else withhold result ("includes documents you cannot access").
+- **KB search/chat:** post-filter vector hits by visibility in `search_knowledge_base` (including calls from extraction and flow agent tools); over-fetch.
+- **System paths:** workers, flows and webhooks read as system; user-facing execution/delivery views still filter by visibility.
+- **Audit:** grep `app/routes` for `{document_id}` and document list handlers; fix gaps. **`test_group_access` route-table test** (4.7) is the regression guard—no hand-maintained route list in this doc.
 
 ### 4.6 Routes and UI for access
 
@@ -362,18 +353,14 @@ This is most of the work in phase 3. Documents are reached through many routes, 
 
 ### 4.7 Tests: `packages/python/tests/test_group_access.py` (new)
 
-- Viewer, editor and manager can each do exactly what the table in 4.1 says.
-- Restrictions intersect across a document's groups, and the lowest role wins.
-- A user without access gets `404` on the document and every document sub-resource. Write this as a **route-table test**: enumerate every registered route whose path contains `{document_id}` and assert `404` for a restricted document, so new routes cannot skip the check.
-- Lists, counts, `groups/values`, bulk operations, KB search, group results and group runs exclude restricted documents. A restricted group the caller is not in does not appear in `groups/values`, except for org admins (4.5).
-- The widening rule blocks an editor from changing or dropping a restricted key value, including through a `PUT` with partial metadata, and allows a manager.
-- Uploading with a restricted group's value requires `editor` on it.
-- `group_readers` is correct after an upload, an update, a bulk update, an ACL change, a restrict and unrestrict, and removal of a user from the org.
-- Removing a key that has restricted groups returns `409`.
-- A group run whose documents include one the caller cannot see has its result withheld, and starting a run on such a group returns `403`.
-- Only org admins can set `display_name`, on restricted and unrestricted groups.
-- Group delete permissions in phase 3 (2.6): a manager can delete the record, cascade is refused with `403` when the manager cannot see every document, and an org admin can always cascade.
-- An org API token gets the same results as its user. Org admins see everything.
+- **Roles (4.1):** matrix tests for viewer / editor / manager actions.
+- **Intersection (4.2)** and **widening rule (4.4)** on metadata writes, including partial `PUT`.
+- **Route-table test:** every `{document_id}` route returns `404` for a restricted document the user cannot see.
+- **Lists and groups (4.5):** documents, bulk, `groups/values`, KB search, group results/runs; admin exception for hidden empty restricted groups.
+- **`group_readers` (4.3):** after upload, update, bulk update, ACL/restrict changes, user removal from org.
+- **409** when removing a `group_keys` entry that still has restricted groups.
+- **Group runs and delete (2.6, 4.5):** withheld run result / `403` on start; cascade `403` when manager lacks full scope visibility.
+- API tokens match their user; org admins see everything.
 
 ## 5. Group prompt runs (phase 2)
 
@@ -381,14 +368,7 @@ These replace the removed prompt-level `peer_match_keys` feature for "run a prom
 
 ### 5.1 Retire `peer_match_keys` (same phase)
 
-- **API stays compatible.** `PromptConfig` in `app/routes/prompts.py` keeps the `peer_match_keys` field, so clients that still send it get no `422`. The server ignores the value: it is not stored on new revisions, and responses always return `peer_match_keys: []`. Mark the field deprecated in the model's description and in the OpenAPI docs.
-- **Revision equality.** The check that decides whether a `PUT` creates a new prompt revision ([`prompts.py`](../packages/python/app/routes/prompts.py), the comparison of `peer_match_keys` against the latest revision) must drop that comparison. Otherwise an old revision with stored keys never compares equal to a new request, and every save creates a new revision.
-- **Stored values are ignored.** Existing prompt revisions that have `peer_match_keys` keep the field in MongoDB. `get_prompt_group_config` (`common/prompts.py`) stops returning it, so nothing reads it.
-- **SDKs:** the TypeScript and Python SDK models keep the field as optional and deprecated, for the same compatibility reason.
-- **UI:** remove the "Grouped Inputs → Metadata group-by keys" control from `PromptCreate.tsx`. Keep the `include` controls (OCR text, PDF, metadata keys), because single-document runs and group runs both use them.
-- **Context building:** remove peer-document lookup from `_build_prompt_context` in `llm/llm.py`. Refactor it to take an explicit ordered list of documents. Single-document runs pass one document, and group runs pass the group's documents. `peer_run`, `match_values` and `match_document_ids` on `llm_runs` go away.
-- **Tests:** delete or rewrite the peer-grouping tests in `test_llm_prompt_context.py`, and add a test that a `PUT` with `peer_match_keys` succeeds and the value is ignored.
-- **Release notes:** say that prompt-level grouping is retired, and that declared group keys and group runs replace it.
+Keep the field on wire/SDK models (deprecated, optional) so old clients do not get `422`; do not store it on new revisions; responses return `[]`. Drop `peer_match_keys` from revision-equality in [`prompts.py`](../packages/python/app/routes/prompts.py); stop returning it from `get_prompt_group_config`. Remove the metadata group-by UI from `PromptCreate.tsx` and peer lookup from `_build_prompt_context` (explicit document list only; drop `peer_run` / `match_document_ids` on `llm_runs`). Rewrite `test_llm_prompt_context.py` peer tests; add a `PUT` that sends `peer_match_keys` and assert it is ignored. Release notes: use group keys and group runs instead.
 
 ### 5.2 Run lifecycle
 
@@ -449,20 +429,9 @@ The frontend calls the API through this SDK, so each phase's SDK changes land be
 
 ### 7.3 MCP server and internal agent (phase 4)
 
-Neither gets group tools before phase 4. Until then they keep working through their existing document tools, and metadata writes they make go through the routes that apply normalization and (in phase 3) the move checks.
+No group tools until phase 4; until then use existing document tools (metadata writes go through API routes with normalization and phase 3 move checks).
 
-**MCP server** (`packages/typescript/mcp/src/index.ts`):
-
-- New tools: `list_group_keys`, `list_group_values`, `get_group`, `get_group_results`, `run_group_prompt`, `get_group_runs`
-- Extend `list_documents` with `group_filter`.
-- Tool descriptions explain that groups come from metadata, and that changing a document's metadata moves it between groups.
-- The access endpoints, `set_group_keys` and group delete are not exposed, so an agent cannot change who can see a file or delete a group's documents.
-
-**Internal DocRouter agent** (`analytiq_data/agent/tools/`, registered in `agent/tool_registry.py`):
-
-- The same read and run tools as MCP: list group keys and values, get a group, get group results, run a group prompt, get group runs.
-- The agent acts as the chatting user, so every tool goes through the same visibility and role checks as the routes (4.5).
-- The same exclusions as MCP: no access changes, no key changes, no group delete.
+Add the same read/run surface to **MCP** (`packages/typescript/mcp/src/index.ts`) and the **internal agent** (`analytiq_data/agent/tools/`, `agent/tool_registry.py`): `list_group_keys`, `list_group_values`, `get_group`, `get_group_results`, `run_group_prompt`, `get_group_runs`, plus `list_documents` with `group_filter`. Agent/MCP act as the user (4.5). Do **not** expose access, `set_group_keys`, or group delete.
 
 ## 8. Delivery phases
 
