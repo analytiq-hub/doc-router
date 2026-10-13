@@ -131,6 +131,10 @@ class BulkAnalyzeDocumentFilters(BaseModel):
     name_search: Optional[str] = None
     tag_ids: Optional[List[str]] = None
     metadata_search: Optional[dict[str, str]] = None
+    case_id: Optional[str] = Field(
+        default=None,
+        description="Filter documents by case id (exact match)",
+    )
     filters: Optional[dict] = Field(
         default=None,
         description="MUI DataGrid filterModel (object)",
@@ -397,6 +401,13 @@ async def bulk_analyze_llm(
     analytiq_client = ad.common.get_analytiq_client()
     filters = request.document_filters
 
+    list_case_id = None
+    if filters.case_id is not None:
+        try:
+            list_case_id = ad.common.validate_case_id(filters.case_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     result = await ad.llm.bulk_analyze_executions(
         analytiq_client,
         organization_id,
@@ -405,6 +416,7 @@ async def bulk_analyze_llm(
         tag_ids=filters.tag_ids,
         name_search=filters.name_search,
         metadata_search=filters.metadata_search,
+        case_id=list_case_id,
         filter_model=filters.filters,
     )
     return BulkAnalyzeLLMResponse(**result)

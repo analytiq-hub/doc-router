@@ -269,6 +269,7 @@ async def bulk_analyze_flow_executions(
     tag_ids: list[str] | None = None,
     name_search: str | None = None,
     metadata_search: dict[str, str] | None = None,
+    case_id: str | None = None,
     filter_model: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
@@ -310,6 +311,7 @@ async def bulk_analyze_flow_executions(
         tag_ids=doc_tag_filter or None,
         name_search=name_search,
         metadata_search=metadata_search,
+        case_id=case_id,
         filter_model=filter_model,
     )
     if not documents:

@@ -469,6 +469,7 @@ export class DocRouterOrg {
       name_search?: string;
       tag_ids?: string[];
       metadata_search?: Record<string, string>;
+      case_id?: string;
       filters?: Record<string, unknown>;
     };
   }): Promise<BulkAnalyzeLLMResponse> {
@@ -490,6 +491,7 @@ export class DocRouterOrg {
       name_search?: string;
       tag_ids?: string[];
       metadata_search?: Record<string, string>;
+      case_id?: string;
       filters?: Record<string, unknown>;
     };
   }): Promise<BulkAnalyzeOCRResponse> {
@@ -512,6 +514,7 @@ export class DocRouterOrg {
       name_search?: string;
       tag_ids?: string[];
       metadata_search?: Record<string, string>;
+      case_id?: string;
       filters?: Record<string, unknown>;
     };
   }): Promise<BulkAnalyzeFlowsResponse> {

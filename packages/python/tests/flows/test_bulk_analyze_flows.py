@@ -36,6 +36,7 @@ async def _insert_named_document(
     name: str,
     tag_ids: list[str] | None = None,
     metadata: dict | None = None,
+    case_id: str | None = None,
 ) -> str:
     document_id = str(ObjectId())
     file_key = f"{document_id}.pdf"
@@ -59,6 +60,7 @@ async def _insert_named_document(
             "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
             "tag_ids": tag_ids if tag_ids is not None else [],
             "metadata": metadata if metadata is not None else {},
+            **({"case_id": case_id} if case_id is not None else {}),
         }
     )
     return document_id
@@ -475,6 +477,37 @@ async def test_bulk_analyze_flows_respects_metadata_search_filter(test_db, mock_
         "missing",
         flow_ids=[flow_id],
         metadata_search={"batch": "alpha"},
+    )
+    doc_ids = {e["document_id"] for g in result["groups"] for e in g["executions"]}
+    assert doc_ids == {match_id}
+
+
+@pytest.mark.asyncio
+async def test_bulk_analyze_flows_respects_case_id_filter(test_db, mock_auth, setup_test_models):
+    tag_id = await _insert_org_tag(test_db, "case-filter-tag")
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(
+        test_db, report_result=True, tag_ids=[tag_id], auto_tag=False
+    )
+    match_id = await _insert_named_document(
+        test_db,
+        name="in_case.pdf",
+        tag_ids=flow_tags,
+        case_id="CLM-BULK-1",
+    )
+    await _insert_named_document(
+        test_db,
+        name="other_case.pdf",
+        tag_ids=flow_tags,
+        case_id="CLM-BULK-2",
+    )
+    aq = ad.common.get_analytiq_client()
+
+    result = await bulk_analyze_flow_executions(
+        aq,
+        TEST_ORG_ID,
+        "missing",
+        flow_ids=[flow_id],
+        case_id="CLM-BULK-1",
     )
     doc_ids = {e["document_id"] for g in result["groups"] for e in g["executions"]}
     assert doc_ids == {match_id}

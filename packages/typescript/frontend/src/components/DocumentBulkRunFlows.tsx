@@ -246,12 +246,14 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
         name_search: searchParameters.searchTerm.trim() || undefined,
         tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
         metadata_search: parseMetadataSearch(searchParameters.metadataSearch.trim()),
+        case_id: searchParameters.caseIdFilter?.trim() || undefined,
       };
     }, [
       selectedTag,
       searchParameters.searchTerm,
       searchParameters.selectedTagFilters,
       searchParameters.metadataSearch,
+      searchParameters.caseIdFilter,
     ]);
 
     const toggleFlowSelection = (flowId: string) => {

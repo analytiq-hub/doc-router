@@ -196,8 +196,15 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
         name_search: searchParameters.searchTerm.trim() || undefined,
         tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
         metadata_search: parseMetadataSearch(searchParameters.metadataSearch.trim()),
+        case_id: searchParameters.caseIdFilter?.trim() || undefined,
       };
-    }, [selectedTag, searchParameters.searchTerm, searchParameters.selectedTagFilters, searchParameters.metadataSearch]);
+    }, [
+      selectedTag,
+      searchParameters.searchTerm,
+      searchParameters.selectedTagFilters,
+      searchParameters.metadataSearch,
+      searchParameters.caseIdFilter,
+    ]);
 
     const analyzeExecutions = useCallback(async () => {
       if (!selectedTag) return;

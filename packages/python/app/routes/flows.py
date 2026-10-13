@@ -1138,6 +1138,7 @@ class BulkAnalyzeFlowsDocumentFilters(BaseModel):
     tag_ids: Optional[List[str]] = None
     name_search: Optional[str] = None
     metadata_search: Optional[dict[str, str]] = None
+    case_id: Optional[str] = None
     filters: Optional[dict[str, Any]] = None
 
 
@@ -1183,6 +1184,13 @@ async def bulk_analyze_flows(
         f"bulk_analyze_flows(): org={organization_id} tag_id={request.tag_id} mode={request.mode}"
     )
     filters = request.document_filters
+    list_case_id = None
+    if filters.case_id is not None:
+        try:
+            list_case_id = ad.common.validate_case_id(filters.case_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     try:
         result = await bulk_analyze_flow_executions(
             ad.common.get_analytiq_client(),
@@ -1193,6 +1201,7 @@ async def bulk_analyze_flows(
             tag_ids=filters.tag_ids,
             name_search=filters.name_search,
             metadata_search=filters.metadata_search,
+            case_id=list_case_id,
             filter_model=filters.filters,
         )
     except ValueError as exc:

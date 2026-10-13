@@ -188,6 +188,8 @@ async def test_document_tools_list_update_delete_with_mocks(org_and_users, test_
         {"document_id": str(update_doc_id), "document_name": "new-name"},
     )
     assert updated["document_name"] == "new-name"
+    row = await test_db.docs.find_one({"_id": update_doc_id})
+    assert row.get("updated_at") is not None
 
     # delete_document: patch file deletion + doc deletion.
     delete_doc_id = ObjectId()

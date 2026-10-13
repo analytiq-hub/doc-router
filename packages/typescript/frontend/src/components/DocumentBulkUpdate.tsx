@@ -540,10 +540,20 @@ export function DocumentBulkUpdate({
                             </div>
                           )}
 
+                          {searchParameters.caseIdFilter && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium text-gray-700">Case:</span>
+                              <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
+                                {searchParameters.caseIdFilter}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Show "(none)" if no filters */}
                           {!searchParameters.searchTerm &&
                            searchParameters.selectedTagFilters.length === 0 &&
-                           !searchParameters.metadataSearch && (
+                           !searchParameters.metadataSearch &&
+                           !searchParameters.caseIdFilter && (
                             <span className="text-gray-500 italic">(no active filters)</span>
                           )}
                         </div>
