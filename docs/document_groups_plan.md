@@ -24,6 +24,7 @@ The approach is deliberately small:
 - **Tags still drive processing.** Groups do not trigger OCR, LLM or flows in this plan. Automatic group-level triggers are deferred (see 9.2).
 - **Prompt-level `peer_match_keys` is retired in phase 2.** Today, prompt revisions can list metadata keys so a single-document LLM run pulls in peer documents and saves one combined result on the source document. Group runs (section 5) replace that behavior. Phase 2 removes the behavior from `_build_prompt_context` and the UI. The prompt API still accepts the field so old clients keep working, but ignores it (5.1). Old prompt settings are not migrated.
 - **Deleting a group deletes only its record by default.** Deleting the group's documents too is an explicit `cascade` option (2.6).
+- **Nested browsing uses one `group_filter`.** A single-level selection is a one-entry filter. Nested selections (claim, then document type) use the same `group_filter` for the document grid, bulk actions, group runs, group results, and cascade delete. ACL rows and display names stay on individual `(key, value)` pairs (1.3).
 
 ## 1. Data model
 
@@ -103,7 +104,7 @@ All indexes are static. They go in `EXPECTED_INDEXES` in `analytiq_data/mongodb/
   - A wildcard index also adds a little cost to every document write that touches `metadata`, for every metadata key. Metadata is small (`Dict[str, str]` with a handful of keys), so this is acceptable. If an org stores many keys that are never grouped, restrict the index with `wildcardProjection` later.
 - `groups`: `(organization_id, key, value)` unique.
 - `groups`: `(organization_id, restricted)` — for listing restricted groups and blocking key removal.
-- `group_llm_runs`: `(organization_id, key, value, prompt_id, created_at desc)`.
+- `group_llm_runs`: `(organization_id, group_filter_key, prompt_id, created_at desc)`; see `group_filter_key()` in 1.6. Lookup latest run with this index, then `$limit` 1.
 - `queues.group_llm` and `queues.group_delete`: the same worker-queue index template as `queues.llm`. Add both to `WORKER_QUEUE_COLLECTIONS` in `index_registry.py`.
 
 ### 1.6 Group filters and query patterns
@@ -117,10 +118,12 @@ A **group filter** selects documents by one or more group levels. It is a list, 
 ]
 ```
 
-Each entry has a `key` and a `value`. Entries combine with AND. One helper, `group_filter_to_match(group_filter)`, turns the list into a MongoDB match, and every endpoint that takes a group filter uses it (2.4). Documents without a value for a key belong to no group for that key, and there is no filter or bucket for them.
+Each entry has a `key` and a `value`. Entries combine with AND. One helper, `group_filter_to_match(group_filter)`, validates the list and turns it into a MongoDB match. Use it anywhere document scope matters: `GET /documents`, bulk actions, **group runs**, and **group results** (same nested scope as the grid). Documents without a value for a key belong to no group for that key, and there is no filter or bucket for them.
 
-- **Documents in a group:** `{"organization_id": org, "metadata.<key>": value}`.
-- **Nested:** all levels together, for example `metadata.claim_number = "CLM-123"` and `metadata.doc_type = "Police report"`.
+For `group_llm_runs` indexes, `group_filter_key(group_filter)` is a stable string (sorted keys, JSON encoding). A one-level filter and a nested filter are different scopes.
+
+- **Documents in a scope:** `group_filter_to_match(group_filter)` on `docs`, for example one level or nested AND of `metadata.<key>`.
+- **Nested example:** `metadata.claim_number = "CLM-123"` and `metadata.doc_type = "Police report"`.
 - **Values of a key with counts:** a `$match` (org, the existing filters, and visibility from phase 3), then `$group` on `$metadata.<key>`, then `$sort` and `$skip`/`$limit`. See 2.2.
 - **Visibility for a non-admin user (phase 3):** `{"$or": [{"group_readers": null}, {"group_readers": user_id}]}`.
 
@@ -134,6 +137,7 @@ Follow the style of `common/doc.py` and `common/tags.py`. Add an explicit import
 - `set_group_keys(analytiq_client, organization_id, keys)` validates the keys (1.1) and saves them. No index work is needed (1.5).
 - `validate_group_key(key)` enforces the key rules in 1.1. Every function that puts a key into a query calls it.
 - `group_filter_to_match(group_filter)` validates a group filter (1.6) and returns its MongoDB match.
+- `group_filter_key(group_filter)` returns the stable string for `group_llm_runs` indexes (1.6).
 - `normalize_group_metadata(group_keys, metadata)` applies the rules in 1.2 and returns new metadata (pure function, no I/O).
 - `apply_group_metadata_rules(analytiq_client, organization_id, metadata)` loads `group_keys` and returns normalized metadata for write paths (1.2).
 - `list_group_values(analytiq_client, organization_id, key, *, match, value_search, skip, limit, sort)` runs the aggregation in 2.2.
@@ -177,16 +181,16 @@ Group values can contain `/` and other characters that proxies decode unreliably
 | `GET`  | `/v0/orgs/{org}/groups/item?key=&value=` | One group: counts, `display_name`, `restricted`, and (phase 3) `my_role`. |
 | `PUT`  | `/v0/orgs/{org}/groups/item?key=&value=` | Set `display_name`. Org admin only. |
 | `DELETE` | `/v0/orgs/{org}/groups/item?key=&value=&cascade=false` | Delete the group record, and with `cascade=true` its documents too (2.6). |
-| `GET`  | `/v0/orgs/{org}/groups/results?key=&value=&prompt_id=` | Group results view (section 6). |
-| `POST` | `/v0/orgs/{org}/groups/runs` | Start a group prompt run (section 5). |
-| `GET`  | `/v0/orgs/{org}/groups/runs?key=&value=&prompt_id=` | Get the latest group runs. |
+| `GET`  | `/v0/orgs/{org}/groups/results?group_filter=&prompt_id=` | Group results view (section 6). |
+| `POST` | `/v0/orgs/{org}/groups/runs` | Start a group prompt run (section 5). Body: `{ group_filter, prompt_id }`. |
+| `GET`  | `/v0/orgs/{org}/groups/runs?group_filter=&prompt_id=` | Get the latest group runs for that scope. |
 | `GET`, `PUT` | `/v0/orgs/{org}/groups/access?key=&value=` | Phase 3 (section 4). |
 
 `key` must be a declared key on every endpoint except `groups/values`, where an admin may pass an undeclared key (2.2).
 
 `group_filter` is the group filter list from 1.6, sent as a JSON-encoded query parameter. JSON avoids any ambiguity when values contain `:`, `,` or `=`.
 
-Pydantic models go in `app/routes/groups.py`: `GroupKey`, `GroupValue`, `ListGroupValuesResponse`, `Group`, `GroupRunRequest`, `GroupRun`, `GroupAccess`, `GroupAclEntry`.
+Pydantic models go in `app/routes/groups.py`: `GroupKey`, `GroupFilterEntry`, `GroupValue`, `ListGroupValuesResponse`, `Group`, `GroupRunRequest` (`group_filter`, `prompt_id`), `GroupRun`, `GroupAccess`, `GroupAclEntry`.
 
 ### 2.4 Documents API changes (`app/routes/documents.py`, `common/doc.py`)
 
@@ -208,6 +212,7 @@ Pydantic models go in `app/routes/groups.py`: `GroupKey`, `GroupValue`, `ListGro
 - Bulk OCR, LLM, flows, delete, and metadata update respect `group_filter` on the server (mirror existing tests that assert `metadata_search` on bulk paths)
 - Group delete (2.6): without `cascade`, documents and their metadata are untouched and only the row goes. With `cascade=true`, every document in the group is deleted with all its data (`delete_doc_full`), and documents outside the group are untouched. A rerun after a simulated crash finishes the job.
 - Cross-org isolation: values from org A never appear in org B
+- Phase 2: `POST/GET /groups/runs` and `GET /groups/results` with a two-level `group_filter` match the same documents as the grid
 
 ### 2.6 Group delete
 
@@ -323,7 +328,7 @@ Changing a declared key's value, or removing it, moves the document out of one g
 | Change `display_name` | Org admin |
 | Change `restricted` or `acl` | `manager` on the group |
 | Delete the group record, or delete with cascade | See 2.6 |
-| Start a group prompt run | `editor` on the group, and the caller can see every document in the group. Otherwise `403` with "the group includes documents you cannot access", because the caller could not read the result (4.5). |
+| Start a group prompt run | `editor` on each restricted `(key, value)` in `group_filter`, and the caller can see every document in the scope. Otherwise `403` with "the group includes documents you cannot access" (4.5). |
 | Declare or remove group keys | Org admin |
 
 **Widening rule:** if a write would let more people see the document, it also requires `manager` on every restricted group the document is leaving. The test is that the document's new `group_readers` is not a subset of the old one, with `null` counting as everyone. Without this rule, any editor could leak a restricted file by editing its claim number, or by sending a `PUT` with partial metadata that drops the key (2.4).
@@ -387,11 +392,11 @@ These replace the removed prompt-level `peer_match_keys` feature for "run a prom
 
 ### 5.2 Run lifecycle
 
-- **Start:** `POST /groups/runs` with `{ key, value, prompt_id }`. It checks permissions (4.4 in phase 3), enqueues a message on `queues.group_llm` and returns the run ID.
-- **Worker** (`worker/worker.py`, same pattern as LLM queue handlers): load **all** of the group's documents as the system, not filtered by the caller's visibility, sorted by upload date, and build one multi-document prompt via the refactored `_build_prompt_context`. The prompt revision's `include` settings (OCR text, PDF, metadata keys) apply unchanged. Message shape: `{ organization_id, key, value, prompt_id, run_id, ... }` with idempotent handling on `run_id`. Because every run covers the whole group, two users get the same result for the same group, and staleness (below) is well defined. Access is enforced when the run is started (4.4) and when its result is read (4.5).
-- **Storage:** `group_llm_runs` collection holding `{organization_id, key, value, prompt_id, prompt_revid, document_ids, result, prompt_used, status, error, created_by, created_at}`. `document_ids` is the snapshot of the group at run time.
+- **Start:** `POST /groups/runs` with `{ group_filter, prompt_id }`. It checks permissions (4.4 in phase 3), enqueues a message on `queues.group_llm` and returns the run ID.
+- **Worker** (`worker/worker.py`, same pattern as LLM queue handlers): load all documents matching `group_filter_to_match(group_filter)` as the system, sorted by upload date, and build one multi-document prompt via the refactored `_build_prompt_context`. The prompt revision's `include` settings (OCR text, PDF, metadata keys) apply unchanged. Message shape: `{ organization_id, group_filter, group_filter_key, prompt_id, run_id, ... }` with idempotent handling on `run_id`. Access is enforced when the run is started (4.4) and when its result is read (4.5).
+- **Storage:** `group_llm_runs` collection holding `{organization_id, group_filter, group_filter_key, prompt_id, prompt_revid, document_ids, result, prompt_used, status, error, created_by, created_at}`. `document_ids` is the snapshot of documents in that scope at run time.
 - **Staleness:** a run is **stale** when its inputs have changed since it ran:
-  - the group's current documents differ from `document_ids`
+  - documents matching the stored `group_filter` differ from `document_ids`
   - a document's OCR was redone after the run (when `include.ocr_text` is on)
   - a document's metadata changed after the run, for keys listed in `include.metadata_keys` (or any key when it is `["*"]`)
   - the prompt has a newer revision than `prompt_revid`
@@ -406,9 +411,9 @@ These replace the removed prompt-level `peer_match_keys` feature for "run a prom
 
 This is a table of each document's extracted fields across a whole group.
 
-**Endpoint:** `GET /v0/orgs/{org}/groups/results?key=&value=&prompt_id=&skip&limit`
+**Endpoint:** `GET /v0/orgs/{org}/groups/results?group_filter=&prompt_id=&skip&limit`
 
-- Lists the group's documents with the same match query as `GET /documents`, including the visibility filter. For each one, it fetches the latest `llm_runs` result for `prompt_id`, using the existing lookup logic in `ad.llm.get_llm_result`. Batch this with one `$in` and `$sort`/`$group` aggregation instead of N lookups. `llm/bulk_analyze.py` already uses a similar aggregation that can serve as a model.
+- Lists documents in the scope with the same match as `GET /documents?group_filter=...`, including the visibility filter (phase 3). For each one, it fetches the latest `llm_runs` result for `prompt_id`, using the existing lookup logic in `ad.llm.get_llm_result`. Batch this with one `$in` and `$sort`/`$group` aggregation instead of N lookups. `llm/bulk_analyze.py` already uses a similar aggregation that can serve as a model.
 - Columns come from the prompt's response JSON Schema (top-level properties, with nested objects flattened to dotted keys). This fixes the column order and holds even for documents without results.
 - Each row has `document_id`, `document_name`, `upload_date`, `state`, `has_result`, `is_edited` (when a human has updated the result), and `fields: {key: value}`.
 - If `prompt_id` is omitted, the endpoint returns the prompts that have results in the group, so the UI can offer a picker.
@@ -417,7 +422,7 @@ This is a table of each document's extracted fields across a whole group.
 
 - A prompt picker, which defaults to the prompt with the most results in the group
 - An MUI DataGrid with one row per document and one column per field, plus a status column (no result, pending, done, edited). Clicking a row opens the document with the extraction sidebar.
-- A **Group runs** section above the grid that shows the latest group run per prompt, with stale markers and Run and Re-run buttons
+- A **Group runs** section above the grid that shows the latest group run per prompt for the current `group_filter`, with stale markers and Run and Re-run buttons
 - CSV export, built client-side from the loaded rows
 - A "Run missing" button, shown to editors, that calls the existing bulk-run LLM path scoped to the group (2.4)
 
