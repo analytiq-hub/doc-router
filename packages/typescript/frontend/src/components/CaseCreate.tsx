@@ -122,14 +122,14 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Display name</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Case Name</label>
           <input
             type="text"
             className="w-full p-2 border rounded"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             disabled={isLoading}
-            placeholder="Optional label"
+            placeholder="Optional; lists use Case ID when empty"
           />
         </div>
         <div>

@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import DocumentList from './DocumentList';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
+import { caseDisplayName } from '@/utils/caseDisplayName';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useSession } from 'next-auth/react';
 import { isOrgAdmin } from '@/utils/roles';
@@ -106,8 +107,10 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
           <Link href={`/orgs/${organizationId}/cases`} className="text-sm text-blue-600 underline">
             ← Cases
           </Link>
-          <h1 className="text-2xl font-bold mt-1">{caseRow.display_name}</h1>
-          <p className="text-sm text-gray-600 font-mono">{caseRow.case_id}</p>
+          <h1 className="text-2xl font-bold mt-1">{caseDisplayName(caseRow)}</h1>
+          {caseDisplayName(caseRow) !== caseRow.case_id && (
+            <p className="text-sm text-gray-600 font-mono">{caseRow.case_id}</p>
+          )}
           <p className="text-sm text-gray-500 mt-1">
             {caseRow.document_count} document(s) · Updated {formatLocalDate(caseRow.updated_at)}
           </p>

@@ -13,8 +13,12 @@ import { isColorLight } from '@/utils/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatLocalDate } from '@/utils/date';
+import { caseDisplayName } from '@/utils/caseDisplayName';
 import { parseAndEncodeMetadataSearch } from '@/utils/documentListQuery';
 import { toast } from 'react-toastify';
+
+const caseDetailHref = (organizationId: string, caseId: string) =>
+  `/orgs/${organizationId}/cases/${encodeURIComponent(caseId)}`;
 
 const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -91,23 +95,32 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const columns = useMemo<GridColDef[]>(
     () => [
       {
+        field: 'display_name',
+        headerName: 'Case Name',
+        flex: 1.5,
+        valueGetter: (_value, row: Case) => caseDisplayName(row),
+        renderCell: (params: GridRenderCellParams<Case>) => {
+          const name = caseDisplayName(params.row);
+          return (
+            <Link
+              href={caseDetailHref(organizationId, params.row.case_id)}
+              className="text-blue-600 underline truncate font-medium"
+              title={name}
+            >
+              {name}
+            </Link>
+          );
+        },
+      },
+      {
         field: 'case_id',
         headerName: 'Case ID',
         flex: 1.2,
         renderCell: (params: GridRenderCellParams<Case>) => (
-          <Link
-            href={`/orgs/${organizationId}/cases/${encodeURIComponent(params.row.case_id)}`}
-            className="text-blue-600 underline truncate"
-            title={params.value as string}
-          >
-            {params.value as string}
-          </Link>
+          <span className="font-mono text-sm text-gray-700 truncate" title={params.row.case_id}>
+            {params.row.case_id}
+          </span>
         ),
-      },
-      {
-        field: 'display_name',
-        headerName: 'Display name',
-        flex: 1.5,
       },
       {
         field: 'document_count',
