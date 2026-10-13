@@ -6,6 +6,12 @@ from .document import (
     DocumentUpdate,
     ListDocumentsResponse
 )
+from .case import (
+    CaseCreate,
+    CaseUpdate,
+    CaseOut,
+    ListCasesResponse
+)
 from .ocr import GetOCRMetadataResponse
 from .llm import (
     LLMChatModel,
@@ -41,7 +47,13 @@ __all__ = [
     "DocumentResponse",
     "DocumentUpdate",
     "ListDocumentsResponse",
-    
+
+    # Case models
+    "CaseCreate",
+    "CaseUpdate",
+    "CaseOut",
+    "ListCasesResponse",
+
     # OCR models
     "GetOCRMetadataResponse",
     

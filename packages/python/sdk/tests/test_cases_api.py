@@ -61,8 +61,8 @@ class TestCasesAPI:
             skip=10,
             limit=25,
             case_id_search="CLM",
-            tag_ids="t1,t2",
-            metadata_search="k%3Dv",
+            tag_ids=["t1", "t2"],
+            metadata_search={"k": "v w"},
         )
         mock_client.request.assert_called_once_with(
             "GET",
@@ -72,7 +72,7 @@ class TestCasesAPI:
                 "limit": 25,
                 "case_id_search": "CLM",
                 "tag_ids": "t1,t2",
-                "metadata_search": "k%3Dv",
+                "metadata_search": "k=v%20w",
             },
         )
         assert isinstance(ListCasesResponse(**mock_client.request.return_value), ListCasesResponse)
@@ -166,3 +166,15 @@ class TestDocumentsAPICaseFields:
             f"/v0/orgs/{ORG}/documents",
             json={"documents": payload},
         )
+
+
+def test_document_update_dump_leaves_out_unset_fields():
+    from docrouter_sdk.models import DocumentUpdate
+
+    assert DocumentUpdate(tag_ids=["t1"]).model_dump() == {"tag_ids": ["t1"]}
+    assert DocumentUpdate(case_id=None).model_dump() == {"case_id": None}
+    assert DocumentUpdate(tag_ids=["t1"]).model_dump(exclude_unset=False)["case_id"] is None
+
+
+def test_case_models_exported():
+    from docrouter_sdk.models import CaseCreate, CaseUpdate, CaseOut, ListCasesResponse  # noqa: F401

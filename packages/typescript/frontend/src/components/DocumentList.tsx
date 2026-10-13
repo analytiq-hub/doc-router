@@ -68,11 +68,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
   // Add state for bulk update modal
   const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false);
 
+  // Follow the case from props: a fixed case, or ?case_id= changing on client-side navigation.
   useEffect(() => {
-    if (fixedCaseId !== undefined) {
-      setCaseIdFilter(fixedCaseId);
-    }
-  }, [fixedCaseId]);
+    setCaseIdFilter(fixedCaseId ?? initialCaseIdFilter ?? '');
+  }, [fixedCaseId, initialCaseIdFilter]);
 
   const effectiveCaseId = (fixedCaseId ?? caseIdFilter).trim();
 

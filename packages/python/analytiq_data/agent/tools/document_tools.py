@@ -158,8 +158,6 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
     if not update_dict:
         return {"message": "No updates provided", "document_id": document_id}
 
-    from datetime import datetime, UTC
-
     update_dict["updated_at"] = datetime.now(UTC)
     old_tag_ids = document.get("tag_ids", [])
     updated = await db.docs.find_one_and_update(

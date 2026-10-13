@@ -106,11 +106,15 @@ export function DocumentUpdate({
       cleanMetadata[field.key] = field.value
     })
     
-    const trimmedCase = caseIdInput.trim()
-    await onSave(selectedTags, cleanMetadata, {
-      caseId: trimmedCase ? trimmedCase : null,
-      createCaseIfMissing,
-    });
+    // Send the case only when it changed, so a tag or metadata edit doesn't depend on
+    // the current case (for example, fail while that case is being deleted).
+    const newCaseId = caseIdInput.trim() || null
+    const caseChanged = newCaseId !== (currentCaseId || null)
+    await onSave(
+      selectedTags,
+      cleanMetadata,
+      caseChanged ? { caseId: newCaseId, createCaseIfMissing } : undefined
+    );
     onClose();
   };
 

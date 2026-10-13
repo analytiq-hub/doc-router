@@ -42,11 +42,26 @@ class DocumentResponse(BaseModel):
     content: str
 
 class DocumentUpdate(BaseModel):
+    """
+    Body for ``PUT /documents/{id}``. The server applies only the fields that are sent,
+    and an explicit ``case_id: null`` removes the document from its case. Dumping
+    therefore leaves out fields that were never set, so building
+    ``DocumentUpdate(tag_ids=[...])`` doesn't also clear the case, name or metadata.
+    """
+
     document_name: Optional[str] = None
     tag_ids: List[str] = []
     metadata: Optional[Dict[str, str]] = {}
     case_id: Optional[str] = None
     create_case_if_missing: bool = False
+
+    def model_dump(self, **kwargs):
+        kwargs.setdefault("exclude_unset", True)
+        return super().model_dump(**kwargs)
+
+    def model_dump_json(self, **kwargs):
+        kwargs.setdefault("exclude_unset", True)
+        return super().model_dump_json(**kwargs)
 
 class ListDocumentsResponse(BaseModel):
     documents: List[DocumentMetadata]

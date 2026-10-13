@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 
+from .documents import encode_metadata_search
 from .models.case import CaseOut, ListCasesResponse
 
 
@@ -21,16 +22,17 @@ class CasesAPI:
         skip: int = 0,
         limit: int = 50,
         case_id_search: Optional[str] = None,
-        tag_ids: Optional[str] = None,
-        metadata_search: Optional[str] = None,
+        tag_ids: Optional[List[str]] = None,
+        metadata_search: Optional[Dict[str, str]] = None,
     ) -> ListCasesResponse:
+        """List cases. ``tag_ids`` and ``metadata_search`` take the same types as ``documents.list``."""
         params: Dict[str, Any] = {"skip": skip, "limit": limit}
         if case_id_search:
             params["case_id_search"] = case_id_search
         if tag_ids:
-            params["tag_ids"] = tag_ids
+            params["tag_ids"] = ",".join(tag_ids)
         if metadata_search:
-            params["metadata_search"] = metadata_search
+            params["metadata_search"] = encode_metadata_search(metadata_search)
         data = self.client.request(
             "GET",
             f"/v0/orgs/{organization_id}/cases",

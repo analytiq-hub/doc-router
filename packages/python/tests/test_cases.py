@@ -465,3 +465,10 @@ async def test_delete_doc_without_docs_row_still_cleans_up(test_db, mock_auth):
     await test_db.form_submissions.insert_one({**scope, "form_revid": "x"})
     await ad.common.delete_doc(ad.common.get_analytiq_client(), did, TEST_ORG_ID)
     assert await test_db.form_submissions.count_documents(scope) == 0
+
+
+@pytest.mark.parametrize("case_id", [".", "..", "..."])
+def test_validate_case_id_rejects_dot_only_ids(case_id):
+    with pytest.raises(ValueError):
+        ad.common.validate_case_id(case_id)
+    assert ad.common.validate_case_id("a.b") == "a.b"

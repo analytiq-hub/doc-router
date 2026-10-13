@@ -13,7 +13,10 @@ export default function DocumentsPage({ params }: { params: Promise<{ organizati
   const caseIdFromQuery = searchParams.get('case_id') ?? undefined;
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${organizationId}/docs?tab=${newValue}`);
+    // Keep the case filter, so uploads from a case-filtered list go to that case.
+    const query = new URLSearchParams({ tab: newValue });
+    if (caseIdFromQuery) query.set('case_id', caseIdFromQuery);
+    router.push(`/orgs/${organizationId}/docs?${query.toString()}`);
   };
 
   return (

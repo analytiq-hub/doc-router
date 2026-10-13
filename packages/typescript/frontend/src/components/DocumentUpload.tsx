@@ -47,9 +47,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
   const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false);
 
   useEffect(() => {
-    if (defaultCaseId) {
-      setCaseId(defaultCaseId);
-    }
+    setCaseId(defaultCaseId ?? '');
   }, [defaultCaseId]);
 
   // Fetch available tags on component mount

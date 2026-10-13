@@ -12,6 +12,13 @@ from .models.document import (
     ListDocumentsResponse
 )
 
+
+def encode_metadata_search(metadata_search: Dict[str, str]) -> str:
+    """Encode a metadata filter as the comma-separated, URL-encoded ``key=value`` list the API expects."""
+    from urllib.parse import quote
+    return ",".join(f"{quote(str(k))}={quote(str(v))}" for k, v in metadata_search.items())
+
+
 class DocumentsAPI:
     def __init__(self, client):
         self.client = client
@@ -59,10 +66,7 @@ class DocumentsAPI:
         if name_search:
             params["name_search"] = name_search
         if metadata_search:
-            # Convert dict to comma-separated key=value pairs with URL encoding
-            from urllib.parse import quote
-            metadata_pairs = [f"{quote(str(k))}={quote(str(v))}" for k, v in metadata_search.items()]
-            params["metadata_search"] = ",".join(metadata_pairs)
+            params["metadata_search"] = encode_metadata_search(metadata_search)
         if case_id:
             params["case_id"] = case_id
             

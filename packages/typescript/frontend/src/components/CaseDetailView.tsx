@@ -29,6 +29,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
     : false;
 
   const [caseRow, setCaseRow] = useState<Case | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState('');
@@ -36,11 +37,18 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
 
   const loadCase = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const c = await docRouterOrgApi.getCase({ caseId: decodedCaseId });
       setCaseRow(c);
-    } catch {
+    } catch (error) {
       setCaseRow(null);
+      // 404 means no such case (or it is being deleted); anything else is a real error.
+      if ((error as { status?: number }).status !== 404) {
+        const message = getApiErrorMsg(error);
+        setLoadError(message);
+        toast.error(`Failed to load case: ${message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -79,7 +87,11 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
   if (!caseRow) {
     return (
       <div className="p-4">
-        <p className="text-gray-600">Case not found or still being deleted.</p>
+        <p className="text-gray-600">
+          {loadError
+            ? `Could not load this case: ${loadError}`
+            : 'Case not found or still being deleted.'}
+        </p>
         <Link href={`/orgs/${organizationId}/cases`} className="text-blue-600 underline">
           Back to cases
         </Link>

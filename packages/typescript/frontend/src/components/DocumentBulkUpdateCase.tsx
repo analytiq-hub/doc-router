@@ -1,8 +1,13 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
-import { DocRouterOrgApi } from '@/utils/api';
+import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { toast } from 'react-hot-toast';
 import { CaseAssignmentFields } from './CaseAssignmentFields';
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery';
+
+// Matches the server's per-transaction assign limit.
+const ASSIGN_BATCH_SIZE = 1000;
+// Removal has no batch endpoint; send this many PUTs at a time.
+const REMOVE_CONCURRENCY = 8;
 
 export interface DocumentBulkUpdateCaseRef {
   executeCase: (operation: string) => Promise<void>;
@@ -51,49 +56,83 @@ export const DocumentBulkUpdateCase = forwardRef<DocumentBulkUpdateCaseRef, Docu
       onDataChange({ caseId, createCaseIfMissing: value });
     };
 
-    const runBulk = async (operation: string) => {
-      let processed = 0;
-      let skip = 0;
+    // Collect every matching id before changing anything. Assign and remove change
+    // case_id, which the filter may use, so paging while updating would skip documents.
+    const collectDocumentIds = async (): Promise<string[]> => {
+      const ids: string[] = [];
       const limit = 1000;
-
-      while (true) {
+      for (let skip = 0; ; skip += limit) {
         const batchResponse = await docRouterOrgApi.listDocuments(
           buildListDocumentsQuery(searchParameters, skip, limit)
         );
-        const batch = batchResponse.documents;
-        if (batch.length === 0) break;
+        ids.push(...batchResponse.documents.map((doc) => doc.id));
+        if (batchResponse.documents.length < limit) break;
+      }
+      return ids;
+    };
 
-        for (const doc of batch) {
-          try {
-            if (operation === 'assignToCase') {
-              const trimmed = caseId.trim();
-              if (!trimmed) {
-                toast.error('Case ID is required');
-                return;
-              }
-              await docRouterOrgApi.updateDocument({
-                documentId: doc.id,
-                caseId: trimmed,
-                createCaseIfMissing,
-              });
-            } else if (operation === 'removeFromCase') {
-              await docRouterOrgApi.updateDocument({
-                documentId: doc.id,
-                caseId: null,
-              });
-            }
-            processed += 1;
-            onProgress?.(processed, totalDocuments);
-          } catch {
-            // continue with next doc
-          }
-        }
-
-        skip += batch.length;
-        if (batch.length < limit) break;
+    const runBulk = async (operation: string) => {
+      const targetCaseId = caseId.trim();
+      if (operation === 'assignToCase' && !targetCaseId) {
+        toast.error('Case ID is required');
+        return;
       }
 
-      toast.success(`Updated case membership for ${processed} document(s)`);
+      let documentIds: string[];
+      try {
+        documentIds = await collectDocumentIds();
+      } catch (error) {
+        toast.error(`Failed to list documents: ${getApiErrorMsg(error)}`);
+        return;
+      }
+
+      let processed = 0;
+      let failed = 0;
+      let firstError: string | null = null;
+      const recordFailure = (error: unknown, count: number) => {
+        failed += count;
+        firstError ??= getApiErrorMsg(error);
+      };
+
+      if (operation === 'assignToCase') {
+        // One request per 1000 documents; the server assigns each batch in one transaction.
+        for (let start = 0; start < documentIds.length; start += ASSIGN_BATCH_SIZE) {
+          const batch = documentIds.slice(start, start + ASSIGN_BATCH_SIZE);
+          try {
+            await docRouterOrgApi.assignDocumentsToCase({
+              caseId: targetCaseId,
+              documentIds: batch,
+              createCaseIfMissing,
+            });
+            processed += batch.length;
+          } catch (error) {
+            recordFailure(error, batch.length);
+            // Unknown or deleting case fails every batch the same way.
+            break;
+          }
+          onProgress?.(processed, totalDocuments);
+        }
+      } else if (operation === 'removeFromCase') {
+        for (let start = 0; start < documentIds.length; start += REMOVE_CONCURRENCY) {
+          const batch = documentIds.slice(start, start + REMOVE_CONCURRENCY);
+          const results = await Promise.allSettled(
+            batch.map((documentId) => docRouterOrgApi.updateDocument({ documentId, caseId: null }))
+          );
+          for (const result of results) {
+            if (result.status === 'fulfilled') processed += 1;
+            else recordFailure(result.reason, 1);
+          }
+          onProgress?.(processed, totalDocuments);
+        }
+      }
+
+      if (failed > 0) {
+        toast.error(
+          `Updated case membership for ${processed} document(s); ${failed} failed: ${firstError}`
+        );
+      } else {
+        toast.success(`Updated case membership for ${processed} document(s)`);
+      }
       onComplete?.();
     };
 

@@ -26,6 +26,9 @@ def validate_case_id(case_id: str) -> str:
         raise ValueError(
             "case_id must be 1–128 characters: letters, digits, and . _ : - only"
         )
+    # "." and ".." are dot segments: clients normalize /cases/.. to the parent URL.
+    if set(case_id) == {"."}:
+        raise ValueError("case_id cannot consist only of dots")
     return case_id
 
 
