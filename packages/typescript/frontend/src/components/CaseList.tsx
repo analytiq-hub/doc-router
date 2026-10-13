@@ -4,7 +4,16 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem, Autocomplete } from '@mui/material';
+import {
+  TextField,
+  InputAdornment,
+  IconButton,
+  Menu,
+  MenuItem,
+  Autocomplete,
+  Box,
+  Tooltip,
+} from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -123,6 +132,76 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         ),
       },
       {
+        field: 'tag_ids',
+        headerName: 'Tags',
+        flex: 1,
+        sortable: false,
+        renderCell: (params: GridRenderCellParams<Case>) => {
+          const caseTags = availableTags.filter((tag) => params.row.tag_ids?.includes(tag.id));
+          const firstTag = caseTags[0];
+          const hasMoreTags = caseTags.length > 1;
+
+          const tagChip = (tag: Tag) => {
+            const bgColor = tag.color;
+            const textColor = isColorLight(bgColor) ? 'text-gray-800' : 'text-white';
+            return (
+              <div
+                key={tag.id}
+                className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center min-w-0 overflow-hidden`}
+                style={{ backgroundColor: bgColor }}
+                title={tag.name}
+              >
+                <span className="truncate min-w-0">{tag.name}</span>
+              </div>
+            );
+          };
+
+          if (!firstTag) {
+            return <div className="text-gray-400 flex items-center h-full">-</div>;
+          }
+
+          const content = (
+            <div className="flex gap-1 items-center h-full w-full min-w-0">
+              {tagChip(firstTag)}
+              {hasMoreTags && <span className="text-gray-500 text-sm shrink-0">...</span>}
+            </div>
+          );
+
+          if (hasMoreTags) {
+            const tooltipContent = (
+              <Box className="flex flex-col gap-1.5 p-1">
+                {caseTags.map((tag) => tagChip(tag))}
+              </Box>
+            );
+            return (
+              <Tooltip
+                title={tooltipContent}
+                arrow
+                placement="top"
+                enterDelay={200}
+                componentsProps={{
+                  tooltip: {
+                    sx: {
+                      bgcolor: 'white',
+                      color: 'text.primary',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      padding: '4px',
+                      maxWidth: '300px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    },
+                  },
+                }}
+              >
+                <div className="w-full flex items-center h-full min-w-0">{content}</div>
+              </Tooltip>
+            );
+          }
+
+          return content;
+        },
+      },
+      {
         field: 'document_count',
         headerName: 'Documents',
         width: 110,
@@ -147,7 +226,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         ),
       },
     ],
-    [organizationId]
+    [organizationId, availableTags]
   );
 
   return (
