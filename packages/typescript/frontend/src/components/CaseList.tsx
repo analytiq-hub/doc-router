@@ -36,7 +36,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
 
   useEffect(() => {
-    void docRouterOrgApi.listTags({ limit: 200 }).then((r) => setAvailableTags(r.tags)).catch(() => {});
+    void docRouterOrgApi.listTags({ limit: 100 }).then((r) => setAvailableTags(r.tags)).catch(() => {});
   }, [docRouterOrgApi]);
 
   const loadCases = useCallback(async () => {

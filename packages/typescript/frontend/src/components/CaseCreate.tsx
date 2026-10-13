@@ -22,7 +22,12 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([]);
 
   useEffect(() => {
-    void docRouterOrgApi.listTags({ limit: 200 }).then((r) => setAvailableTags(r.tags)).catch(() => {});
+    void docRouterOrgApi
+      .listTags({ limit: 100 })
+      .then((r) => setAvailableTags(r.tags))
+      .catch((error) => {
+        toast.error(getApiErrorMsg(error) || 'Failed to load tags');
+      });
   }, [docRouterOrgApi]);
 
   useEffect(() => {

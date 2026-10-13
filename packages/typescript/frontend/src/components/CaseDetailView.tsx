@@ -57,7 +57,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
 
   useEffect(() => {
     void loadCase();
-    void docRouterOrgApi.listTags({ limit: 200 }).then((r) => setTags(r.tags)).catch(() => {});
+    void docRouterOrgApi.listTags({ limit: 100 }).then((r) => setTags(r.tags)).catch(() => {});
   }, [loadCase, docRouterOrgApi]);
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
