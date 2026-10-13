@@ -21,6 +21,7 @@ The approach is deliberately small:
 - **A document can be in several groups at once**, one for each declared key it has a value for, for example a claim group and a policy group.
 - **Group membership is not stored.** Changing a document's metadata moves it between groups. Section 4.4 makes this subject to permission checks once ACLs exist.
 - **Tags still drive processing.** Groups do not trigger OCR, LLM or flows in this plan. Automatic group-level triggers are deferred (see 9.2).
+- **Prompt-level `peer_match_keys` is removed in phase 2.** Today, prompt revisions can list metadata keys so a single-document LLM run pulls in peer documents and saves one combined result on the source document. Group runs (section 5) replace that behavior. Phase 2 removes `peer_match_keys` from the API, SDKs, UI, and `_build_prompt_context` with no backward compatibility or migration of old prompt settings.
 
 ## 1. Data model
 
@@ -52,7 +53,7 @@ Document metadata stays `Dict[str, str]`, as it is today.
 - **Empty values.** An empty string after trimming counts as "no value". The server removes the key from metadata instead of storing `""`. This keeps the "(none)" bucket simple.
 - **Existing documents.** Declaring a key does not rewrite existing values. If old documents carry untrimmed values, they appear as separate groups until they are edited. Section 9.1 has the open question about a one-off normalization job.
 
-All writes go through one helper, `ad.common.groups.normalize_group_metadata(org, metadata)`, so that every path applies the same rules.
+All writes go through `ad.common.groups.apply_group_metadata_rules(analytiq_client, organization_id, metadata)`, which loads `group_keys` for the org and calls the pure helper `normalize_group_metadata(group_keys, metadata)` so every path applies the same rules.
 
 ### 1.3 `groups` collection
 
@@ -83,18 +84,21 @@ A row exists only when a group needs state. Most groups never get one.
 
 | Field           | Type                | Notes |
 |-----------------|---------------------|-------|
-| `group_readers` | `list[str] \| null` | Added in phase 3. The intersection of `readers` across every restricted group the document belongs to. `null` means no restricted group applies, and the document is visible to every org member as today. `[]` means only org admins can see it. See 4.3. |
+| `group_readers` | `list[str] \| null` | Added in phase 3. The intersection of `readers` across every restricted group the document belongs to. `null` means no restricted group applies, and the document is visible to every org member as today. `[]` means the document sits in at least one restricted group whose ACL has no users (only org admins can see it). See 4.3. |
 
 No other document fields change. Group membership is read from `metadata`.
 
 ### 1.5 Indexes
 
-- `docs`: `(organization_id, metadata.<key>, upload_date desc)` for each declared key. It is created when the key is declared, and dropped when the key is removed. A startup reconcile in `analytiq_data/mongodb/index_registry.py` re-creates any missing ones. Name them `docs_group_<key>` so the reconcile can tell them apart from other indexes.
-- `groups`: `(organization_id, key, value)` unique.
-- `groups`: `(organization_id, restricted)`, for listing restricted groups and blocking key removal.
-- `group_llm_runs`: `(organization_id, key, value, prompt_id, created_at desc)`.
+Per repo policy ([`docs/indexes.md`](indexes.md)), **static** indexes belong in `EXPECTED_INDEXES` in `analytiq_data/mongodb/index_registry.py` and are applied by deploy-time `reconcile_indexes()`. Do not add a versioned migration class only to create these.
 
-Add the static indexes in a new migration class at the end of the list in `packages/python/analytiq_data/migrations/migration.py`. The per-key `docs` indexes are dynamic, so they are handled by the org-settings route and the reconcile, not by the migration.
+- `docs`: `(organization_id, metadata.<key>, upload_date desc)` for each declared key. Created when the key is declared and dropped when the key is removed. `set_group_keys` (2.1) creates and drops them; `reconcile_org_group_key_indexes` (2.1) re-creates any missing ones on startup reconcile. Name them `docs_group_<key>` so reconcile can tell them apart from other indexes.
+- `groups`: `(organization_id, key, value)` unique — `IndexSpec` on collection `groups`.
+- `groups`: `(organization_id, restricted)` — for listing restricted groups and blocking key removal.
+- `group_llm_runs`: `(organization_id, key, value, prompt_id, created_at desc)`.
+- `queues.group_llm`: same worker-queue index template as `queues.llm` (add `queues.group_llm` to `WORKER_QUEUE_COLLECTIONS` in `index_registry.py`).
+
+The per-key `docs` indexes are **dynamic** (key names vary by org) and stay out of the static registry except through `reconcile_org_group_key_indexes`.
 
 ### 1.6 Query patterns
 
@@ -110,8 +114,10 @@ Add the static indexes in a new migration class at the end of the list in `packa
 Follow the style of `common/doc.py` and `common/tags.py`. Add an explicit import in `analytiq_data/common/__init__.py`. Per CLAUDE.md, this must be an eager import, with no lazy loading.
 
 - `get_group_keys(analytiq_client, organization_id)` returns the declared keys.
-- `set_group_keys(analytiq_client, organization_id, keys)` validates the keys (1.1), saves them, and creates or drops the per-key indexes.
-- `normalize_group_metadata(group_keys, metadata)` applies the rules in 1.2 and returns new metadata.
+- `set_group_keys(analytiq_client, organization_id, keys)` validates the keys (1.1), saves them, and creates or drops the per-key `docs` indexes.
+- `reconcile_org_group_key_indexes(analytiq_client, organization_id)` ensures every declared key has a `docs_group_<key>` index (called from `set_group_keys` and from org-wide reconcile on deploy).
+- `normalize_group_metadata(group_keys, metadata)` applies the rules in 1.2 and returns new metadata (pure function, no I/O).
+- `apply_group_metadata_rules(analytiq_client, organization_id, metadata)` loads `group_keys` and returns normalized metadata for write paths (1.2).
 - `list_group_values(analytiq_client, organization_id, key, *, match, value_search, skip, limit, sort)` runs the aggregation in 2.2.
 - `get_group(analytiq_client, organization_id, key, value)` returns the `groups` row, or a default (unrestricted, no display name) when there is none.
 - `upsert_group(...)` and `delete_group(...)` manage `groups` rows. Phase 1 uses them only for `display_name`.
@@ -160,16 +166,19 @@ Pydantic models go in `app/routes/groups.py`: `GroupKey`, `GroupValue`, `ListGro
 
 - `GET /documents` gains `group_key` and `group_value` parameters, plus `group_missing=true` for the "(none)" bucket. They map onto `build_docs_match_query`. `metadata_search` could already express a group value, but not "key is missing", and explicit parameters make the scope clear in bulk-action code.
 - `build_docs_match_query` and `list_all_matching_docs` get the same parameters, so bulk analyze (OCR, LLM, flows) can target one group.
-- Every metadata write path calls `normalize_group_metadata` (1.2): JSON upload, multipart upload, `PUT /documents/{id}`, and the bulk metadata update.
+- Every metadata write path calls `apply_group_metadata_rules` (1.2): JSON upload, multipart upload, `PUT /documents/{id}`, bulk metadata update, Python SDK upload/update, and MCP upload/update.
 - `PUT /documents/{id}` **replaces** the whole metadata dict today. A client that sends partial metadata drops the keys it left out, which moves the document out of its groups. This stays as it is for compatibility, but in phase 3 such a drop counts as a move and goes through the checks in 4.4.
+- **Phase 1 does not add confidentiality.** Until phase 3, any org member can still read and edit metadata on all org documents, including moving them between group values. Do not describe group browsing as access control before phase 3 ships.
 
 ### 2.5 Tests: `packages/python/tests/test_groups.py` (new)
 
 - Declaring keys: validation, admin-only, index created and dropped, the 10-key limit
 - Normalization on every write path (upload JSON, multipart, update, bulk update), including trimming, optional lowercasing, and removing empty values
 - `groups/values`: counts, state counts, the "(none)" bucket, `value_search`, paging, each sort, and that results agree with `GET /documents` under the same filters
+- **Nested group-by:** with a parent value selected (including parent `group_missing=true` / `(none)`), child-key aggregation and `GET /documents` with `group_by2` filters agree
 - Undeclared-key grouping is admin-only
 - `GET /documents?group_key&group_value` and `group_missing=true`
+- Bulk OCR, LLM, flows, delete, and metadata update respect `group_*` filters on the server (mirror existing tests that assert `metadata_search` on bulk paths)
 - Cross-org isolation: values from org A never appear in org B
 
 ## 3. Frontend: group-by on the documents page (phase 1)
@@ -195,16 +204,16 @@ In `packages/typescript/frontend/src/components/groups/`:
   - infinite scroll over `groups/values`
 
   Selecting a row sets `group` in the URL.
-- **Second level.** When `group_by2` is set, the selected value expands to show its sub-values. They come from the same endpoint with the parent group added to the filters. This is how drawer, then file, then folder browsing works without folders.
+- **Second level.** When `group_by2` is set, the selected value expands to show its sub-values. They come from the same endpoint with the parent group added to the filters (`group_key` / `group_value`, or `group_missing=true` when the parent is `__none__`). This is how drawer, then file, then folder browsing works without folders.
 - **`GroupHeader.tsx`** sits above the grid when a value is selected. It shows the key label, the value, an editable `display_name`, the counts, and buttons for **Run prompt on group** (phase 2), **Results** (phase 2) and **Access…** (phase 3, managers only).
 
 ### 3.3 Changes to existing components
 
 - **`DocumentList.tsx`** takes `groupKey`, `groupValue` and `groupMissing`, and passes them to `listDocuments`. When grouping is active and no value is selected, the grid shows all matching documents, as it does today.
-- **Bulk actions** (`DocumentBulkUpdateTags.tsx`, `DocumentBulkUpdateMetadata.tsx`, `DocumentBulkDelete.tsx`, `DocumentBulkRunOCR.tsx`, `DocumentBulkRunLLM.tsx`, `DocumentBulkRunFlows.tsx`) carry the group parameters in their `searchParameters` and pass them on. Without this, "select all in this group, then bulk delete" would act on every matching document in the org. Add a test for each one.
+- **Bulk actions** (`DocumentBulkUpdateTags.tsx`, `DocumentBulkUpdateMetadata.tsx`, `DocumentBulkDelete.tsx`, `DocumentBulkRunOCR.tsx`, `DocumentBulkRunLLM.tsx`, `DocumentBulkRunFlows.tsx`) carry the group parameters in their `searchParameters` and pass them on. Without this, "select all in this group, then bulk delete" would act on every matching document in the org. Server-side bulk filter tests (2.5) are the source of truth; the frontend has no test runner today.
 - **`DocumentUpload.tsx`**: when a group is selected, the upload form pre-fills `metadata[key] = value`, shows "Uploading to: Claim CLM-123", and lets the user clear it.
 - **Document page (`docs/[id]`)**: show the document's groups as chips (`Claim: CLM-123`). Each chip links to the documents page with that group selected.
-- **Org settings**: a "Group keys" section for admins, with key, label and case-insensitive columns, drag-to-reorder, and a confirmation listing the restricted groups when a removal is blocked.
+- **Org settings**: a "Group keys" section for admins, wired to `GET`/`PUT /group-keys` only (not a separate org PATCH field). Columns: key, label, case-insensitive; drag-to-reorder; confirmation listing restricted groups when a removal is blocked. Phase 3 adds "restrict a value before upload" here (4.6).
 
 ## 4. Access control (phase 3)
 
@@ -244,7 +253,8 @@ When a user restricts a group, the server adds them as `manager` if they are not
 Listing is the hot path, so visibility must be a cheap filter, not a per-document group lookup.
 
 - `groups.readers` is the user IDs in `acl` when `restricted`, and `null` otherwise. Org admins are not stored, because they bypass the filter.
-- `docs.group_readers` is the intersection of `readers` across the document's restricted groups, or `null` when there are none.
+- `docs.group_readers` is the intersection of `readers` across the document's restricted groups, or `null` when there are none. If any restricted group has `readers: []`, the intersection is `[]`.
+- When a group is unrestricted or its `groups` row is deleted, it no longer contributes; recompute must restore `group_readers` to `null` when no restricted groups remain.
 - For non-admin users, the visibility filter is `{"$or": [{"group_readers": null}, {"group_readers": user_id}]}`. Org admins get no filter.
 - **`compute_doc_readers(group_keys, metadata, restricted_groups)`** is the single function that computes the value for one document.
 - Recompute `group_readers`:
@@ -280,11 +290,10 @@ This is most of the work in phase 3. Documents are reached through many routes, 
 
 - **One helper for single documents.** Add `ad.common.get_doc_for_user(analytiq_client, organization_id, document_id, user, min_role)` in `common/doc.py`. It loads the document, applies the visibility rule, and checks the role for writes. It returns `404` both when the document does not exist and when the caller cannot see it, so the API does not reveal that restricted documents exist. Every route with `{document_id}` in its path uses it.
 - **One filter for lists.** `build_docs_match_query` and `list_docs` get a keyword-only, required `visibility` argument built from the current user (`Visibility.for_user(user, org)` or `Visibility.system()`). Making it required means every existing call site has to be updated, and none can be missed by accident.
-- **Group endpoints.** `groups/values` counts include only visible documents. A restricted group that the caller has no ACL entry on is left out of the values list completely, even if it would show zero documents. `groups/item`, `groups/results` and `groups/runs` return `404` for such a group.
+- **Group endpoints.** `groups/values` counts include only visible documents. A restricted group that the caller has no ACL entry on is omitted from the values list (including zero-document groups), except org admins and users with `manager` on that group, who still see the row so they can manage access and pre-restricted empty groups. `groups/item`, `groups/results` and `groups/runs` return `404` for callers with no access.
 - **Group prompt runs** (section 5) store the multi-document LLM output on the group. Reading a run requires `viewer` on the group, **and** the caller must be able to see every document in the run's `document_ids` snapshot. Otherwise the output could reveal content from documents in another restricted group. If any document is hidden from the caller, return the run's metadata with the result withheld and the message "includes documents you cannot access".
-- **Routes to audit** (each has `{document_id}` endpoints or document lists): `documents.py`, `ocr.py`, `llm.py` (including bulk analyze and bulk run), `forms.py` (form submissions per document: `GET` and `DELETE /forms/submissions/{document_id}` currently skip the document check entirely), `prompts.py`, `flows.py` (run on document, plus the org-wide executions list, execution detail, blob download and resume, which read `flow_executions` without loading the document even though the trigger holds the file name, tags, metadata and LLM result), `knowledge_bases.py` (KB document lists and counts, search, chat), `webhooks.py` (delivery list, detail and retry, whose stored payloads hold document name, tags, metadata and LLM output), `agent.py` (document chat; agent tools such as `get_ocr_text` and `get_extraction_result` rely on the route-level check), dashboard counts, and the new `groups.py`.
+- **Routes to audit** (each has `{document_id}` endpoints or document lists): `documents.py`, `ocr.py`, `llm.py` (including bulk analyze and bulk run), `forms.py` (form submissions per document: `GET` and `DELETE /forms/submissions/{document_id}` currently skip the document check entirely), `prompts.py`, `flows.py` (run on document, plus the org-wide executions list, execution detail, blob download and resume, which read `flow_executions` without loading the document even though the trigger holds the file name, tags, metadata and LLM result), `knowledge_bases.py` (KB document lists and counts, search, chat), `webhooks.py` (delivery list, detail and retry, whose stored payloads hold document name, tags, metadata and LLM output), `agent.py` (document chat; agent tools such as `get_ocr_text` and `get_extraction_result` rely on the route-level check), and the new `groups.py`. **Dashboard / home counts** are computed in the frontend from list APIs; once those lists honor `visibility`, dashboard numbers follow without a separate backend audit.
 - **Knowledge base search and chat.** Vector hits carry `document_id`. Post-filter hits against the caller's visibility, and over-fetch to make up for dropped hits. KB search is also reached from the KB tool inside extraction (`llm/llm.py`) and the flow agent tool (`flows/agent_loop/dispatch.py`), so the post-filter belongs in `search_knowledge_base` itself.
-- **Prompt-level `peer_match_keys`.** A grouped prompt run (`_build_prompt_context` in `llm/llm.py`) pulls in peer documents by metadata and saves the combined output on the source document. When the peers include documents the source document's viewers cannot see, this leaks content. Either remove `peer_match_keys` in favor of group runs (section 5) before phase 3 ships, or have the run fail when the peers' `group_readers` is not a superset of the source document's.
 - **Workers, flows and webhooks** run as the system and are configured by org admins, so they can read every document. That is acceptable, because admins already see everything. User-facing views of their output, such as flow execution lists, must still hide entries for documents the caller cannot see.
 
 ### 4.6 Routes and UI for access
@@ -305,7 +314,7 @@ This is most of the work in phase 3. Documents are reached through many routes, 
 - Viewer, editor and manager can each do exactly what the table in 4.1 says.
 - Restrictions intersect across a document's groups, and the lowest role wins.
 - A user without access gets `404` on the document and every document sub-resource. Write this as a **route-table test**: enumerate every registered route whose path contains `{document_id}` and assert `404` for a restricted document, so new routes cannot skip the check.
-- Lists, counts, `groups/values`, bulk operations, KB search, group results and group runs exclude restricted documents. A restricted group the caller is not in does not appear in `groups/values`.
+- Lists, counts, `groups/values`, bulk operations, KB search, group results and group runs exclude restricted documents. A restricted group the caller is not in does not appear in `groups/values`, except for org admins and group managers (4.5).
 - The widening rule blocks an editor from changing or dropping a restricted key value, including through a `PUT` with partial metadata, and allows a manager.
 - Uploading with a restricted group's value requires `editor` on it.
 - `group_readers` is correct after an upload, an update, a bulk update, an ACL change, a restrict and unrestrict, and removal of a user from the org.
@@ -315,14 +324,22 @@ This is most of the work in phase 3. Documents are reached through many routes, 
 
 ## 5. Group prompt runs (phase 2)
 
-These replace prompt-level `peer_match_keys` for "run a prompt over a set of related documents". The difference is that the group is chosen explicitly and the result belongs to the group, not to whichever document triggered the run.
+These replace the removed prompt-level `peer_match_keys` feature for "run a prompt over a set of related documents". The group is chosen explicitly and the result belongs to the group, not to whichever document triggered a tag prompt.
 
-- **Start:** `POST /groups/runs` with `{ key, value, prompt_id }`. It queues a `group_llm` message and returns the run ID.
-- **Worker:** loads the group's documents, sorted by upload date, and builds one multi-document prompt. Refactor `_build_prompt_context` in `llm/llm.py` to take an explicit list of documents. The `peer_match_keys` path then becomes a thin wrapper that computes the list. The prompt revision's `include` settings (OCR text, PDF, metadata keys) apply unchanged.
-- **Storage:** a new `group_llm_runs` collection holding `{organization_id, key, value, prompt_id, prompt_revid, document_ids, result, prompt_used, status, error, created_by, created_at}`. `document_ids` is the snapshot of the group at run time.
+### 5.1 Remove `peer_match_keys` (same phase, no backward compatibility)
+
+- Drop `peer_match_keys` from prompt revision storage, `GET`/`PUT` prompt APIs, Python and TypeScript SDK models, and `PromptCreate.tsx` (including the metadata "group by" UI).
+- Remove peer-document lookup from `_build_prompt_context` in `llm/llm.py`. Refactor it to take an explicit ordered list of documents (used only by group runs and ordinary single-document runs).
+- Delete or rewrite tests in `test_llm_prompt_context.py` that cover peer grouping. Document in release notes that customers must use declared group keys and group runs instead.
+
+### 5.2 Run lifecycle
+
+- **Start:** `POST /groups/runs` with `{ key, value, prompt_id }`. It enqueues a message on `queues.group_llm` and returns the run ID.
+- **Worker** (`worker/worker.py`, same pattern as LLM queue handlers): load the group's documents (visibility-aware when phase 3 exists; phase 2 uses org-wide membership), sorted by upload date, and build one multi-document prompt via the refactored `_build_prompt_context`. The prompt revision's `include` settings (OCR text, PDF, metadata keys) apply unchanged. Message shape: `{ organization_id, key, value, prompt_id, run_id, ... }` with idempotent handling on `run_id`.
+- **Storage:** `group_llm_runs` collection holding `{organization_id, key, value, prompt_id, prompt_revid, document_ids, result, prompt_used, status, error, created_by, created_at}`. `document_ids` is the snapshot of the group at run time.
 - **Staleness:** a run is **stale** when the group's current documents differ from `document_ids`, or when one of them has a newer OCR or LLM result than the run. The UI shows a "Re-run" button for stale runs.
 - **Readiness:** the run does not wait for document processing. If any document has not finished OCR while `include.ocr_text` is on, the run fails with a message listing those documents. The group header's state counts tell the user when the group is ready.
-- **Limits:** cap a run at a configurable number of documents (default 50) and check the estimated token count against the model's context window before calling the LLM. Fail with a clear message rather than truncating.
+- **Limits:** cap a run at a configurable number of documents (default 50) and check the estimated token count against the model's context window before calling the LLM (PDF `include` is the usual driver of oversize). Fail with a clear message rather than truncating.
 - **Billing:** charge SPUs as the per-document LLM path does, using the total page count.
 - **No automatic trigger in this plan.** Runs are started by a user or through the API. Section 9.2 describes the automatic case trigger.
 
@@ -371,9 +388,9 @@ The frontend calls the API through this SDK, so each phase's SDK changes land be
 
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
-| **1. Group keys and browsing** | `group_keys` setting and per-key indexes, normalization on every write path, `common/groups.py`, `groups/values` and `groups/item`, group parameters on `GET /documents` and bulk operations, `test_groups.py`, SDK changes, the group-by pane, header and upload pre-fill, org settings UI | A user can group documents by claim number, open a claim, upload into it and bulk-act on it, and share a link to it |
-| **2. Group runs and results** | `_build_prompt_context` refactor, `group_llm` worker, `group_llm_runs`, staleness, the results endpoint, the Results tab, MCP tools | A claim shows one row per document with extracted fields, and a claim-level prompt runs over all its documents with a stale marker |
-| **3. Access control** | `groups` ACL fields, `group_readers`, the access endpoints, `get_doc_for_user`, required `visibility` in list queries, move checks on metadata writes, the audit in 4.5 (including `peer_match_keys`), `test_group_access.py`, the access editor | The route-table test passes, and a restricted document is invisible to non-members in every API |
+| **1. Group keys and browsing** | `group_keys` on orgs, static indexes in `index_registry.py`, dynamic `docs_group_*` indexes, normalization on every write path, `common/groups.py`, `groups/values` and `groups/item`, group parameters on `GET /documents` and bulk operations, `test_groups.py`, SDK changes, the group-by pane, header and upload pre-fill, org settings UI | A user can group documents by claim number, open a claim, upload into it and bulk-act on it, and share a link to it. No confidentiality claim until phase 3. |
+| **2. Group runs and results** | Remove `peer_match_keys` (API, UI, SDKs, `_build_prompt_context`), group runs refactor, `queues.group_llm` worker and indexes, `group_llm_runs`, staleness, the results endpoint, the Results tab, MCP tools | A claim shows one row per document with extracted fields, and a claim-level prompt runs over all its documents with a stale marker. Prompt create/edit has no peer-metadata grouping control. |
+| **3. Access control** | `groups` ACL fields, `group_readers`, the access endpoints, `get_doc_for_user`, required `visibility` in list queries, move checks on metadata writes, the audit in 4.5, `test_group_access.py`, the access editor | The route-table test passes, and a restricted document is invisible to non-members in every API |
 
 Phase 3's backend and UI ship together. Groups that look restricted in the UI without enforcement would invite users to rely on protection that isn't there.
 
@@ -399,14 +416,14 @@ Phase 3's backend and UI ship together. Groups that look restricted in the UI wi
 - **Submissions.** An upload batch as a unit of processing (one flow run over N documents). This is independent of groups.
 - **Free-form folders.** A user-made folder tree with drag and drop, as in the earlier draft of this plan. If it is needed, a folder becomes one more source of group membership and shares the `groups` ACL machinery.
 - **Default tags per group.** A group could carry tags that are added to documents when they join it, so that filing into a claim starts the right processing. This needs care, because joining happens through metadata edits.
-- **Complete document deletion.** Today the delete route and `ad.common.delete_doc` miss several collections keyed by document (flow executions and blobs, form submissions, agent threads, webhook deliveries). Bulk delete by group makes this more visible. Add a `delete_doc_full` helper that removes everything.
+- **Complete document deletion.** Today the delete route and `ad.common.delete_doc` miss several collections keyed by document (flow executions and blobs, form submissions, agent threads, webhook deliveries). Bulk delete by group makes this more visible. Add a `delete_doc_full` helper that removes everything. Consider doing this in phase 1 or 2 if bulk delete-by-group ships there; otherwise document orphans accumulate faster once grouping is in use.
 - **ImageRight import.** A script on the Python SDK that declares `ir_drawer`, `ir_file` and `ir_folder` as group keys, sets them on upload, and maps ImageRight security onto group ACLs.
 - **Access audit log.** Who viewed or changed access to a restricted group. Access changes are logged from phase 3, and a queryable audit collection can follow.
 
 ### 9.3 Risks
 
 - **Missed enforcement point.** A document route that skips `get_doc_for_user` leaks restricted content. Mitigations: the route-table test in 4.7, the required `visibility` argument, and reviewing every new document route against 4.5.
-- **Metadata is now a security attribute.** Every path that writes metadata (routes, bulk update, SDKs, MCP, flows, future importers) must normalize and recompute `group_readers`. Mitigation: one write helper in `common/groups.py` that every path calls, and a test that seeds a restricted group and writes through each path.
+- **Metadata is now a security attribute (phase 3 onward).** Every path that writes metadata (routes, bulk update, SDKs, MCP, flows, future importers) must call `apply_group_metadata_rules` and recompute `group_readers`. Mitigation: one write helper in `common/groups.py` and a test that seeds a restricted group and writes through each path.
 - **Stale `group_readers` after a race.** An upload can compute readers while the group's ACL is changing. Mitigations: re-read restricted groups inside the upload write, apply the stricter readers during long recomputes (4.3), and provide a `repair_group_readers(org_id)` helper that recomputes every document.
 - **Aggregation cost on large orgs.** `groups/values` scans every matching document. If it becomes slow, cache per-value counts in `groups` rows, updated with `$inc` on metadata writes. Cached counts would include documents the caller cannot see, so they work only for unrestricted groups.
 - **Context limits on group runs.** Large groups can exceed the model's context window. Mitigations: the document cap and the pre-flight token estimate in section 5. A map-reduce run (summarize each document, then combine) is a later option.
