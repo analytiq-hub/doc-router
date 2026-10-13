@@ -22,7 +22,7 @@ The approach is deliberately small:
 - **A document can be in several groups at once**, one for each declared key it has a value for, for example a claim group and a policy group.
 - **Group membership is not stored.** Changing a document's metadata moves it between groups. Section 4.4 makes this subject to permission checks once ACLs exist.
 - **Tags still drive processing.** Groups do not trigger OCR, LLM or flows in this plan. Automatic group-level triggers are deferred (see 9.2).
-- **Prompt-level `peer_match_keys` is retired in phase 2.** Today, prompt revisions can list metadata keys so a single-document LLM run pulls in peer documents and saves one combined result on the source document. Group runs (section 5) replace that behavior. Phase 2 removes the behavior from `_build_prompt_context` and the UI. The prompt API still accepts the field so old clients keep working, but ignores it (5.1). Old prompt settings are not migrated.
+- **Prompt-level `peer_match_keys` is removed in phase 2.** Today, prompt revisions can list metadata keys so a single-document LLM run pulls in peer documents and saves one combined result on the source document. Group runs (section 5) replace that behavior. Phase 2 removes the field from the prompt API, SDKs, UI, and `_build_prompt_context`. Legacy values may remain on old `prompt_revisions` documents in MongoDB but are never read. No migration of old settings.
 - **Deleting a group deletes only its record by default.** Deleting the group's documents too is an explicit `cascade` option (2.6).
 - **Nested browsing uses one `group_filter`.** A single-level selection is a one-entry filter. Nested selections (claim, then document type) use the same `group_filter` for the document grid, bulk actions, group runs, group results, and cascade delete. ACL rows and display names stay on individual `(key, value)` pairs (1.3).
 
@@ -364,11 +364,17 @@ Phase 3 is mostly wiring visibility everywhere documents are read or listed.
 
 ## 5. Group prompt runs (phase 2)
 
-These replace the removed prompt-level `peer_match_keys` feature for "run a prompt over a set of related documents". The group is chosen explicitly and the result belongs to the group, not to whichever document triggered a tag prompt.
+These replace the removed prompt-level peer-metadata grouping for "run a prompt over a set of related documents". The group is chosen explicitly and the result belongs to the group, not to whichever document triggered a tag prompt.
 
-### 5.1 Retire `peer_match_keys` (same phase)
+### 5.1 Remove `peer_match_keys` (same phase)
 
-Keep the field on wire/SDK models (deprecated, optional) so old clients do not get `422`; do not store it on new revisions; responses return `[]`. Drop `peer_match_keys` from revision-equality in [`prompts.py`](../packages/python/app/routes/prompts.py); stop returning it from `get_prompt_group_config`. Remove the metadata group-by UI from `PromptCreate.tsx` and peer lookup from `_build_prompt_context` (explicit document list only; drop `peer_run` / `match_document_ids` on `llm_runs`). Rewrite `test_llm_prompt_context.py` peer tests; add a `PUT` that sends `peer_match_keys` and assert it is ignored. Release notes: use group keys and group runs instead.
+- **API:** remove `peer_match_keys` from `PromptConfig` / `Prompt` in [`prompts.py`](../packages/python/app/routes/prompts.py) (request and response models, OpenAPI). Do not write it on new `prompt_revisions`; drop it from revision-equality. `get_prompt_group_config` (`common/prompts.py`) no longer returns it.
+- **SDKs:** remove from TypeScript and Python prompt types and from any client code that sets it.
+- **UI:** remove the metadata group-by control from `PromptCreate.tsx`.
+- **Runtime:** remove peer-document lookup from `_build_prompt_context` in `llm/llm.py` (explicit document list only). Stop writing `peer_run`, `match_values`, and `match_document_ids` on new `llm_runs`.
+- **Tests:** rewrite or delete peer-grouping tests in `test_llm_prompt_context.py`. Release notes: use declared group keys and group runs instead.
+
+Clients that still send `peer_match_keys` in JSON rely on Pydantic’s default `extra='ignore'` and are unaffected; the field is not part of the documented contract.
 
 ### 5.2 Run lifecycle
 
@@ -417,7 +423,7 @@ The TypeScript SDK covers every new API in the phase that adds it. MCP and the i
 - Phase 3: `getGroupAccess`, `setGroupAccess`
 - `listDocuments` gains `groupFilter` (phase 1).
 - Add `GroupKey`, `GroupFilter`, `GroupValue`, `Group`, `GroupRun`, `GroupAccess` and related types.
-- Prompt types keep `peer_match_keys` as optional and deprecated (5.1).
+- Phase 2: remove `peer_match_keys` from prompt types (5.1).
 
 The frontend calls the API through this SDK, so each phase's SDK changes land before its UI work.
 
@@ -425,7 +431,7 @@ The frontend calls the API through this SDK, so each phase's SDK changes land be
 
 - New `groups.py` API module that mirrors `tags.py`, and matching models in `models/`
 - Add `group_filter` to `documents.py`
-- Prompt models keep `peer_match_keys` as optional and deprecated (5.1).
+- Phase 2: remove `peer_match_keys` from prompt models (5.1).
 
 ### 7.3 MCP server and internal agent (phase 4)
 
@@ -438,7 +444,7 @@ Add the same read/run surface to **MCP** (`packages/typescript/mcp/src/index.ts`
 | Phase | Scope | Exit criteria |
 |-------|-------|---------------|
 | **1. Group keys and browsing** | `group_keys` on orgs, the metadata wildcard index and `groups` indexes in `index_registry.py`, normalization on every write path, `common/groups.py`, `groups/values` and `groups/item`, `group_filter` on `GET /documents` and bulk operations, group delete with `cascade` and `delete_doc_full` (2.6), `test_groups.py`, TS and Python SDK changes, the group-by pane, header, delete dialog and upload pre-fill, org settings UI | A user can group documents by claim number, open a claim, upload into it, bulk-act on it, and share a link to it. An admin can delete a group record, or a group with its documents. No confidentiality claim until phase 3. |
-| **2. Group runs and results** | Retire `peer_match_keys` (UI, `_build_prompt_context`, revision equality, API accepts and ignores), group runs refactor, `queues.group_llm` worker and indexes, `group_llm_runs`, staleness fields on `docs`, the results endpoint, the Results tab, TS and Python SDK changes | A claim shows one row per document with extracted fields, and a claim-level prompt runs over all its documents with a stale marker. Prompt create/edit has no peer-metadata grouping control, and old clients that send `peer_match_keys` still work. |
+| **2. Group runs and results** | Remove `peer_match_keys` (API, SDKs, UI, `_build_prompt_context`, revision equality), group runs refactor, `queues.group_llm` worker and indexes, `group_llm_runs`, staleness fields on `docs`, the results endpoint, the Results tab, TS and Python SDK changes | A claim shows one row per document with extracted fields, and a claim-level prompt runs over all its documents with a stale marker. Prompt create/edit has no peer-metadata grouping control. |
 | **3. Access control** | `groups` ACL fields, `group_readers`, the access endpoints, `get_doc_for_user`, required `visibility` in list queries, move checks on metadata writes, the audit in 4.5, phase 3 delete and run permissions, `test_group_access.py`, the access editor, TS and Python SDK changes | The route-table test passes, and a restricted document is invisible to non-members in every API |
 | **4. MCP and agent tools** | Group tools in the MCP server and the internal DocRouter agent (7.3) | An agent can list a user's groups, read group results and start a group run, and sees only what the user can see |
 
