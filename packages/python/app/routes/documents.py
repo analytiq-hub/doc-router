@@ -22,7 +22,7 @@ from analytiq_data.common.doc import get_mime_type
 from app.auth import get_org_user
 from app.licensing_deps import require_feature
 from app.models import User
-from app.routes.cases import case_error_to_http
+from app.case_http import case_error_to_http
 
 # Configure logger
 logger = logging.getLogger(__name__)

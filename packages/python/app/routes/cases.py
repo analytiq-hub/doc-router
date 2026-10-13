@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 import analytiq_data as ad
 from app.auth import get_org_user, is_organization_admin
+from app.case_http import case_error_to_http
 from app.licensing_deps import require_feature
 from app.models import User
 
@@ -83,25 +84,6 @@ def _parse_metadata_search(metadata_search: str | None) -> dict[str, str] | None
             key, value = decoded.split("=", 1)
             out[key.strip()] = value
     return out or None
-
-
-def case_error_to_http(exc: Exception) -> HTTPException:
-    """Map case errors (``ValueError``, ``LookupError`` codes) to HTTP errors. Shared with documents routes."""
-    if isinstance(exc, ValueError):
-        return HTTPException(status_code=400, detail=str(exc))
-    code = str(exc)
-    if code == "unknown_case":
-        return HTTPException(status_code=400, detail="Unknown case_id")
-    if code == "case_deleting":
-        return HTTPException(status_code=409, detail="Case is being deleted")
-    if code == "delete_mode_conflict":
-        return HTTPException(
-            status_code=409,
-            detail="Case is already being deleted with a different cascade setting",
-        )
-    if code == "document_not_found":
-        return HTTPException(status_code=404, detail="Document not found")
-    return HTTPException(status_code=400, detail=code)
 
 
 async def _finish_case_delete_in_background(
@@ -234,13 +216,25 @@ async def delete_case_route(
     organization_id: str,
     case_id: str,
     background_tasks: BackgroundTasks,
-    cascade: bool = Query(False, description="Also delete every document in the case (org admins only)"),
+    cascade: bool = Query(
+        False,
+        description=(
+            "Delete every document in the case (org admins only). Always returns 202 when "
+            "true, including empty cases; poll GET until 404 or refresh the list."
+        ),
+    ),
     current_user: User = Depends(get_org_user),
 ):
     """
-    Delete a case. Without ``cascade``, member documents are kept and removed from the
-    case. With ``cascade``, documents are deleted in the background and the call returns
-    ``202``. Deleting again resumes an interrupted delete.
+    Delete a case.
+
+    **Default:** member documents are kept; their ``case_id`` is cleared. Returns **200**
+    when finished.
+
+    **``cascade=true``:** returns **202** immediately (even for zero documents). Document
+    deletion runs in a background task. Poll ``GET .../cases/{case_id}`` until **404**, or
+    refresh the cases list. Call DELETE again with the same ``cascade`` value to resume after
+    a crash or deploy.
     """
     if cascade and not await is_organization_admin(organization_id, current_user.user_id):
         raise HTTPException(status_code=403, detail="Only org admins can delete a case with its documents")

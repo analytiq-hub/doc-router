@@ -71,7 +71,7 @@ Module `analytiq_data/common/cases.py` (eager import in `common/__init__.py`).
 | Method | Path | Notes |
 |--------|------|--------|
 | GET/POST | `/v0/orgs/{org}/cases` | Create; duplicate `case_id` → `409` |
-| GET/PUT/DELETE | `/v0/orgs/{org}/cases/{case_id}` | DELETE `?cascade=` |
+| GET/PUT/DELETE | `/v0/orgs/{org}/cases/{case_id}` | DELETE `?cascade=` — default `200`; `cascade=true` → **`202`** (see §2.3) |
 | GET/POST/DELETE | `.../cases/{case_id}/documents` | Assign `{ document_ids, create_case_if_missing? }`; remove one doc |
 
 Phase 2: `.../runs`, `.../results`.
@@ -88,9 +88,11 @@ Cap **1,000** documents per assign transaction; larger bulks batch.
 
 ### 2.3 Delete
 
-1. Set `deleting_at` (transaction).
-2. **Default:** clear `case_id` on all member docs; delete case row and case runs (phase 2). In-request for moderate sizes; **`202` + worker** for very large cases.
-3. **`cascade=true` (admin):** worker batch-deletes docs via **`delete_doc`**, then case row. UI confirms with count + typed case id.
+1. Set `deleting_at` (transaction). A second DELETE with the same `cascade` flag **resumes** an interrupted delete; mismatched `cascade` → `409`.
+2. **Default (`cascade=false`):** synchronous **`200`** — clear `case_id` on all member docs, delete case row and case runs (phase 2). Runs in the API request (fine for typical case sizes).
+3. **`cascade=true` (org admin):** always **`202 Accepted`** — batch-delete member docs via **`delete_doc`** in a FastAPI background task, then remove the case row. Same response for empty or large cases; clients should not expect the case to disappear immediately. Poll **`GET .../cases/{case_id}`** until `404`, or refresh the cases list. If the process restarts mid-delete, call DELETE again with the same `cascade=true` to resume. UI confirms with count + typed case id.
+
+Very large non-cascade deletes (many docs to unassign) may later move to **`202` + queue worker**; phase 1 keeps them synchronous.
 
 **`delete_doc` (phase 1):** must remove stored files, flow results, the docs row, LLM/OCR, and KB index entries; extend as needed for flow executions, form submissions, etc.
 
