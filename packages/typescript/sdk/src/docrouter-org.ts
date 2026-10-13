@@ -17,6 +17,11 @@ import {
   FlowDocumentResult,
   ListTagsParams,
   ListTagsResponse,
+  Case,
+  ListCasesParams,
+  ListCasesResponse,
+  CreateCaseParams,
+  UpdateCaseParams,
   JsonValue,
   Tag,
   OCRBlock,
@@ -149,7 +154,7 @@ export class DocRouterOrg {
 
   // ---------------- Documents ----------------
 
-  async uploadDocuments(params: { documents: Array<{ name: string; content: string; tag_ids?: string[]; metadata?: Record<string, string>; }>; }): Promise<UploadDocumentsResponse> {
+  async uploadDocuments(params: { documents: Array<{ name: string; content: string; tag_ids?: string[]; metadata?: Record<string, string>; case_id?: string; create_case_if_missing?: boolean; }>; }): Promise<UploadDocumentsResponse> {
     const documentsPayload = params.documents.map(doc => {
       // Handle both plain base64 and data URLs
       let base64Content: string;
@@ -166,12 +171,16 @@ export class DocRouterOrg {
         content: string;
         tag_ids?: string[];
         metadata?: Record<string, string>;
+        case_id?: string;
+        create_case_if_missing?: boolean;
       } = {
         name: doc.name,
         content: base64Content,
       };
       if (doc.tag_ids && doc.tag_ids.length > 0) payload.tag_ids = doc.tag_ids;
       if (doc.metadata) payload.metadata = doc.metadata;
+      if (doc.case_id) payload.case_id = doc.case_id;
+      if (doc.create_case_if_missing) payload.create_case_if_missing = doc.create_case_if_missing;
       return payload;
     });
 
@@ -189,6 +198,8 @@ export class DocRouterOrg {
     form.append('file', params.file, params.name);
     if (params.tag_ids?.length) form.append('tag_ids', JSON.stringify(params.tag_ids));
     if (params.metadata && Object.keys(params.metadata).length) form.append('metadata', JSON.stringify(params.metadata));
+    if (params.case_id?.trim()) form.append('case_id', params.case_id.trim());
+    if (params.create_case_if_missing) form.append('create_case_if_missing', 'true');
     return this.http.postFormData<UploadDocumentResponse>(
       `/v0/orgs/${this.organizationId}/documents/multipart`,
       form
@@ -213,6 +224,7 @@ export class DocRouterOrg {
     tagIds?: string;
     nameSearch?: string;
     metadataSearch?: string;
+    caseId?: string;
     sort?: string;
     filters?: string;
   }): Promise<ListDocumentsResponse> {
@@ -223,6 +235,7 @@ export class DocRouterOrg {
     if (params?.tagIds) queryParams.tag_ids = params.tagIds;
     if (params?.nameSearch) queryParams.name_search = params.nameSearch;
     if (params?.metadataSearch) queryParams.metadata_search = params.metadataSearch;
+    if (params?.caseId) queryParams.case_id = params.caseId;
     if (params?.sort) queryParams.sort = params.sort;
     if (params?.filters) queryParams.filters = params.filters;
 
@@ -302,12 +315,27 @@ export class DocRouterOrg {
     return `${base}/v0/orgs/${this.organizationId}/documents/${documentId}/file?${query.toString()}`;
   }
 
-  async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {
-    const { documentId, documentName, tagIds, metadata } = params;
-    const updateData: { tag_ids?: string[]; document_name?: string; metadata?: Record<string, string> } = {};
+  async updateDocument(params: {
+    documentId: string;
+    documentName?: string;
+    tagIds?: string[];
+    metadata?: Record<string, string>;
+    caseId?: string | null;
+    createCaseIfMissing?: boolean;
+  }) {
+    const { documentId, documentName, tagIds, metadata, caseId, createCaseIfMissing } = params;
+    const updateData: {
+      tag_ids?: string[];
+      document_name?: string;
+      metadata?: Record<string, string>;
+      case_id?: string | null;
+      create_case_if_missing?: boolean;
+    } = {};
     if (documentName !== undefined) updateData.document_name = documentName;
     if (tagIds !== undefined) updateData.tag_ids = tagIds;
     if (metadata !== undefined) updateData.metadata = metadata;
+    if (caseId !== undefined) updateData.case_id = caseId;
+    if (createCaseIfMissing !== undefined) updateData.create_case_if_missing = createCaseIfMissing;
     return this.http.put(`/v0/orgs/${this.organizationId}/documents/${documentId}`, updateData);
   }
 
@@ -567,6 +595,67 @@ export class DocRouterOrg {
   async listPromptVersions(params: { promptId: string }): Promise<ListPromptsResponse> {
     const { promptId } = params;
     return this.http.get<ListPromptsResponse>(`/v0/orgs/${this.organizationId}/prompts/${promptId}/versions`);
+  }
+
+  // ---------------- Cases ----------------
+
+  async listCases(params?: ListCasesParams): Promise<ListCasesResponse> {
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: params?.skip ?? 0,
+      limit: params?.limit ?? 50,
+    };
+    if (params?.caseIdSearch) queryParams.case_id_search = params.caseIdSearch;
+    if (params?.tagIds) queryParams.tag_ids = params.tagIds;
+    if (params?.metadataSearch) queryParams.metadata_search = params.metadataSearch;
+    return this.http.get<ListCasesResponse>(`/v0/orgs/${this.organizationId}/cases`, {
+      params: queryParams,
+    });
+  }
+
+  async getCase(params: { caseId: string }): Promise<Case> {
+    const { caseId } = params;
+    return this.http.get<Case>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}`
+    );
+  }
+
+  async createCase(params: { body: CreateCaseParams }): Promise<Case> {
+    return this.http.post<Case>(`/v0/orgs/${this.organizationId}/cases`, params.body);
+  }
+
+  async updateCase(params: { caseId: string; body: UpdateCaseParams }): Promise<Case> {
+    const { caseId, body } = params;
+    return this.http.put<Case>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}`,
+      body
+    );
+  }
+
+  async deleteCase(params: { caseId: string; cascade?: boolean }): Promise<{ message: string }> {
+    const { caseId, cascade = false } = params;
+    return this.http.delete<{ message: string }>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}`,
+      { params: { cascade } }
+    );
+  }
+
+  async assignDocumentsToCase(params: {
+    caseId: string;
+    documentIds: string[];
+    createCaseIfMissing?: boolean;
+  }): Promise<{ message: string; count: number }> {
+    const { caseId, documentIds, createCaseIfMissing = false } = params;
+    return this.http.post<{ message: string; count: number }>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}/documents`,
+      { document_ids: documentIds, create_case_if_missing: createCaseIfMissing }
+    );
+  }
+
+  async removeDocumentFromCase(params: { caseId: string; documentId: string }): Promise<{ message: string }> {
+    const { caseId, documentId } = params;
+    return this.http.delete<{ message: string }>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}/documents/${documentId}`
+    );
   }
 
   // ---------------- Tags ----------------

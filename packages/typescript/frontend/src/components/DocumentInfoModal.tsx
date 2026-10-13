@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Document, Tag } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
@@ -10,6 +11,7 @@ interface DocumentInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
   document: Document;
+  organizationId: string;
   availableTags?: Tag[];
 }
 
@@ -17,6 +19,7 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
   isOpen, 
   onClose, 
   document,
+  organizationId,
   availableTags = []
 }) => {
   const [uploadedByUserId, setUploadedByUserId] = useState<string | null>(null);
@@ -116,6 +119,22 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
             <label className="text-sm font-semibold text-gray-700 block mb-1">Type</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
               {document.type || <span className="text-gray-500 italic">Not specified</span>}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1">Case</label>
+            <div className="text-gray-900 bg-gray-50 p-2 rounded border">
+              {document.case_id ? (
+                <Link
+                  href={`/orgs/${organizationId}/cases/${encodeURIComponent(document.case_id)}`}
+                  className="text-blue-600 underline"
+                >
+                  {document.case_id}
+                </Link>
+              ) : (
+                <span className="text-gray-500 italic">Not in a case</span>
+              )}
             </div>
           </div>
           

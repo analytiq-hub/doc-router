@@ -36,7 +36,17 @@ type FlowsOperationData = {
   isAnalyzing?: boolean;
 };
 
-type OperationData = TagsOperationData | MetadataOperationData | MetadataKeysOperationData | LLMOperationData | OCROperationData | FlowsOperationData | null;
+type CaseOperationData = { caseId: string; createCaseIfMissing: boolean };
+
+type OperationData =
+  | TagsOperationData
+  | MetadataOperationData
+  | MetadataKeysOperationData
+  | LLMOperationData
+  | OCROperationData
+  | FlowsOperationData
+  | CaseOperationData
+  | null;
 
 type PendingOperation = {
   operation: string;
@@ -64,18 +74,15 @@ import { DocumentBulkDelete, DocumentBulkDeleteRef } from './DocumentBulkDelete'
 import { DocumentBulkRunLLM, DocumentBulkRunLLMRef } from './DocumentBulkRunLLM';
 import { DocumentBulkRunOCR, DocumentBulkRunOCRRef } from './DocumentBulkRunOCR';
 import { DocumentBulkRunFlows, DocumentBulkRunFlowsRef } from './DocumentBulkRunFlows';
+import { DocumentBulkUpdateCase, DocumentBulkUpdateCaseRef } from './DocumentBulkUpdateCase';
+import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery';
 
 interface DocumentBulkUpdateProps {
   isOpen: boolean
   onClose: () => void
   organizationId: string
   availableTags: Tag[]
-  searchParameters: {
-    searchTerm: string
-    selectedTagFilters: Tag[]
-    metadataSearch: string
-    paginationModel: { page: number; pageSize: number }
-  }
+  searchParameters: DocumentListSearchParameters
   onRefresh?: () => void
 }
 
@@ -107,9 +114,17 @@ export function DocumentBulkUpdate({
   const runLLMRef = useRef<DocumentBulkRunLLMRef>(null)
   const runOCRRef = useRef<DocumentBulkRunOCRRef>(null)
   const runFlowsRef = useRef<DocumentBulkRunFlowsRef>(null)
+  const caseRef = useRef<DocumentBulkUpdateCaseRef>(null)
 
   // Operation definitions with icons and grouping
   const operationGroups = [
+    {
+      title: 'Case',
+      operations: [
+        { value: 'assignToCase', label: 'Assign', icon: PlusIcon, description: 'Assign filtered documents to a case' },
+        { value: 'removeFromCase', label: 'Remove', icon: MinusIcon, description: 'Clear case_id on filtered documents' },
+      ],
+    },
     {
       title: 'Tags',
       operations: [
@@ -186,13 +201,9 @@ export function DocumentBulkUpdate({
         }
       };
 
-      const response = await docRouterOrgApi.listDocuments({
-        skip: 0,
-        limit: 3,
-        nameSearch: searchParameters.searchTerm.trim() || undefined,
-        tagIds: searchParameters.selectedTagFilters.length > 0 ? searchParameters.selectedTagFilters.map(tag => tag.id).join(',') : undefined,
-        metadataSearch: searchParameters.metadataSearch.trim() ? parseAndEncodeMetadataSearch(searchParameters.metadataSearch.trim()) || undefined : undefined,
-      })
+      const response = await docRouterOrgApi.listDocuments(
+        buildListDocumentsQuery(searchParameters, 0, 3)
+      )
       setPreviewDocuments(response.documents)
       setTotalDocuments(response.total_count)
     } catch (error) {
@@ -247,13 +258,9 @@ export function DocumentBulkUpdate({
 
   const countTotalMatchingDocuments = async (): Promise<number> => {
     try {
-      const response = await docRouterOrgApi.listDocuments({
-        skip: 0,
-        limit: 1, // We only need the count, not the documents
-        nameSearch: searchParameters.searchTerm.trim() || undefined,
-        tagIds: searchParameters.selectedTagFilters.length > 0 ? searchParameters.selectedTagFilters.map(tag => tag.id).join(',') : undefined,
-        metadataSearch: searchParameters.metadataSearch.trim() ? parseAndEncodeMetadataSearch(searchParameters.metadataSearch.trim()) || undefined : undefined,
-      });
+      const response = await docRouterOrgApi.listDocuments(
+        buildListDocumentsQuery(searchParameters, 0, 1)
+      );
       return response.total_count;
     } catch (error) {
       console.error('Error counting documents:', error);
@@ -281,6 +288,11 @@ export function DocumentBulkUpdate({
 
       if (operation === 'deleteDocuments') {
         await deleteRef.current?.executeDelete();
+        return;
+      }
+
+      if (operation === 'assignToCase' || operation === 'removeFromCase') {
+        await caseRef.current?.executeCase(operation);
         return;
       }
 
@@ -436,7 +448,15 @@ export function DocumentBulkUpdate({
       case 'clearMetadata':
       case 'downloadDocuments':
       case 'deleteDocuments':
+      case 'removeFromCase':
         return true; // These operations are always available when there are documents
+      case 'assignToCase':
+        return (
+          operationData !== null &&
+          typeof operationData === 'object' &&
+          'caseId' in operationData &&
+          Boolean((operationData as { caseId: string }).caseId?.trim())
+        );
       case 'runLLMOperations':
         return isLLMOperationData(operationData) ? operationData.selectedTag !== null : false;
       case 'runOCROperations':
@@ -603,6 +623,23 @@ export function DocumentBulkUpdate({
 
                       {/* Dynamic Content Area */}
                       <div className="border border-gray-300 rounded-md bg-white p-3">
+                        {(selectedOperation === 'assignToCase' || selectedOperation === 'removeFromCase') && (
+                          <DocumentBulkUpdateCase
+                            ref={caseRef}
+                            organizationId={organizationId}
+                            searchParameters={searchParameters}
+                            totalDocuments={totalDocuments}
+                            selectedOperation={selectedOperation}
+                            onDataChange={setOperationData}
+                            disabled={isOperationLoading}
+                            onProgress={(processed) => setProcessedDocuments(processed)}
+                            onComplete={() => {
+                              if (onRefresh) onRefresh();
+                              fetchPreviewDocuments();
+                            }}
+                          />
+                        )}
+
                         {(selectedOperation === 'addTags' || selectedOperation === 'removeTags') && (
                           <DocumentBulkUpdateTags
                             ref={tagsRef}

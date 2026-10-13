@@ -2,15 +2,11 @@ import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { DocRouterOrgApi } from '@/utils/api'
 import { Document, Tag } from '@docrouter/sdk';
 import { toast } from 'react-hot-toast'
+import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 
 interface DocumentBulkDownloadProps {
   organizationId: string
-  searchParameters: {
-    searchTerm: string
-    selectedTagFilters: Tag[]
-    metadataSearch: string
-    paginationModel: { page: number; pageSize: number }
-  }
+  searchParameters: DocumentListSearchParameters
   totalDocuments: number
   disabled?: boolean
   onProgress?: (processed: number, total: number) => void
@@ -115,17 +111,9 @@ export const DocumentBulkDownload = forwardRef<DocumentBulkDownloadRef, Document
 
       while (true) {
         // Fetch next batch of documents
-        const batchResponse = await docRouterOrgApi.listDocuments({
-          skip,
-          limit,
-          nameSearch: searchParameters.searchTerm.trim() || undefined,
-          tagIds: searchParameters.selectedTagFilters.length > 0
-            ? searchParameters.selectedTagFilters.map(tag => tag.id).join(',')
-            : undefined,
-          metadataSearch: searchParameters.metadataSearch.trim()
-            ? parseAndEncodeMetadataSearch(searchParameters.metadataSearch.trim()) || undefined
-            : undefined,
-        });
+        const batchResponse = await docRouterOrgApi.listDocuments(
+          buildListDocumentsQuery(searchParameters, skip, limit)
+        );
 
         const documentsInBatch = batchResponse.documents;
 

@@ -2,16 +2,12 @@ import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { DocRouterOrgApi } from '@/utils/api'
 import { toast } from 'react-hot-toast'
+import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 import { Document, Tag } from '@docrouter/sdk';
 
 interface DocumentBulkDeleteProps {
   organizationId: string
-  searchParameters: {
-    searchTerm: string
-    selectedTagFilters: Tag[]
-    metadataSearch: string
-    paginationModel: { page: number; pageSize: number }
-  }
+  searchParameters: DocumentListSearchParameters
   totalDocuments: number
   disabled?: boolean
   onProgress?: (processed: number, total: number) => void
@@ -82,17 +78,9 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
       // This ensures we process all remaining documents that match the filter
       while (true) {
         // Fetch next batch of documents (always from the beginning)
-        const batchResponse = await docRouterOrgApi.listDocuments({
-          skip: 0,
-          limit,
-          nameSearch: searchParameters.searchTerm.trim() || undefined,
-          tagIds: searchParameters.selectedTagFilters.length > 0
-            ? searchParameters.selectedTagFilters.map(tag => tag.id).join(',')
-            : undefined,
-          metadataSearch: searchParameters.metadataSearch.trim()
-            ? parseAndEncodeMetadataSearch(searchParameters.metadataSearch.trim()) || undefined
-            : undefined,
-        });
+        const batchResponse = await docRouterOrgApi.listDocuments(
+          buildListDocumentsQuery(searchParameters, 0, limit)
+        );
 
         const documentsInBatch = batchResponse.documents;
 

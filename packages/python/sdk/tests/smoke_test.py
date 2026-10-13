@@ -16,6 +16,7 @@ def main() -> None:
     assert hasattr(client, "schemas"), "missing schemas API"
     assert hasattr(client, "prompts"), "missing prompts API"
     assert hasattr(client, "tags"), "missing tags API"
+    assert hasattr(client, "cases"), "missing cases API"
 
     # Verify typing marker is packaged
     assert pkgutil.get_data("docrouter_sdk", "py.typed") is not None, "py.typed missing"

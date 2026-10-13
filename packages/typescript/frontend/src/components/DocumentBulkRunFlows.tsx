@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { BulkAnalyzeFlowsResponse, FlowListItem, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
+import { DocumentListSearchParameters } from '@/utils/documentListQuery';
 import { pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
 import {
   persistBulkFlowRerunModeToSession,
@@ -102,12 +103,7 @@ async function runWithConcurrency(
 
 interface DocumentBulkRunFlowsProps {
   organizationId: string;
-  searchParameters: {
-    searchTerm: string;
-    selectedTagFilters: Tag[];
-    metadataSearch: string;
-    paginationModel: { page: number; pageSize: number };
-  };
+  searchParameters: DocumentListSearchParameters;
   totalDocuments: number;
   disabled?: boolean;
   onProgress?: (processed: number) => void;

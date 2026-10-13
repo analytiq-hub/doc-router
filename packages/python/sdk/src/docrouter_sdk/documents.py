@@ -1,5 +1,8 @@
 import base64
 from typing import List, Optional, Dict, Any
+
+# Distinct from ``None`` (clear case) so callers can omit ``case_id`` on update.
+_CASE_ID_OMITTED = object()
 from .models.document import (
     DocumentUpload,
     DocumentsUpload,
@@ -35,7 +38,7 @@ class DocumentsAPI:
             json=docs_upload
         )
     
-    def list(self, organization_id: str, skip: int = 0, limit: int = 10, tag_ids: List[str] = None, name_search: str = None, metadata_search: Dict[str, str] = None) -> ListDocumentsResponse:
+    def list(self, organization_id: str, skip: int = 0, limit: int = 10, tag_ids: List[str] = None, name_search: str = None, metadata_search: Dict[str, str] = None, case_id: str = None) -> ListDocumentsResponse:
         """
         List documents
         
@@ -60,6 +63,8 @@ class DocumentsAPI:
             from urllib.parse import quote
             metadata_pairs = [f"{quote(str(k))}={quote(str(v))}" for k, v in metadata_search.items()]
             params["metadata_search"] = ",".join(metadata_pairs)
+        if case_id:
+            params["case_id"] = case_id
             
         data = self.client.request(
             "GET",
@@ -85,7 +90,16 @@ class DocumentsAPI:
         )
         return DocumentResponse(**data)
     
-    def update(self, organization_id: str, document_id: str, document_name: Optional[str] = None, tag_ids: List[str] = None, metadata: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    def update(
+        self,
+        organization_id: str,
+        document_id: str,
+        document_name: Optional[str] = None,
+        tag_ids: List[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+        case_id: Optional[str] | object = _CASE_ID_OMITTED,
+        create_case_if_missing: bool = False,
+    ) -> Dict[str, str]:
         """
         Update a document
         
@@ -106,6 +120,10 @@ class DocumentsAPI:
             update_data["tag_ids"] = tag_ids
         if metadata is not None:
             update_data["metadata"] = metadata
+        if case_id is not _CASE_ID_OMITTED:
+            update_data["case_id"] = case_id
+        if create_case_if_missing:
+            update_data["create_case_if_missing"] = create_case_if_missing
             
         return self.client.request(
             "PUT",

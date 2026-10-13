@@ -86,6 +86,13 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.listTags).toBe('function');
       expect(typeof client.updateTag).toBe('function');
       expect(typeof client.deleteTag).toBe('function');
+      expect(typeof client.listCases).toBe('function');
+      expect(typeof client.getCase).toBe('function');
+      expect(typeof client.createCase).toBe('function');
+      expect(typeof client.updateCase).toBe('function');
+      expect(typeof client.deleteCase).toBe('function');
+      expect(typeof client.assignDocumentsToCase).toBe('function');
+      expect(typeof client.removeDocumentFromCase).toBe('function');
       expect(typeof client.createKnowledgeBase).toBe('function');
       expect(typeof client.listKnowledgeBases).toBe('function');
       expect(typeof client.getKnowledgeBase).toBe('function');

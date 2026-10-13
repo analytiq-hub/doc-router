@@ -26,9 +26,11 @@ class DocRouterClient:
         from . import schemas
         from . import prompts
         from . import tags
+        from . import cases
         
         # Initialize API modules
         self.documents = documents.DocumentsAPI(self)
+        self.cases = cases.CasesAPI(self)
         self.ocr = ocr.OCRAPI(self)
         self.llm = llm.LLMAPI(self)
         self.schemas = schemas.SchemasAPI(self)

@@ -1,8 +1,9 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Tag } from '@docrouter/sdk';
 import TagSelector from './TagSelector';
+import { CaseAssignmentFields } from './CaseAssignmentFields';
 
 interface DocumentUpdateProps {
   isOpen: boolean
@@ -10,8 +11,13 @@ interface DocumentUpdateProps {
   documentName: string
   currentTags: string[]
   currentMetadata?: Record<string, string>
+  currentCaseId?: string | null
   availableTags: Tag[]
-  onSave: (tagIds: string[], metadata: Record<string, string>) => Promise<void>
+  onSave: (
+    tagIds: string[],
+    metadata: Record<string, string>,
+    caseOptions?: { caseId: string | null; createCaseIfMissing: boolean }
+  ) => Promise<void>
 }
 
 export function DocumentUpdate({ 
@@ -20,10 +26,13 @@ export function DocumentUpdate({
   documentName, 
   currentTags, 
   currentMetadata = {},
+  currentCaseId = null,
   availableTags,
   onSave 
 }: DocumentUpdateProps) {
   const [selectedTags, setSelectedTags] = useState(currentTags)
+  const [caseIdInput, setCaseIdInput] = useState('')
+  const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false)
   const [metadataFields, setMetadataFields] = useState<Array<{id: string, key: string, value: string}>>(
     Object.entries(currentMetadata).map(([key, value], index) => ({
       id: `field_${index}`,
@@ -32,6 +41,22 @@ export function DocumentUpdate({
     }))
   )
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedTags(currentTags)
+      setMetadataFields(
+        Object.entries(currentMetadata).map(([key, value], index) => ({
+          id: `field_${index}`,
+          key,
+          value,
+        }))
+      )
+      setCaseIdInput(currentCaseId ?? '')
+      setCreateCaseIfMissing(false)
+      setValidationError(null)
+    }
+  }, [isOpen, currentTags, currentMetadata, currentCaseId])
 
   const handleAddMetadata = () => {
     const newId = `field_${Date.now()}`
@@ -81,7 +106,11 @@ export function DocumentUpdate({
       cleanMetadata[field.key] = field.value
     })
     
-    await onSave(selectedTags, cleanMetadata);
+    const trimmedCase = caseIdInput.trim()
+    await onSave(selectedTags, cleanMetadata, {
+      caseId: trimmedCase ? trimmedCase : null,
+      createCaseIfMissing,
+    });
     onClose();
   };
 
@@ -118,6 +147,16 @@ export function DocumentUpdate({
                         availableTags={availableTags}
                         selectedTagIds={selectedTags}
                         onChange={setSelectedTags}
+                      />
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">Case</h3>
+                      <CaseAssignmentFields
+                        caseId={caseIdInput}
+                        onCaseIdChange={setCaseIdInput}
+                        createCaseIfMissing={createCaseIfMissing}
+                        onCreateCaseIfMissingChange={setCreateCaseIfMissing}
                       />
                     </div>
 

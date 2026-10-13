@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { BulkAnalyzeOCRResponse, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
+import { DocumentListSearchParameters } from '@/utils/documentListQuery';
 import { toast } from 'react-hot-toast';
 import SingleTagSelector from './SingleTagSelector';
 
@@ -79,12 +80,7 @@ interface OcrExecution {
 
 interface DocumentBulkRunOCRProps {
   organizationId: string;
-  searchParameters: {
-    searchTerm: string;
-    selectedTagFilters: Tag[];
-    metadataSearch: string;
-    paginationModel: { page: number; pageSize: number };
-  };
+  searchParameters: DocumentListSearchParameters;
   totalDocuments: number;
   disabled?: boolean;
   onProgress?: (processed: number) => void;

@@ -3,6 +3,7 @@ import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api'
 import { toast } from 'react-hot-toast'
+import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 
 // Type definitions for metadata operations
 type MetadataOperationData = Record<string, string> | string[] | null;
@@ -13,12 +14,7 @@ interface DocumentBulkUpdateMetadataProps {
   disabled?: boolean
   selectedOperation?: string
   organizationId: string
-  searchParameters: {
-    searchTerm: string
-    selectedTagFilters: Tag[]
-    metadataSearch: string
-    paginationModel: { page: number; pageSize: number }
-  }
+  searchParameters: DocumentListSearchParameters
   onProgress?: (processed: number, total: number) => void
   onComplete?: () => void
 }
@@ -174,13 +170,9 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
 
       while (true) {
         // Fetch next batch of documents
-        const batchResponse = await docRouterOrgApi.listDocuments({
-          skip,
-          limit,
-          nameSearch: searchParameters.searchTerm.trim() || undefined,
-          tagIds: searchParameters.selectedTagFilters.length > 0 ? searchParameters.selectedTagFilters.map(tag => tag.id).join(',') : undefined,
-          metadataSearch: searchParameters.metadataSearch.trim() ? parseAndEncodeMetadataSearch(searchParameters.metadataSearch.trim()) || undefined : undefined,
-        });
+        const batchResponse = await docRouterOrgApi.listDocuments(
+          buildListDocumentsQuery(searchParameters, skip, limit)
+        );
 
         const documentsInBatch = batchResponse.documents;
 

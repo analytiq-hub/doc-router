@@ -19,6 +19,7 @@ import {
   Assignment as FormsIcon,
   AccountTree as FlowsIcon,
   MenuBook as KnowledgeBaseIcon,
+  FolderCopy as CasesIcon,
   InfoOutlined as AboutIcon
 } from '@mui/icons-material';
 import { SvgIconProps } from '@mui/material';
@@ -89,6 +90,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     ? [
         { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: `/orgs/${orgIdForLinks}/dashboard` },
         { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: `/orgs/${orgIdForLinks}/docs` },
+        { text: 'Cases', icon: CasesIcon, tooltip: 'Cases', href: `/orgs/${orgIdForLinks}/cases` },
         { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: `/orgs/${orgIdForLinks}/tags` },
         { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${orgIdForLinks}/schemas` },
         { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${orgIdForLinks}/prompts` },
@@ -99,6 +101,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     : [
         { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: '#' },
         { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: '#' },
+        { text: 'Cases', icon: CasesIcon, tooltip: 'Cases', href: '#' },
         { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: '#' },
         { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: '#' },
         { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: '#' },

@@ -264,6 +264,7 @@ export interface Document {
   tag_ids: string[];
   type: string;
   metadata: Record<string, string>;
+  case_id?: string | null;
 }
 
 export interface UploadDocument {
@@ -271,6 +272,8 @@ export interface UploadDocument {
   content: string; // Base64 encoded content (supports both plain base64 and data URLs)
   tag_ids?: string[]; // Optional list of tag IDs
   metadata?: Record<string, string>;
+  case_id?: string;
+  create_case_if_missing?: boolean;
 }
 
 /** One file for POST .../documents/multipart (raw bytes, no base64). */
@@ -279,6 +282,8 @@ export interface UploadDocumentMultipartPart {
   file: Blob;
   tag_ids?: string[];
   metadata?: Record<string, string>;
+  case_id?: string;
+  create_case_if_missing?: boolean;
 }
 
 export interface UploadDocumentsParams {
@@ -771,6 +776,44 @@ export interface ListUsersResponse {
 }
 
 // Tag types
+export interface Case {
+  case_id: string;
+  display_name: string;
+  tag_ids: string[];
+  metadata: Record<string, string>;
+  document_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListCasesParams {
+  skip?: number;
+  limit?: number;
+  caseIdSearch?: string;
+  tagIds?: string;
+  metadataSearch?: string;
+}
+
+export interface ListCasesResponse {
+  cases: Case[];
+  total_count: number;
+  skip: number;
+}
+
+export interface CreateCaseParams {
+  case_id?: string;
+  display_name?: string;
+  tag_ids?: string[];
+  metadata?: Record<string, string>;
+}
+
+export interface UpdateCaseParams {
+  display_name?: string;
+  tag_ids?: string[];
+  metadata?: Record<string, string>;
+}
+
 export interface Tag {
   id: string;
   name: string;

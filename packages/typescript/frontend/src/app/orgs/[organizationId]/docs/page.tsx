@@ -10,6 +10,7 @@ export default function DocumentsPage({ params }: { params: Promise<{ organizati
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'documents';
+  const caseIdFromQuery = searchParams.get('case_id') ?? undefined;
 
   const handleTabChange = (newValue: string) => {
     router.push(`/orgs/${organizationId}/docs?tab=${newValue}`);
@@ -46,10 +47,17 @@ export default function DocumentsPage({ params }: { params: Promise<{ organizati
 
       <div className="max-w-6xl mx-auto">
         <div role="tabpanel" hidden={tab !== 'documents'}>
-          {tab === 'documents' && <DocumentList organizationId={organizationId} />}
+          {tab === 'documents' && (
+            <DocumentList
+              organizationId={organizationId}
+              initialCaseIdFilter={caseIdFromQuery}
+            />
+          )}
         </div>
         <div role="tabpanel" hidden={tab !== 'upload'}>
-          {tab === 'upload' && <DocumentUpload organizationId={organizationId} />}
+          {tab === 'upload' && (
+            <DocumentUpload organizationId={organizationId} defaultCaseId={caseIdFromQuery} />
+          )}
         </div>
       </div>
     </div>

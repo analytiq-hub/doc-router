@@ -23,43 +23,25 @@ import { BoltIcon } from '@heroicons/react/24/outline';
 import { DocumentBulkUpdate } from './DocumentBulkUpdate';
 import { DocRouterOrgApi } from '@/utils/api';
 import DocumentInfoModal from './DocumentInfoModal';
+import { buildListDocumentsQuery } from '@/utils/documentListQuery';
 
 const jsonStringifyForQuery = (value: unknown): string =>
   JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
 
-// Helper function to parse and URL-encode metadata search
-const parseAndEncodeMetadataSearch = (searchStr: string): string | null => {
-  try {
-    const pairs: string[] = [];
-    // Simple parsing - split by comma and then by first equals sign
-    const rawPairs = searchStr.split(',');
-    
-    for (const rawPair of rawPairs) {
-      const trimmed = rawPair.trim();
-      if (!trimmed) continue;
-      
-      const equalIndex = trimmed.indexOf('=');
-      if (equalIndex === -1) continue;
-      
-      const key = trimmed.substring(0, equalIndex).trim();
-      const value = trimmed.substring(equalIndex + 1).trim();
-      
-      if (key && value) {
-        // URL encode both key and value to handle special characters
-        const encodedKey = encodeURIComponent(key);
-        const encodedValue = encodeURIComponent(value);
-        pairs.push(`${encodedKey}=${encodedValue}`);
-      }
-    }
-    
-    return pairs.length > 0 ? pairs.join(',') : null;
-  } catch (error) {
-    console.error('Error parsing metadata search:', error);
-    return null;
-  }
+type DocumentListProps = {
+  organizationId: string;
+  /** When set, list is scoped to this case (e.g. case detail page). */
+  fixedCaseId?: string;
+  hideCaseFilter?: boolean;
+  initialCaseIdFilter?: string;
 };
 
-const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
+const DocumentList: React.FC<DocumentListProps> = ({
+  organizationId,
+  fixedCaseId,
+  hideCaseFilter = false,
+  initialCaseIdFilter,
+}) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [totalRows, setTotalRows] = useState<number>(0);
@@ -72,6 +54,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<Tag[]>([]);
   const [metadataSearch, setMetadataSearch] = useState('');
+  const [caseIdFilter, setCaseIdFilter] = useState(fixedCaseId ?? initialCaseIdFilter ?? '');
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
@@ -85,16 +68,29 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   // Add state for bulk update modal
   const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false);
 
+  useEffect(() => {
+    if (fixedCaseId !== undefined) {
+      setCaseIdFilter(fixedCaseId);
+    }
+  }, [fixedCaseId]);
+
+  const effectiveCaseId = (fixedCaseId ?? caseIdFilter).trim();
+
   const fetchFiles = useCallback(async () => {
-    const requestParams = {
-      skip: paginationModel.page * paginationModel.pageSize,
-      limit: paginationModel.pageSize,
-      nameSearch: searchTerm.trim() || undefined,
-      tagIds: selectedTagFilters.length > 0 ? selectedTagFilters.map(tag => tag.id).join(',') : undefined,
-      metadataSearch: metadataSearch.trim() ? parseAndEncodeMetadataSearch(metadataSearch.trim()) || undefined : undefined,
-      sort: sortModel.length ? jsonStringifyForQuery(sortModel) : undefined,
-      filters: filterModel.items.length ? jsonStringifyForQuery(filterModel) : undefined,
-    };
+    const requestParams = buildListDocumentsQuery(
+      {
+        searchTerm,
+        selectedTagFilters,
+        metadataSearch,
+        caseIdFilter: effectiveCaseId || undefined,
+      },
+      paginationModel.page * paginationModel.pageSize,
+      paginationModel.pageSize,
+      {
+        sort: sortModel.length ? jsonStringifyForQuery(sortModel) : undefined,
+        filters: filterModel.items.length ? jsonStringifyForQuery(filterModel) : undefined,
+      }
+    );
 
     try {
       setIsLoading(true);
@@ -127,7 +123,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
     } finally {
       setIsLoading(false);
     }
-  }, [paginationModel, searchTerm, selectedTagFilters, metadataSearch, sortModel, filterModel, docRouterOrgApi]);
+  }, [paginationModel, searchTerm, selectedTagFilters, metadataSearch, effectiveCaseId, sortModel, filterModel, docRouterOrgApi]);
 
   useEffect(() => {
     console.log('FileList component mounted or pagination changed');
@@ -235,22 +231,24 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
     }
   };
 
-  const handleUpdateDocument = async (tagIds: string[], metadata: Record<string, string>) => {
+  const handleUpdateDocument = async (
+    tagIds: string[],
+    metadata: Record<string, string>,
+    caseOptions?: { caseId: string | null; createCaseIfMissing: boolean }
+  ) => {
     if (!editingDocument) return;
     
     try {
-      console.log('DocumentList - handleUpdateDocument:', {
-        documentId: editingDocument.id,
-        oldTags: editingDocument.tag_ids,
-        newTags: tagIds,
-        oldMetadata: editingDocument.metadata,
-        newMetadata: metadata
-      });
-      
       await docRouterOrgApi.updateDocument({
         documentId: editingDocument.id,
         tagIds: tagIds,
-        metadata: metadata
+        metadata: metadata,
+        ...(caseOptions
+          ? {
+              caseId: caseOptions.caseId,
+              createCaseIfMissing: caseOptions.createCaseIfMissing,
+            }
+          : {}),
       });
       console.log('Document updated successfully, refreshing document list');
       
@@ -354,6 +352,24 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       },
     },
     { field: 'uploaded_by', headerName: 'Uploaded By', flex: 1 },
+    {
+      field: 'case_id',
+      headerName: 'Case',
+      flex: 0.9,
+      renderCell: (params) => {
+        const cid = params.row.case_id as string | null | undefined;
+        if (!cid) return <span className="text-gray-400">—</span>;
+        return (
+          <Link
+            href={`/orgs/${organizationId}/cases/${encodeURIComponent(cid)}`}
+            className="text-blue-600 underline truncate"
+            title={cid}
+          >
+            {cid}
+          </Link>
+        );
+      },
+    },
     { field: 'state', headerName: 'State', flex: .75 },
     {
       field: 'tag_ids',
@@ -567,6 +583,18 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
             ),
           }}
         />
+        {!hideCaseFilter && (
+          <TextField
+            variant="outlined"
+            placeholder="Filter by case ID"
+            value={caseIdFilter}
+            onChange={(e) => {
+              setCaseIdFilter(e.target.value);
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            }}
+            sx={{ minWidth: 180 }}
+          />
+        )}
         <button
           onClick={() => setIsBulkUpdateOpen(true)}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
@@ -693,6 +721,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           documentName={editingDocument.document_name}
           currentTags={editingDocument.tag_ids || []}
           currentMetadata={editingDocument.metadata || {}}
+          currentCaseId={editingDocument.case_id ?? null}
           availableTags={tags}
           onSave={handleUpdateDocument}
         />
@@ -718,7 +747,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           searchTerm,
           selectedTagFilters,
           metadataSearch,
-          paginationModel
+          caseIdFilter: effectiveCaseId || undefined,
+          paginationModel,
         }}
         onRefresh={fetchFiles}
       />
@@ -726,6 +756,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       {/* Info Modal */}
       {selectedDocument && (
         <DocumentInfoModal
+          organizationId={organizationId}
           isOpen={isInfoModalOpen}
           onClose={() => {
             setIsInfoModalOpen(false);

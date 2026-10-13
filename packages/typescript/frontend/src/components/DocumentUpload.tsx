@@ -20,9 +20,11 @@ import { isColorLight } from '@/utils/colors';
 import { randomUUID } from '@/utils/uuid';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from './TagSelector';
+import { CaseAssignmentFields } from './CaseAssignmentFields';
 
 interface DocumentUploadProps {
   organizationId: string;
+  defaultCaseId?: string;
 }
 
 /** Local file row (multipart upload; avoid base64 in memory). */
@@ -31,7 +33,7 @@ interface PendingUploadFile {
   file: File;
 }
 
-const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
+const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, defaultCaseId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [files, setFiles] = useState<PendingUploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -41,6 +43,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
   const [metadataFields, setMetadataFields] = useState<Array<{id: string, key: string, value: string}>>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [caseId, setCaseId] = useState(defaultCaseId ?? '');
+  const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false);
+
+  useEffect(() => {
+    if (defaultCaseId) {
+      setCaseId(defaultCaseId);
+    }
+  }, [defaultCaseId]);
 
   // Fetch available tags on component mount
   useEffect(() => {
@@ -104,6 +114,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
             file,
             tag_ids: selectedTags,
             metadata,
+            case_id: caseId.trim() || undefined,
+            create_case_if_missing: createCaseIfMissing,
           })
         )
       );
@@ -121,6 +133,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
       setFiles([]);
       setSelectedTags([]); // Reset selected tags after successful upload
       setMetadataFields([]); // Reset metadata after successful upload
+      setCaseId(defaultCaseId ?? '');
+      setCreateCaseIfMissing(false);
       setActiveStep(0); // Reset to first step
     } catch (error) {
       console.error('Error uploading files:', error);
@@ -367,6 +381,16 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
             </div>
             
             <div className="space-y-6">
+              <div>
+                <h4 className="text-md font-medium mb-3">Case</h4>
+                <CaseAssignmentFields
+                  caseId={caseId}
+                  onCaseIdChange={setCaseId}
+                  createCaseIfMissing={createCaseIfMissing}
+                  onCreateCaseIfMissingChange={setCreateCaseIfMissing}
+                />
+              </div>
+
               {/* Tags Section */}
               <div>
                 <h4 className="text-md font-medium mb-3">Tags</h4>

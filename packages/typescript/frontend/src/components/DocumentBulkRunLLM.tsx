@@ -5,6 +5,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { toast } from 'react-hot-toast';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
+import { DocumentListSearchParameters } from '@/utils/documentListQuery';
 
 const DEFAULT_PARALLEL_RUNS = 10;
 const MIN_PARALLEL_RUNS = 1;
@@ -66,12 +67,7 @@ async function runWithConcurrency(
 
 interface DocumentBulkRunLLMProps {
   organizationId: string;
-  searchParameters: {
-    searchTerm: string;
-    selectedTagFilters: Tag[];
-    metadataSearch: string;
-    paginationModel: { page: number; pageSize: number };
-  };
+  searchParameters: DocumentListSearchParameters;
   totalDocuments: number;
   disabled?: boolean;
   onProgress?: (processed: number) => void;
