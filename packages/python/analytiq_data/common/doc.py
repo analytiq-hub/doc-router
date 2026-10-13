@@ -113,20 +113,28 @@ async def save_doc(analytiq_client, document: dict) -> str:
 
 async def delete_doc(analytiq_client, document_id: str, organization_id: str):
     """
-    Delete a document within an organization
-    
-    Args:
-        analytiq_client: AnalytiqClient
-            The analytiq client
-        document_id: str
-            Document ID to delete
-        organization_id: str
-            Organization ID
+    Delete a document within an organization: stored files, flow results, docs row,
+    LLM/OCR results, and KB index entries.
     """
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
-    
+
+    document = await collection.find_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id}
+    )
+    if not document:
+        return
+
+    mongo_file_name = document.get("mongo_file_name")
+    if mongo_file_name:
+        await ad.common.delete_file_async(analytiq_client, file_name=mongo_file_name)
+        pdf_file_name = document.get("pdf_file_name")
+        if pdf_file_name and pdf_file_name != mongo_file_name:
+            await ad.common.delete_file_async(analytiq_client, file_name=pdf_file_name)
+
+    await ad.docrouter_flows.delete_flow_results_for_document(db, document_id=document_id)
+
     await collection.delete_one({
         "_id": ObjectId(document_id),
         "organization_id": organization_id
@@ -176,10 +184,13 @@ async def build_docs_match_query(
     tag_ids: list[str] | None = None,
     name_search: str | None = None,
     metadata_search: dict[str, str] | None = None,
+    case_id: str | None = None,
     filter_model: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a MongoDB match query for documents (same filters as list_docs)."""
     query: dict[str, Any] = {"organization_id": organization_id}
+    if case_id is not None:
+        query["case_id"] = case_id
     if tag_ids:
         query["tag_ids"] = {"$all": tag_ids}
     if name_search:
@@ -206,6 +217,7 @@ async def list_all_matching_docs(
     tag_ids: list[str] | None = None,
     name_search: str | None = None,
     metadata_search: dict[str, str] | None = None,
+    case_id: str | None = None,
     filter_model: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     """
@@ -218,6 +230,7 @@ async def list_all_matching_docs(
         tag_ids=tag_ids,
         name_search=name_search,
         metadata_search=metadata_search,
+        case_id=case_id,
         filter_model=filter_model,
     )
     docs = await db.docs.find(query, {"user_file_name": 1}).to_list(None)
@@ -235,6 +248,7 @@ async def list_docs(
     tag_ids: list[str] = None,
     name_search: str = None,
     metadata_search: dict[str, str] = None,
+    case_id: str | None = None,
     sort_model: list[dict[str, Any]] | None = None,
     filter_model: dict[str, Any] | None = None,
 ) -> tuple[list, int]:
@@ -274,6 +288,7 @@ async def list_docs(
         tag_ids=tag_ids,
         name_search=name_search,
         metadata_search=metadata_search,
+        case_id=case_id,
         filter_model=filter_model,
     )
 
@@ -331,11 +346,13 @@ async def update_doc_state(analytiq_client, document_id: str, state: str):
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
     
+    now = datetime.now(UTC)
     await collection.update_one(
         {"_id": ObjectId(document_id)},
         {"$set": {
             "state": state,
-            "state_updated_at": datetime.now(UTC)
+            "state_updated_at": now,
+            "updated_at": now,
         }}
     )
     

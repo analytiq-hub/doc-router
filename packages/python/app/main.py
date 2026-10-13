@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import startup
 from app.routes.payments import payments_router, init_payments
 from app.routes.documents import documents_router
+from app.routes.cases import cases_router
 from app.routes.ocr import ocr_router
 from app.routes.llm import llm_router
 from app.routes.prompts import prompts_router
@@ -175,6 +176,7 @@ app.add_middleware(
 app.include_router(redirect_router)
 app.include_router(payments_router)
 app.include_router(documents_router)
+app.include_router(cases_router)
 app.include_router(ocr_router)
 app.include_router(llm_router)
 app.include_router(prompts_router)

@@ -16,7 +16,7 @@ Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the cas
 - **Case id:** client-supplied or auto `DR-{ulid}`; unique per org; pattern `^[A-Za-z0-9._:-]{1,128}$` (URL-safe). Case-sensitive.
 - **Tags and metadata** on cases, same as documents (`tag_ids`, `Dict[str, str]`, trim/empty rules). No server-side case-to-case links—metadata values are plain strings (e.g. `policy_number=POL-998` is not validated as another case id).
 - **Unknown case id on assign fails by default.** `create_case_if_missing` defaults `false` (upload, PUT, bulk, assign API). Flow assign node defaults `true` (§6).
-- **Delete case:** clear `case_id` on docs by default; optional admin **cascade** deletes member documents via `delete_doc_full` (§2.4).
+- **Delete case:** clear `case_id` on docs by default; optional admin **cascade** deletes member documents via `delete_doc` (§2.4).
 - **Phase 2:** case prompt runs; **retire** prompt `peer_match_keys` (API accepts, ignores—§4.1).
 
 ## 1. Data model
@@ -90,15 +90,15 @@ Cap **1,000** documents per assign transaction; larger bulks batch.
 
 1. Set `deleting_at` (transaction).
 2. **Default:** clear `case_id` on all member docs; delete case row and case runs (phase 2). In-request for moderate sizes; **`202` + worker** for very large cases.
-3. **`cascade=true` (admin):** worker batch-deletes docs via **`delete_doc_full`**, then case row. UI confirms with count + typed case id.
+3. **`cascade=true` (admin):** worker batch-deletes docs via **`delete_doc`**, then case row. UI confirms with count + typed case id.
 
-**`delete_doc_full` (phase 1):** single helper used by cascade delete, single-doc delete, and bulk delete—remove files, OCR, LLM runs, flow results/executions/blobs, form submissions, KB vectors, agent threads, webhook deliveries, etc. (audit existing delete paths; fix gaps today.)
+**`delete_doc` (phase 1):** must remove stored files, flow results, the docs row, LLM/OCR, and KB index entries; extend as needed for flow executions, form submissions, etc.
 
 Deleting a document does not delete the case (case may be empty).
 
 ### 2.4 Tests (`test_cases.py`)
 
-Validation, CRUD, assign paths, `create_case_if_missing`, PUT omitted/null/string, delete/cascade, tags/metadata search, concurrent assign vs delete, `delete_doc_full` completeness.
+Validation, CRUD, assign paths, `create_case_if_missing`, PUT omitted/null/string, delete/cascade, tags/metadata search, concurrent assign vs delete, `delete_doc` completeness.
 
 ## 3. Frontend (phase 1)
 
@@ -158,7 +158,7 @@ Phase 1–3: case + document APIs as above; phase 2 runs/results; phase 3 member
 
 | Phase | Exit |
 |-------|------|
-| **1** | Cases, assign, delete, `delete_doc_full`, UI, SDK, tests |
+| **1** | Cases, assign, delete, full `delete_doc`, UI, SDK, tests |
 | **2** | Case runs + results; document `updated_at` on all write paths; ignore `peer_match_keys` |
 | **3** | Org permissions on all REST; assign-to-case node |
 | **4** | MCP/agent; optional case webhook events |

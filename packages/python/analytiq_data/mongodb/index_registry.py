@@ -201,6 +201,27 @@ _PHASE2_INDEXES: tuple[IndexSpec, ...] = (
         "org_upload_date_idx",
         [("organization_id", 1), ("upload_date", -1)],
     ),
+    _spec(
+        "docs",
+        "docs_org_case_id_upload",
+        [("organization_id", 1), ("case_id", 1), ("upload_date", -1)],
+    ),
+    _spec(
+        "cases",
+        "cases_org_case_id_unique",
+        [("organization_id", 1), ("case_id", 1)],
+        unique=True,
+    ),
+    _spec(
+        "cases",
+        "cases_org_updated_at",
+        [("organization_id", 1), ("updated_at", -1)],
+    ),
+    _spec(
+        "cases",
+        "cases_org_tag_ids",
+        [("organization_id", 1), ("tag_ids", 1)],
+    ),
     # llm_runs: result lookups by prompt id / revision
     _spec(
         "llm_runs",

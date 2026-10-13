@@ -38,6 +38,8 @@ class DocumentUpload(BaseModel):
     content: str
     tag_ids: List[str] = []  # Optional list of tag IDs
     metadata: Optional[Dict[str, str]] = {}  # Optional key-value metadata pairs
+    case_id: Optional[str] = None
+    create_case_if_missing: bool = False
 
 class DocumentsUpload(BaseModel):
     documents: List[DocumentUpload]
@@ -52,6 +54,7 @@ class DocumentMetadata(BaseModel):
     tag_ids: List[str] = []  # List of tag IDs
     type: str | None = None   # MIME type of the returned file (original/pdf)
     metadata: Optional[Dict[str, str]] = {}  # Optional key-value metadata pairs
+    case_id: Optional[str] = None
 
 class DocumentResponse(BaseModel):
     id: str
@@ -63,6 +66,7 @@ class DocumentResponse(BaseModel):
     tag_ids: List[str] = []  # List of tag IDs
     type: str | None = None   # MIME type of the returned file (original/pdf)
     metadata: Optional[Dict[str, str]] = {}  # Optional key-value metadata pairs
+    case_id: Optional[str] = None
     content: Optional[str] = None  # Base64 encoded content; omitted when include_content=false (backward compatible: default request returns content)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -85,6 +89,14 @@ class DocumentUpdate(BaseModel):
     metadata: Optional[Dict[str, str]] = Field(
         default=None,
         description="Optional key-value metadata pairs"
+    )
+    case_id: Optional[str] = Field(
+        default=None,
+        description="Assign to case, or null to remove from case when this field is sent"
+    )
+    create_case_if_missing: bool = Field(
+        default=False,
+        description="When assigning via case_id, create the case if it does not exist"
     )
 
 def decode_base64_content(content: str) -> bytes:
@@ -139,6 +151,8 @@ async def _save_single_uploaded_document(
     tag_ids: List[str],
     metadata: Optional[Dict[str, str]],
     *,
+    case_id: Optional[str] = None,
+    create_case_if_missing: bool = False,
     upload_policy_cache: Optional[Dict[tuple, Any]] = None,
 ) -> Dict[str, Any]:
     """Persist one decoded file (same storage path as JSON upload)."""
@@ -188,10 +202,35 @@ async def _save_single_uploaded_document(
         "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
         "tag_ids": tag_ids,
         "metadata": metadata,
-        "organization_id": organization_id
+        "organization_id": organization_id,
+        "case_id": None,
+        "updated_at": datetime.now(UTC),
     }
 
     await ad.common.save_doc(analytiq_client, document_metadata)
+
+    if case_id:
+        try:
+            await ad.common.assign_documents_to_case(
+                analytiq_client,
+                organization_id,
+                [document_id],
+                case_id,
+                create_case_if_missing=create_case_if_missing,
+                created_by=current_user.user_id,
+            )
+        except ValueError as e:
+            await ad.common.delete_doc(analytiq_client, document_id, organization_id)
+            raise HTTPException(status_code=400, detail=str(e))
+        except LookupError as e:
+            await ad.common.delete_doc(analytiq_client, document_id, organization_id)
+            code = str(e)
+            if code == "unknown_case":
+                raise HTTPException(status_code=400, detail="Unknown case_id")
+            if code == "case_deleting":
+                raise HTTPException(status_code=409, detail="Case is being deleted")
+            raise HTTPException(status_code=400, detail=code)
+        document_metadata["case_id"] = ad.common.validate_case_id(case_id)
 
     logger.info(f"upload_document(): saved {organization_id}/{document_id} name {name}")
 
@@ -233,6 +272,7 @@ async def _save_single_uploaded_document(
         "document_id": document_id,
         "tag_ids": tag_ids,
         "metadata": metadata,
+        "case_id": document_metadata.get("case_id"),
     }
 
 
@@ -266,6 +306,8 @@ async def upload_document(
                 content,
                 document.tag_ids,
                 document.metadata,
+                case_id=document.case_id,
+                create_case_if_missing=document.create_case_if_missing,
                 upload_policy_cache=upload_policy_cache,
             )
         )
@@ -280,6 +322,10 @@ async def upload_document_multipart(
     name: Annotated[Optional[str], Form(description="Override filename.")] = None,
     tag_ids: Annotated[Optional[str], Form(description='JSON array of tag IDs, e.g. ["id1","id2"].')] = None,
     metadata: Annotated[Optional[str], Form(description='JSON object of string key-value pairs.')] = None,
+    case_id: Annotated[Optional[str], Form(description="Assign uploaded document to this case.")] = None,
+    create_case_if_missing: Annotated[
+        bool, Form(description="Create case if case_id is unknown.")
+    ] = False,
     current_user: User = Depends(get_org_user),
 ):
     """Upload a single document as raw multipart/form-data (no base64)."""
@@ -323,6 +369,8 @@ async def upload_document_multipart(
         content,
         parsed_tag_ids,
         parsed_metadata,
+        case_id=case_id,
+        create_case_if_missing=create_case_if_missing,
     )
     return {"document": doc}
 
@@ -364,41 +412,65 @@ async def update_document(
                 detail=f"Invalid tag IDs: {list(invalid_tags)}"
             )
     
-    # Prepare update dictionary
+    fields_set = update.model_fields_set
     update_dict = {}
     if update.tag_ids is not None:
         update_dict["tag_ids"] = update.tag_ids
-    
-    # Add document_name to update if provided
     if update.document_name is not None:
         update_dict["user_file_name"] = update.document_name
-    
-    # Add metadata to update if provided
     if update.metadata is not None:
         update_dict["metadata"] = update.metadata
-    
-    # Only proceed if there's something to update
-    if not update_dict:
+
+    case_assign = "case_id" in fields_set
+    if update_dict:
+        update_dict["updated_at"] = datetime.now(UTC)
+    elif not case_assign:
         return {"message": "No updates provided"}
 
     # Get old tag IDs before update (for KB membership check)
     old_tag_ids = document.get("tag_ids", [])
     
-    # Update the document
-    updated_doc = await db.docs.find_one_and_update(
-        {
-            "_id": ObjectId(document_id),
-            "organization_id": organization_id
-        },
-        {"$set": update_dict},
-        return_document=True
-    )
-
-    if not updated_doc:
-        raise HTTPException(
-            status_code=404,
-            detail="Document not found"
+    if update_dict:
+        updated_doc = await db.docs.find_one_and_update(
+            {
+                "_id": ObjectId(document_id),
+                "organization_id": organization_id
+            },
+            {"$set": update_dict},
+            return_document=True
         )
+        if not updated_doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+    else:
+        updated_doc = document
+
+    if case_assign:
+        if update.case_id is None:
+            try:
+                await ad.common.remove_documents_from_case(
+                    analytiq_client, organization_id, [document_id]
+                )
+            except LookupError:
+                raise HTTPException(status_code=404, detail="Document not found")
+        else:
+            try:
+                await ad.common.assign_documents_to_case(
+                    analytiq_client,
+                    organization_id,
+                    [document_id],
+                    update.case_id,
+                    create_case_if_missing=update.create_case_if_missing,
+                    created_by=current_user.user_id,
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except LookupError as e:
+                code = str(e)
+                if code == "unknown_case":
+                    raise HTTPException(status_code=400, detail="Unknown case_id")
+                if code == "case_deleting":
+                    raise HTTPException(status_code=409, detail="Case is being deleted")
+                raise HTTPException(status_code=400, detail=code)
     
     # If tags changed, trigger KB membership re-evaluation
     if update.tag_ids is not None:
@@ -440,6 +512,7 @@ async def list_documents(
     tag_ids: str = Query(None, description="Comma-separated list of tag IDs"),
     name_search: str = Query(None, description="Search term for document names"),
     metadata_search: str = Query(None, description="Metadata search as key=value pairs, comma-separated (e.g., 'author=John,type=invoice'). Special characters in keys/values are URL-encoded automatically."),
+    case_id: str | None = Query(None, description="Filter by case id"),
     sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
@@ -484,6 +557,13 @@ async def list_documents(
         f"sort_model={sort_model} filter_model={filter_model}"
     )
 
+    list_case_id = None
+    if case_id is not None:
+        try:
+            list_case_id = ad.common.validate_case_id(case_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     docs, total_count = await ad.common.list_docs(
         analytiq_client,
         organization_id=organization_id,
@@ -492,6 +572,7 @@ async def list_documents(
         tag_ids=tag_id_list,
         name_search=name_search,
         metadata_search=metadata_search_dict,
+        case_id=list_case_id,
         sort_model=sort_model,
         filter_model=filter_model,
     )
@@ -507,7 +588,7 @@ async def list_documents(
                 state=doc.get("state", ""),
                 tag_ids=doc.get("tag_ids", []),
                 metadata=doc.get("metadata", {}),
-                # Optionally add pdf_file_name if you want to expose it
+                case_id=doc.get("case_id"),
             )
             for doc in docs
         ],
@@ -561,6 +642,7 @@ async def get_document(
             tag_ids=document.get("tag_ids", []),
             type=returned_mime,
             metadata=document.get("metadata", {}),
+            case_id=document.get("case_id"),
             content=None,
         )
 
@@ -596,6 +678,7 @@ async def get_document(
         tag_ids=document.get("tag_ids", []),
         type=returned_mime,
         metadata=document.get("metadata", {}),
+        case_id=document.get("case_id"),
         content=base64.b64encode(file["blob"]).decode("utf-8"),
     )
 
@@ -656,21 +739,5 @@ async def delete_document(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if "mongo_file_name" not in document:
-        raise HTTPException(
-            status_code=500, 
-            detail="Document metadata is corrupted: missing mongo_file_name"
-        )
-
-    # Delete the original file
-    await ad.common.delete_file_async(analytiq_client, file_name=document["mongo_file_name"])
-
-    # Delete the associated PDF if it's different
-    pdf_file_name = document.get("pdf_file_name")
-    if pdf_file_name and pdf_file_name != document["mongo_file_name"]:
-        await ad.common.delete_file_async(analytiq_client, file_name=pdf_file_name)
-
-    await ad.docrouter_flows.delete_flow_results_for_document(db, document_id=document_id)
     await ad.common.delete_doc(analytiq_client, document_id, organization_id)
-    
     return {"message": "Document deleted successfully"}
