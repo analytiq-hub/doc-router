@@ -22,6 +22,7 @@ from analytiq_data.common.doc import get_mime_type
 from app.auth import get_org_user
 from app.licensing_deps import require_feature
 from app.models import User
+from app.routes.cases import case_error_to_http
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -142,6 +143,27 @@ async def _validate_tag_ids_for_org(
         )
 
 
+async def _check_upload_case(
+    analytiq_client,
+    organization_id: str,
+    case_id: Optional[str],
+    create_case_if_missing: bool,
+) -> Optional[str]:
+    """
+    Validate an upload's case before anything is stored. Returns the normalized case id.
+
+    ``None`` means no case. An empty string is rejected like any other invalid id.
+    """
+    if case_id is None:
+        return None
+    try:
+        if create_case_if_missing:
+            return ad.common.validate_case_id(case_id)
+        return await ad.common.check_case_assignable(analytiq_client, organization_id, case_id)
+    except (ValueError, LookupError) as e:
+        raise case_error_to_http(e)
+
+
 async def _save_single_uploaded_document(
     analytiq_client,
     organization_id: str,
@@ -155,7 +177,13 @@ async def _save_single_uploaded_document(
     create_case_if_missing: bool = False,
     upload_policy_cache: Optional[Dict[tuple, Any]] = None,
 ) -> Dict[str, Any]:
-    """Persist one decoded file (same storage path as JSON upload)."""
+    """
+    Persist one decoded file (same storage path as JSON upload).
+
+    Callers check ``case_id`` with ``_check_upload_case`` first. If the case is deleted
+    between that check and the assignment here, the stored document is deleted again
+    and the error is returned, before any upload event or processing is queued.
+    """
     if metadata is None:
         metadata = {}
     try:
@@ -209,7 +237,7 @@ async def _save_single_uploaded_document(
 
     await ad.common.save_doc(analytiq_client, document_metadata)
 
-    if case_id:
+    if case_id is not None:
         try:
             await ad.common.assign_documents_to_case(
                 analytiq_client,
@@ -219,17 +247,9 @@ async def _save_single_uploaded_document(
                 create_case_if_missing=create_case_if_missing,
                 created_by=current_user.user_id,
             )
-        except ValueError as e:
+        except (ValueError, LookupError) as e:
             await ad.common.delete_doc(analytiq_client, document_id, organization_id)
-            raise HTTPException(status_code=400, detail=str(e))
-        except LookupError as e:
-            await ad.common.delete_doc(analytiq_client, document_id, organization_id)
-            code = str(e)
-            if code == "unknown_case":
-                raise HTTPException(status_code=400, detail="Unknown case_id")
-            if code == "case_deleting":
-                raise HTTPException(status_code=409, detail="Case is being deleted")
-            raise HTTPException(status_code=400, detail=code)
+            raise case_error_to_http(e)
         document_metadata["case_id"] = ad.common.validate_case_id(case_id)
 
     logger.info(f"upload_document(): saved {organization_id}/{document_id} name {name}")
@@ -294,9 +314,23 @@ async def upload_document(
     db = ad.common.get_async_db(analytiq_client)
     await _validate_tag_ids_for_org(organization_id, all_tag_ids, db)
 
-    upload_policy_cache: Dict[tuple, Any] = {}
+    # Check every document's file type, case and content before storing any, so one
+    # bad item fails the request without leaving earlier items saved.
     for document in documents_upload.documents:
-        content = decode_base64_content(document.content)
+        try:
+            get_mime_type(document.name)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    case_ids = [
+        await _check_upload_case(
+            analytiq_client, organization_id, document.case_id, document.create_case_if_missing
+        )
+        for document in documents_upload.documents
+    ]
+    contents = [decode_base64_content(document.content) for document in documents_upload.documents]
+
+    upload_policy_cache: Dict[tuple, Any] = {}
+    for document, case_id, content in zip(documents_upload.documents, case_ids, contents):
         documents.append(
             await _save_single_uploaded_document(
                 analytiq_client,
@@ -306,7 +340,7 @@ async def upload_document(
                 content,
                 document.tag_ids,
                 document.metadata,
-                case_id=document.case_id,
+                case_id=case_id,
                 create_case_if_missing=document.create_case_if_missing,
                 upload_policy_cache=upload_policy_cache,
             )
@@ -357,6 +391,9 @@ async def upload_document_multipart(
     db = ad.common.get_async_db(analytiq_client)
     if parsed_tag_ids:
         await _validate_tag_ids_for_org(organization_id, set(parsed_tag_ids), db)
+    case_id = await _check_upload_case(
+        analytiq_client, organization_id, case_id, create_case_if_missing
+    )
 
     logger.info(f"upload_document_multipart(): {organization_id}: {file_name}")
 
@@ -430,48 +467,33 @@ async def update_document(
     # Get old tag IDs before update (for KB membership check)
     old_tag_ids = document.get("tag_ids", [])
     
-    if update_dict:
-        updated_doc = await db.docs.find_one_and_update(
-            {
-                "_id": ObjectId(document_id),
-                "organization_id": organization_id
-            },
-            {"$set": update_dict},
-            return_document=True
-        )
-        if not updated_doc:
-            raise HTTPException(status_code=404, detail="Document not found")
-    else:
-        updated_doc = document
-
-    if case_assign:
-        if update.case_id is None:
-            try:
-                await ad.common.remove_documents_from_case(
-                    analytiq_client, organization_id, [document_id]
-                )
-            except LookupError:
-                raise HTTPException(status_code=404, detail="Document not found")
+    # When the case changes, the other fields are written in the same transaction as
+    # the case assignment, so a case error leaves the document untouched.
+    try:
+        if case_assign and update.case_id is None:
+            await ad.common.remove_documents_from_case(
+                analytiq_client, organization_id, [document_id], set_fields=update_dict
+            )
+        elif case_assign:
+            await ad.common.assign_documents_to_case(
+                analytiq_client,
+                organization_id,
+                [document_id],
+                update.case_id,
+                create_case_if_missing=update.create_case_if_missing,
+                created_by=current_user.user_id,
+                set_fields=update_dict,
+            )
         else:
-            try:
-                await ad.common.assign_documents_to_case(
-                    analytiq_client,
-                    organization_id,
-                    [document_id],
-                    update.case_id,
-                    create_case_if_missing=update.create_case_if_missing,
-                    created_by=current_user.user_id,
-                )
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except LookupError as e:
-                code = str(e)
-                if code == "unknown_case":
-                    raise HTTPException(status_code=400, detail="Unknown case_id")
-                if code == "case_deleting":
-                    raise HTTPException(status_code=409, detail="Case is being deleted")
-                raise HTTPException(status_code=400, detail=code)
-    
+            result = await db.docs.update_one(
+                {"_id": ObjectId(document_id), "organization_id": organization_id},
+                {"$set": update_dict},
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="Document not found")
+    except (ValueError, LookupError) as e:
+        raise case_error_to_http(e)
+
     # If tags changed, trigger KB membership re-evaluation
     if update.tag_ids is not None:
         new_tag_ids = set(update.tag_ids)

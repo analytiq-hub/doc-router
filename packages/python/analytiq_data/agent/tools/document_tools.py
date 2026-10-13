@@ -97,17 +97,7 @@ async def delete_document(context: dict, params: dict) -> dict[str, Any]:
     )
     if not document:
         return {"error": "Document not found"}
-    if "mongo_file_name" not in document:
-        return {"error": "Document metadata is corrupted: missing mongo_file_name"}
 
-    await ad.common.delete_file_async(
-        context["analytiq_client"], file_name=document["mongo_file_name"]
-    )
-    pdf_file_name = document.get("pdf_file_name")
-    if pdf_file_name and pdf_file_name != document["mongo_file_name"]:
-        await ad.common.delete_file_async(
-            context["analytiq_client"], file_name=pdf_file_name
-        )
     await ad.common.delete_doc(context["analytiq_client"], document_id, org_id)
     logger.info(f"Deleted document {document_id}")
     return {"message": "Document deleted successfully", "document_id": document_id}

@@ -222,6 +222,22 @@ _PHASE2_INDEXES: tuple[IndexSpec, ...] = (
         "cases_org_tag_ids",
         [("organization_id", 1), ("tag_ids", 1)],
     ),
+    # Per-document cleanup in delete_doc
+    _spec(
+        "flow_executions",
+        "flow_executions_org_trigger_document",
+        [("organization_id", 1), ("trigger.document_id", 1)],
+    ),
+    _spec(
+        "webhook_deliveries",
+        "webhook_deliveries_org_document",
+        [("organization_id", 1), ("document_id", 1)],
+    ),
+    _spec(
+        "form_submissions",
+        "form_submissions_org_document",
+        [("organization_id", 1), ("document_id", 1)],
+    ),
     # llm_runs: result lookups by prompt id / revision
     _spec(
         "llm_runs",

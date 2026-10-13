@@ -5,11 +5,12 @@ from datetime import datetime, UTC
 from typing import Any, Optional, List, Dict
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
-from app.auth import get_org_user
+from app.auth import get_org_user, is_organization_admin
 from app.licensing_deps import require_feature
 from app.models import User
 
@@ -84,15 +85,41 @@ def _parse_metadata_search(metadata_search: str | None) -> dict[str, str] | None
     return out or None
 
 
-def _lookup_error_to_http(exc: LookupError) -> HTTPException:
+def case_error_to_http(exc: Exception) -> HTTPException:
+    """Map case errors (``ValueError``, ``LookupError`` codes) to HTTP errors. Shared with documents routes."""
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=400, detail=str(exc))
     code = str(exc)
     if code == "unknown_case":
         return HTTPException(status_code=400, detail="Unknown case_id")
     if code == "case_deleting":
         return HTTPException(status_code=409, detail="Case is being deleted")
+    if code == "delete_mode_conflict":
+        return HTTPException(
+            status_code=409,
+            detail="Case is already being deleted with a different cascade setting",
+        )
     if code == "document_not_found":
         return HTTPException(status_code=404, detail="Document not found")
     return HTTPException(status_code=400, detail=code)
+
+
+async def _finish_case_delete_in_background(
+    organization_id: str, case_id: str, cascade_documents: bool
+) -> None:
+    analytiq_client = ad.common.get_analytiq_client()
+    try:
+        await ad.common.finish_case_delete(
+            analytiq_client,
+            organization_id,
+            case_id,
+            cascade_documents=cascade_documents,
+        )
+    except Exception as e:
+        logger.error(
+            f"Case delete {organization_id}/{case_id} stopped before finishing; "
+            f"delete the case again to resume: {e}"
+        )
 
 
 @cases_router.get("/v0/orgs/{organization_id}/cases", response_model=ListCasesResponse)
@@ -116,12 +143,10 @@ async def list_cases_route(
         tag_ids=tag_id_list,
         metadata_search=_parse_metadata_search(metadata_search),
     )
-    out = []
-    for case in cases:
-        count = await ad.common.count_documents_in_case(
-            analytiq_client, organization_id, case["case_id"]
-        )
-        out.append(_case_to_out(case, count))
+    counts = await ad.common.count_documents_in_cases(
+        analytiq_client, organization_id, [case["case_id"] for case in cases]
+    )
+    out = [_case_to_out(case, counts[case["case_id"]]) for case in cases]
     return ListCasesResponse(cases=out, total_count=total, skip=skip)
 
 
@@ -208,22 +233,38 @@ async def update_case_route(
 async def delete_case_route(
     organization_id: str,
     case_id: str,
-    cascade: bool = Query(False),
+    background_tasks: BackgroundTasks,
+    cascade: bool = Query(False, description="Also delete every document in the case (org admins only)"),
     current_user: User = Depends(get_org_user),
 ):
+    """
+    Delete a case. Without ``cascade``, member documents are kept and removed from the
+    case. With ``cascade``, documents are deleted in the background and the call returns
+    ``202``. Deleting again resumes an interrupted delete.
+    """
+    if cascade and not await is_organization_admin(organization_id, current_user.user_id):
+        raise HTTPException(status_code=403, detail="Only org admins can delete a case with its documents")
+
     analytiq_client = ad.common.get_analytiq_client()
     try:
-        ad.common.validate_case_id(case_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    deleted = await ad.common.delete_case(
-        analytiq_client,
-        organization_id,
-        case_id,
-        cascade_documents=cascade,
-    )
-    if not deleted:
+        case_id = ad.common.validate_case_id(case_id)
+        row = await ad.common.begin_case_delete(
+            analytiq_client, organization_id, case_id, cascade_documents=cascade
+        )
+    except (ValueError, LookupError) as e:
+        raise case_error_to_http(e)
+    if not row:
         raise HTTPException(status_code=404, detail="Case not found")
+
+    if cascade:
+        background_tasks.add_task(
+            _finish_case_delete_in_background, organization_id, case_id, True
+        )
+        return JSONResponse(status_code=202, content={"message": "Case delete started"})
+
+    await ad.common.finish_case_delete(
+        analytiq_client, organization_id, case_id, cascade_documents=False
+    )
     return {"message": "Case deleted"}
 
 
@@ -245,11 +286,9 @@ async def assign_documents_route(
             create_case_if_missing=body.create_case_if_missing,
             created_by=current_user.user_id,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except LookupError as e:
-        raise _lookup_error_to_http(e)
-    return {"message": "Documents assigned", "count": len(body.document_ids)}
+    except (ValueError, LookupError) as e:
+        raise case_error_to_http(e)
+    return {"message": "Documents assigned", "count": len(set(body.document_ids))}
 
 
 @cases_router.delete(
@@ -272,5 +311,5 @@ async def remove_document_from_case_route(
             analytiq_client, organization_id, [document_id]
         )
     except LookupError as e:
-        raise _lookup_error_to_http(e)
+        raise case_error_to_http(e)
     return {"message": "Document removed from case"}

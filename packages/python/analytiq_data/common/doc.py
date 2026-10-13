@@ -8,6 +8,7 @@ from typing import Any
 
 import analytiq_data as ad
 from analytiq_data.common.grid_filter import build_filter_match, build_sort_doc
+from analytiq_data.mongodb.index_registry import ACTIVE_FLOW_DOCUMENT_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -111,34 +112,63 @@ async def save_doc(analytiq_client, document: dict) -> str:
 
     return str(document["_id"])
 
+async def _delete_flow_executions_for_document(
+    analytiq_client, db, document_id: str, organization_id: str
+) -> None:
+    """
+    Delete finished flow executions triggered by this document, with their ``flow_blobs``.
+
+    Queued or running executions are asked to stop and left in place; the flow
+    cleanup worker removes them after ``FLOW_EXECUTION_RETENTION_DAYS``.
+    """
+    query = {"organization_id": organization_id, "trigger.document_id": document_id}
+    active = list(ACTIVE_FLOW_DOCUMENT_STATUSES)
+    await db.flow_executions.update_many(
+        {**query, "status": {"$in": active}},
+        {"$set": {"stop_requested": True}},
+    )
+    finished = await db.flow_executions.find(
+        {**query, "status": {"$nin": active}}, {"_id": 1}
+    ).to_list(None)
+    for execution in finished:
+        exec_id = str(execution["_id"])
+        await ad.mongodb.blob.delete_blobs_by_prefix_async(
+            analytiq_client, bucket="flow_blobs", prefix=f"{exec_id}/"
+        )
+        await db.flow_executions.delete_one({"_id": execution["_id"]})
+
+
 async def delete_doc(analytiq_client, document_id: str, organization_id: str):
     """
-    Delete a document within an organization: stored files, flow results, docs row,
-    LLM/OCR results, and KB index entries.
+    Delete a document within an organization and everything stored for it: files,
+    flow results and executions, form submissions, chat threads, webhook deliveries,
+    LLM and OCR results, and KB index entries.
+
+    Safe to call again after a partial delete. The docs row is deleted last, because
+    it is the only record of the stored file names.
     """
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
+    scope = {"document_id": document_id, "organization_id": organization_id}
 
     document = await collection.find_one(
         {"_id": ObjectId(document_id), "organization_id": organization_id}
     )
-    if not document:
-        return
-
-    mongo_file_name = document.get("mongo_file_name")
-    if mongo_file_name:
-        await ad.common.delete_file_async(analytiq_client, file_name=mongo_file_name)
+    if document:
+        mongo_file_name = document.get("mongo_file_name")
+        if mongo_file_name:
+            await ad.common.delete_file_async(analytiq_client, file_name=mongo_file_name)
         pdf_file_name = document.get("pdf_file_name")
         if pdf_file_name and pdf_file_name != mongo_file_name:
             await ad.common.delete_file_async(analytiq_client, file_name=pdf_file_name)
 
     await ad.docrouter_flows.delete_flow_results_for_document(db, document_id=document_id)
-
-    await collection.delete_one({
-        "_id": ObjectId(document_id),
-        "organization_id": organization_id
-    })
+    await _delete_flow_executions_for_document(analytiq_client, db, document_id, organization_id)
+    await db.form_submissions.delete_many(scope)
+    await db.chat_threads.delete_many(scope)
+    # Pending deliveries are dropped too; their queued messages find no delivery and are skipped.
+    await db.webhook_deliveries.delete_many(scope)
 
     # Delete all LLM results for the document
     await ad.llm.delete_llm_result(analytiq_client, document_id=document_id)
@@ -163,7 +193,12 @@ async def delete_doc(analytiq_client, document_id: str, organization_id: str):
             logger.warning(f"Error removing document {document_id} from KB {kb_id} during deletion: {e}")
             # Continue with other KBs even if one fails
 
-    logger.info(f"Document {document_id} has been deleted with all LLM, OCR, and KB results.")
+    await collection.delete_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+
+    logger.info(f"Document {document_id} has been deleted with all stored data.")
 
 
 _LIST_DOCS_FIELD_MAP: dict[str, str | None] = {
