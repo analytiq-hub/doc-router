@@ -290,7 +290,6 @@ async def get_prompt_group_config(analytiq_client, prompt_revid: str) -> Dict[st
     if elem is None:
         raise ValueError(f"Prompt revision {prompt_revid} not found")
 
-    peer_match_keys = elem.get("peer_match_keys") or []
     include = elem.get("include") or {}
 
     # Ensure include has all expected keys with sensible defaults
@@ -303,6 +302,6 @@ async def get_prompt_group_config(analytiq_client, prompt_revid: str) -> Dict[st
     }
 
     return {
-        "peer_match_keys": peer_match_keys,
+        "peer_match_keys": [],
         "include": include,
     }

@@ -742,15 +742,16 @@ async def _build_prompt_context(
     llm_provider: str,
     llm_model: str,
     api_key: str,
+    *,
+    ordered_documents: List[dict] | None = None,
 ) -> Tuple[list, dict | None, str]:
     """
     Build chat messages (and optional peer_run) from prompt revision include settings.
 
-    Used for grouped prompts (peer_match_keys) and for single-document runs with the same
-    block layout and include toggles (ocr_text, pdf, metadata_keys). Prompt content is always included.
+    Single-document runs use ``doc`` only. Case (or other explicit multi-document) runs pass
+    ``ordered_documents`` with the full analysis set in display order.
     """
     group_cfg = await ad.common.get_prompt_group_config(analytiq_client, prompt_revid)
-    peer_match_keys: List[str] = group_cfg.get("peer_match_keys") or []
     include: Dict[str, Any] = group_cfg.get("include") or {}
 
     include_ocr = bool(include.get("ocr_text", True))
@@ -762,55 +763,12 @@ async def _build_prompt_context(
     metadata_keys: List[str] = list(include.get("metadata_keys") or [])
     include_all_metadata = metadata_keys == ["*"]
 
-    db = analytiq_client.mongodb_async[analytiq_client.env]
-    source_doc_id = str(doc.get("_id"))
-
     peer_run: dict | None = None
-    ordered_peer_docs: List[dict]
-
-    if peer_match_keys:
-        doc_metadata: Dict[str, Any] = doc.get("metadata", {}) or {}
-
-        match_values: Dict[str, Any] = {}
-        for key in peer_match_keys:
-            if key not in doc_metadata:
-                raise Exception(f"Grouped LLM run failed: source document missing metadata key '{key}'")
-            match_values[key] = doc_metadata[key]
-
-        peer_query: Dict[str, Any] = {"organization_id": org_id}
-        for key, value in match_values.items():
-            peer_query[f"metadata.{key}"] = value
-
-        peer_docs = await db.docs.find(peer_query).to_list(length=None)
-
-        def _sort_key(d: dict):
-            created_at = d.get("created_at") or d.get("upload_date")
-            if not created_at and isinstance(d.get("_id"), ObjectId):
-                created_at = d["_id"].generation_time
-            return (created_at, d.get("_id"))
-
-        peer_docs.sort(key=_sort_key)
-
-        match_document_ids_all = [str(d["_id"]) for d in peer_docs if d.get("_id") is not None]
-
-        if source_doc_id not in match_document_ids_all:
-            raise Exception(
-                "Grouped LLM run failed: source document not found by computed peer query "
-                f"{match_values}"
-            )
-
-        # `ordered_peer_docs` includes the source as the first block (so the prompt can
-        # describe the full analysis set). `match_document_ids`, however, is used for
-        # UI/debugging to show "matched peer documents" *excluding* the source doc.
-        match_document_ids = [doc_id for doc_id in match_document_ids_all if doc_id != source_doc_id]
+    if ordered_documents is not None:
+        ordered_peer_docs = ordered_documents
         peer_run = {
-            "match_values": match_values,
-            "match_document_ids": match_document_ids,
+            "document_ids": [str(d.get("_id")) for d in ordered_documents if d.get("_id") is not None],
         }
-
-        ordered_peer_docs = [d for d in peer_docs if str(d.get("_id")) == source_doc_id] + [
-            d for d in peer_docs if str(d.get("_id")) != source_doc_id
-        ]
     else:
         ordered_peer_docs = [doc]
 
@@ -826,7 +784,7 @@ async def _build_prompt_context(
 
     user_blocks: List[Dict[str, Any]] = []
     header_lines: List[str] = []
-    if peer_match_keys:
+    if len(ordered_peer_docs) > 1:
         header_lines.append("You are analyzing a group of related documents.")
     else:
         header_lines.append("You are analyzing a document.")
@@ -954,6 +912,9 @@ async def run_llm(
     prompt_revid: str = "default",
     llm_model: str = None,
     force: bool = False,
+    *,
+    ordered_documents: List[dict] | None = None,
+    case_persist: dict | None = None,
 ) -> dict:
     """
     Run the LLM for the given document and prompt.
@@ -965,24 +926,31 @@ async def run_llm(
         llm_model: The model to use (e.g. "gpt-4", "claude-3-sonnet", "mixtral-8x7b-32768")
                If not provided, the model will be retrieved from the prompt.
         force: If True, run the LLM even if the result is already cached
+        ordered_documents: When set, build prompt context from this ordered doc list (case runs).
+        case_persist: When set with ordered_documents, save to ``case_llm_runs`` instead of ``llm_runs``.
     
     Returns:
         dict: The LLM result
     """
+    is_case_run = case_persist is not None
+    if is_case_run and not ordered_documents:
+        raise ValueError("case_persist requires ordered_documents")
+
     # Normalize invalid prompt_revid (e.g. non-ObjectId from agent) to avoid ObjectId errors downstream
     if prompt_revid != "default" and not ad.common.is_valid_object_id(prompt_revid):
         logger.info(f"prompt_revid {prompt_revid!r} is not a valid ObjectId, using default prompt")
         prompt_revid = "default"
 
-    # Check for existing result unless force is True
-    if not force:
-        existing_result = await get_llm_result(analytiq_client, document_id, prompt_revid=prompt_revid)
-        if existing_result:
-            logger.info(f"Using cached LLM result for doc_id/prompt_revid {document_id}/{prompt_revid}")
-            return existing_result["llm_result"]
-    else:
-        # Delete the existing result
-        await delete_llm_result(analytiq_client, document_id, prompt_revid)
+    # Check for existing result unless force is True (document runs only)
+    if not is_case_run:
+        if not force:
+            existing_result = await get_llm_result(analytiq_client, document_id, prompt_revid=prompt_revid)
+            if existing_result:
+                logger.info(f"Using cached LLM result for doc_id/prompt_revid {document_id}/{prompt_revid}")
+                return existing_result["llm_result"]
+        else:
+            # Delete the existing result
+            await delete_llm_result(analytiq_client, document_id, prompt_revid)
 
     if not llm_model:
         logger.info(f"Running new LLM analysis for doc_id/prompt_revid {document_id}/{prompt_revid}")
@@ -1000,9 +968,12 @@ async def run_llm(
         llm_model = await ad.llm.get_llm_model(analytiq_client, prompt_revid)
 
     # 3. Determine number of pages and page-based SPU floor for pre-check
-    num_pages = doc.get("num_pages", 1)
     from analytiq_data.payments.spu import spu_llm_min_for_page_count
 
+    if ordered_documents:
+        num_pages = sum(int(d.get("num_pages") or 1) for d in ordered_documents)
+    else:
+        num_pages = doc.get("num_pages", 1)
     page_floor_spus = spu_llm_min_for_page_count(num_pages)
 
     # 4. Pre-check: ensure org has at least the page-floor SPUs available
@@ -1051,6 +1022,7 @@ async def run_llm(
         llm_provider=llm_provider,
         llm_model=llm_model,
         api_key=api_key,
+        ordered_documents=ordered_documents,
     )
     if peer_run is not None:
         logger.info(f"{document_id}/{prompt_revid}: Grouped prompt context peer_run={peer_run}")
@@ -1285,7 +1257,7 @@ async def run_llm(
         completion_tokens=total_completion_tokens,
         total_tokens=total_tokens,
         actual_cost=total_cost,
-        operation="document_llm",
+        operation="case_llm" if is_case_run else "document_llm",
     )
 
     # Skip any <think> ... </think> blocks
@@ -1351,18 +1323,41 @@ async def run_llm(
     # 10. Save the new result
     run_payload: dict[str, object] = {"prompt": prompt_used_text}
     if peer_run is not None:
-        run_payload["match_values"] = peer_run["match_values"]
-        run_payload["match_document_ids"] = peer_run["match_document_ids"]
-    llm_run_id = await save_llm_result(
-        analytiq_client,
-        document_id,
-        prompt_revid,
-        resp_dict,
-        run=run_payload,
-    )
+        if "match_values" in peer_run:
+            run_payload["match_values"] = peer_run["match_values"]
+        if "match_document_ids" in peer_run:
+            run_payload["match_document_ids"] = peer_run["match_document_ids"]
+        if "document_ids" in peer_run:
+            run_payload["document_ids"] = peer_run["document_ids"]
+
+    if is_case_run:
+        from analytiq_data.case_llm.runs import save_case_llm_run
+
+        prompt_id, prompt_version = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+        await save_case_llm_run(
+            analytiq_client,
+            organization_id=str(case_persist["organization_id"]),
+            case_id=str(case_persist["case_id"]),
+            prompt_id=str(case_persist.get("prompt_id") or prompt_id),
+            prompt_revid=prompt_revid,
+            prompt_version=prompt_version,
+            document_ids=list(case_persist["document_ids"]),
+            llm_result=resp_dict,
+            run=run_payload,
+            status="completed",
+        )
+        llm_run_id = None
+    else:
+        llm_run_id = await save_llm_result(
+            analytiq_client,
+            document_id,
+            prompt_revid,
+            resp_dict,
+            run=run_payload,
+        )
 
     # Optional per-org webhook: per-prompt completion (non-default prompts only)
-    if prompt_revid != "default":
+    if not is_case_run and prompt_revid != "default":
         try:
             prompt_id, prompt_version = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
             await ad.webhooks.enqueue_event(
@@ -1380,14 +1375,15 @@ async def run_llm(
         except Exception as e:
             logger.warning(f"{document_id}/{prompt_revid}: webhook enqueue failed: {e}")
 
-    await notify_llm_completed_docrouter_event(
-        analytiq_client,
-        organization_id=org_id,
-        document_id=document_id,
-        prompt_revid=prompt_revid,
-        llm_result=resp_dict,
-        llm_run_id=llm_run_id,
-    )
+    if not is_case_run:
+        await notify_llm_completed_docrouter_event(
+            analytiq_client,
+            organization_id=org_id,
+            document_id=document_id,
+            prompt_revid=prompt_revid,
+            llm_result=resp_dict,
+            llm_run_id=llm_run_id,
+        )
 
     return resp_dict
 

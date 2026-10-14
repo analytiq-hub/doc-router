@@ -59,6 +59,10 @@ class AssignDocumentsRequest(BaseModel):
     create_case_if_missing: bool = False
 
 
+class CaseRunRequest(BaseModel):
+    prompt_id: str
+
+
 def _case_to_out(case: dict, document_count: int) -> CaseOut:
     return CaseOut(
         case_id=case["case_id"],
@@ -346,3 +350,51 @@ async def remove_document_from_case_route(
     except LookupError as e:
         raise case_error_to_http(e)
     return {"message": "Document removed from case"}
+
+
+@cases_router.post("/v0/orgs/{organization_id}/cases/{case_id}/runs")
+async def start_case_llm_run_route(
+    organization_id: str,
+    case_id: str,
+    body: CaseRunRequest,
+    current_user: User = Depends(get_org_user),
+):
+    """Queue a case-scoped LLM run for the latest revision of ``prompt_id``."""
+    analytiq_client = ad.common.get_analytiq_client()
+    try:
+        ad.common.validate_case_id(case_id)
+        msg_id = await ad.case_llm.enqueue_case_llm_run(
+            analytiq_client,
+            organization_id,
+            case_id,
+            body.prompt_id.strip(),
+        )
+    except (ValueError, LookupError) as e:
+        raise case_error_to_http(e)
+    return JSONResponse(
+        status_code=202,
+        content={"message": "Case LLM run queued", "queue_message_id": msg_id},
+    )
+
+
+@cases_router.get("/v0/orgs/{organization_id}/cases/{case_id}/results")
+async def get_case_llm_results_route(
+    organization_id: str,
+    case_id: str,
+    prompt_id: str = Query(..., description="Stable prompt id"),
+    current_user: User = Depends(get_org_user),
+):
+    analytiq_client = ad.common.get_analytiq_client()
+    try:
+        ad.common.validate_case_id(case_id)
+        case = await ad.common.get_case(analytiq_client, organization_id, case_id)
+        if not case:
+            raise HTTPException(status_code=404, detail="Case not found")
+        return await ad.case_llm.build_case_results_payload(
+            analytiq_client,
+            organization_id,
+            case_id,
+            prompt_id.strip(),
+        )
+    except LookupError as e:
+        raise case_error_to_http(e)

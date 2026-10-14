@@ -565,6 +565,8 @@ async def finish_case_delete(
             {"$set": {"case_id": None, "updated_at": datetime.now(UTC)}},
         )
 
+    await ad.case_llm.delete_case_llm_runs(analytiq_client, organization_id, case_id)
+
     await _cases_coll(analytiq_client).delete_one(
         {"organization_id": organization_id, "case_id": case_id}
     )

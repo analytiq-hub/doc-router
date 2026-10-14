@@ -305,43 +305,25 @@ async def test_build_prompt_context_xai_embeds_pdf_even_if_vision_supported(test
 
 
 @pytest.mark.asyncio
-async def test_build_prompt_context_peer_group_order_and_match_ids(test_db, mock_auth, setup_test_models):
-    """peer_match_keys loads peers from Mongo; source doc first, then others by sort order."""
+async def test_build_prompt_context_ordered_documents_group_header(test_db, mock_auth, setup_test_models):
+    """Explicit ``ordered_documents`` builds a multi-document group context."""
     analytiq_client = ad.common.get_analytiq_client()
-    t0 = datetime(2024, 1, 1, tzinfo=UTC)
-    t1 = datetime(2024, 1, 2, tzinfo=UTC)
-    t2 = datetime(2024, 1, 3, tzinfo=UTC)
-    oid_early = ObjectId()
-    oid_src = ObjectId()
-    oid_late = ObjectId()
-    await test_db.docs.insert_many(
-        [
-            {
-                "_id": oid_early,
-                "organization_id": TEST_ORG_ID,
-                "metadata": {"batch_id": "batch-99", "slot": "early"},
-                "user_file_name": "early.pdf",
-                "created_at": t0,
-            },
-            {
-                "_id": oid_src,
-                "organization_id": TEST_ORG_ID,
-                "metadata": {"batch_id": "batch-99", "slot": "source"},
-                "user_file_name": "source.pdf",
-                "created_at": t1,
-            },
-            {
-                "_id": oid_late,
-                "organization_id": TEST_ORG_ID,
-                "metadata": {"batch_id": "batch-99", "slot": "late"},
-                "user_file_name": "late.pdf",
-                "created_at": t2,
-            },
-        ]
-    )
-    source = await test_db.docs.find_one({"_id": oid_src})
+    oid_a = ObjectId()
+    oid_b = ObjectId()
+    doc_a = {
+        "_id": oid_a,
+        "organization_id": TEST_ORG_ID,
+        "metadata": {"slot": "first"},
+        "user_file_name": "first.pdf",
+    }
+    doc_b = {
+        "_id": oid_b,
+        "organization_id": TEST_ORG_ID,
+        "metadata": {"slot": "second"},
+        "user_file_name": "second.pdf",
+    }
     group_cfg = {
-        "peer_match_keys": ["batch_id"],
+        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": ["slot"]},
     }
     with (
@@ -350,47 +332,23 @@ async def test_build_prompt_context_peer_group_order_and_match_ids(test_db, mock
     ):
         messages, peer_run, _ = await _build_prompt_context(
             analytiq_client,
-            source,
+            doc_a,
             "r",
             TEST_ORG_ID,
             "SYS",
             "openai",
             "gpt-4o",
             "k",
+            ordered_documents=[doc_a, doc_b],
         )
     assert peer_run is not None
-    assert peer_run["match_values"] == {"batch_id": "batch-99"}
-    peer_ids = set(peer_run["match_document_ids"])
-    assert peer_ids == {str(oid_early), str(oid_late)}
-
+    assert peer_run["document_ids"] == [str(oid_a), str(oid_b)]
     texts = _user_text_blocks(messages)
-    group_header = texts[0]
-    assert "group of related documents" in group_header
-
+    assert "group of related documents" in texts[0]
     markers = [t for t in texts if t.startswith("[Document #")]
-    assert len(markers) == 3
-    # Source document first, then peers in Mongo sort order (created_at, _id).
-    assert '"slot": "source"' in markers[0]
-    assert '"slot": "early"' in markers[1]
-    assert '"slot": "late"' in markers[2]
-
-
-@pytest.mark.asyncio
-async def test_build_prompt_context_peer_missing_metadata_key_raises(test_db, mock_auth, setup_test_models):
-    analytiq_client = ad.common.get_analytiq_client()
-    doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "a.pdf"}
-    group_cfg = {
-        "peer_match_keys": ["batch_id"],
-        "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
-    }
-    with (
-        patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
-        patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="x"),
-    ):
-        with pytest.raises(Exception, match="missing metadata key"):
-            await _build_prompt_context(
-                analytiq_client, doc, "r", TEST_ORG_ID, "SYS", "openai", "gpt-4o", "k"
-            )
+    assert len(markers) == 2
+    assert '"slot": "first"' in markers[0]
+    assert '"slot": "second"' in markers[1]
 
 
 def test_prompt_used_from_grouped_user_blocks_placeholders():

@@ -483,26 +483,47 @@ const DocumentList: React.FC<DocumentListProps> = ({
     setEditingDocument(null);
   };
 
+  const isCaseScopedList = Boolean(fixedCaseId);
+  const filterFieldSx = isCaseScopedList
+    ? {
+        flex: '1 1 0%',
+        minWidth: 72,
+        '& .MuiInputBase-root': { height: 40 },
+      }
+    : {
+        flex: '1 1 12rem',
+        minWidth: 0,
+        maxWidth: '100%',
+      };
+
   return (
     <Box sx={{
       width: '100%',
       display: 'flex',
       flexDirection: 'column',
-      height: 'calc(100vh - 200px)', // Account for header, nav, and padding
-      minHeight: '400px' // Ensure minimum height
+      height: isCaseScopedList ? 'auto' : 'calc(100vh - 200px)',
+      minHeight: isCaseScopedList ? '280px' : '400px',
     }}>
-      <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
-        <p className="text-sm">
-          Welcome! Upload your documents to begin transforming unstructured data into structured insights. 
-          If no documents are visible, <Link href={`/orgs/${organizationId}/docs?tab=upload`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to upload and start extracting key data fields effortlessly.
-        </p>
-      </div>
+      {!isCaseScopedList && (
+        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
+          <p className="text-sm">
+            Welcome! Upload your documents to begin transforming unstructured data into structured insights. 
+            If no documents are visible, <Link href={`/orgs/${organizationId}/docs?tab=upload`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to upload and start extracting key data fields effortlessly.
+          </p>
+        </div>
+      )}
       
-      <div className="flex gap-4 mb-4">
+      <div
+        className={
+          isCaseScopedList
+            ? 'flex flex-nowrap gap-2 mb-4 items-center w-full min-w-0'
+            : 'flex flex-wrap gap-3 mb-4 items-center'
+        }
+      >
         <TextField
-          fullWidth
           variant="outlined"
-          placeholder="Search documents..."
+          placeholder={isCaseScopedList ? 'Search…' : 'Search documents...'}
+          size={isCaseScopedList ? 'small' : 'medium'}
           value={searchTerm}
           onChange={(e) => { setSearchTerm(e.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })); }}
           InputProps={{
@@ -512,9 +533,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
               </InputAdornment>
             ),
           }}
+          sx={filterFieldSx}
         />
         <Autocomplete
           multiple
+          size={isCaseScopedList ? 'small' : 'medium'}
           options={tags}
           value={selectedTagFilters}
           onChange={(_, newValue) => { setSelectedTagFilters(newValue); setPaginationModel(prev => ({ ...prev, page: 0 })); }}
@@ -523,7 +546,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <TextField
               {...params}
               variant="outlined"
-              placeholder="Filter by tags..."
+              placeholder={isCaseScopedList ? 'Tags…' : 'Filter by tags...'}
             />
           )}
           renderOption={(props, tag) => {
@@ -560,27 +583,30 @@ const DocumentList: React.FC<DocumentListProps> = ({
             })
           }
           sx={{
-            minWidth: 300,
+            ...filterFieldSx,
             '& .MuiAutocomplete-tag': {
               margin: 0,
-              padding: 0
-            }
+              padding: 0,
+            },
           }}
         />
         <TextField
-          fullWidth
           variant="outlined"
-          placeholder="Search metadata (author=John Smith,type=invoice)..."
+          size={isCaseScopedList ? 'small' : 'medium'}
+          placeholder={
+            isCaseScopedList ? 'Metadata…' : 'Search metadata (author=John Smith,type=invoice)...'
+          }
           value={metadataSearch}
           onChange={(e) => { setMetadataSearch(e.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })); }}
           title="Format: key=value,key2=value2. Commas and equals in values are automatically handled."
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon />
+                <SearchIcon fontSize={isCaseScopedList ? 'small' : 'medium'} />
               </InputAdornment>
             ),
           }}
+          sx={filterFieldSx}
         />
         {!hideCaseFilter && (
           <TextField
@@ -591,12 +617,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
               setCaseIdFilter(e.target.value);
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
             }}
-            sx={{ minWidth: 180 }}
+            sx={filterFieldSx}
           />
         )}
         <button
+          type="button"
           onClick={() => setIsBulkUpdateOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
+          className={`inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 ${
+            isCaseScopedList ? 'h-10 whitespace-nowrap' : 'w-full sm:w-auto justify-center'
+          }`}
         >
           <BoltIcon className="h-5 w-5" />
           Actions

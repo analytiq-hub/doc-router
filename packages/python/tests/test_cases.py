@@ -682,3 +682,170 @@ async def test_list_cases_default_sort_is_updated_at_desc(test_db, mock_auth):
         aq, TEST_ORG_ID, sort_model=[{"field": "case_id", "sort": "desc"}]
     )
     assert [c["case_id"] for c in cases] == ["CASE-Z-OLD", "CASE-M-MID", "CASE-A-NEW"]
+
+
+async def _insert_prompt(test_db, *, name="Case prompt"):
+    prompt_id = ObjectId()
+    await test_db.prompts.insert_one(
+        {
+            "_id": prompt_id,
+            "organization_id": TEST_ORG_ID,
+            "name": name,
+        }
+    )
+    rev_id = ObjectId()
+    await test_db.prompt_revisions.insert_one(
+        {
+            "_id": rev_id,
+            "prompt_id": str(prompt_id),
+            "prompt_version": 1,
+            "content": "Extract fields.",
+            "organization_id": TEST_ORG_ID,
+            "tag_ids": [],
+            "model": "gpt-4o-mini",
+            "peer_match_keys": ["legacy"],
+            "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
+            "created_at": datetime.now(UTC),
+            "created_by": "test",
+        }
+    )
+    return str(prompt_id), str(rev_id)
+
+
+@pytest.mark.asyncio
+async def test_case_llm_run_rejects_prompt_without_shared_tag(test_db, mock_auth):
+    tag_id = ObjectId()
+    await test_db.tags.insert_one(
+        {
+            "_id": tag_id,
+            "organization_id": TEST_ORG_ID,
+            "name": "claim",
+            "color": "#000000",
+        }
+    )
+    client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/cases",
+        json={"case_id": "CLM-tag-mismatch", "tag_ids": [str(tag_id)]},
+        headers=get_auth_headers(),
+    )
+    await _insert_doc(test_db, case_id="CLM-tag-mismatch")
+    prompt_id, _ = await _insert_prompt(test_db)
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-tag-mismatch/runs",
+        json={"prompt_id": prompt_id},
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 400, resp.text
+
+
+@pytest.mark.asyncio
+async def test_case_llm_run_enqueue_and_results(test_db, mock_auth):
+    tag_id = ObjectId()
+    await test_db.tags.insert_one(
+        {
+            "_id": tag_id,
+            "organization_id": TEST_ORG_ID,
+            "name": "claim",
+            "color": "#000000",
+        }
+    )
+    client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/cases",
+        json={"case_id": "CLM-run", "tag_ids": [str(tag_id)]},
+        headers=get_auth_headers(),
+    )
+    doc_id = await _insert_doc(test_db, case_id="CLM-run")
+    prompt_id, rev_id = await _insert_prompt(test_db)
+    await test_db.prompt_revisions.update_one(
+        {"_id": ObjectId(rev_id)},
+        {"$set": {"tag_ids": [str(tag_id)]}},
+    )
+
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-run/runs",
+        json={"prompt_id": prompt_id},
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 202, resp.text
+    assert resp.json().get("queue_message_id")
+
+    aq = ad.common.get_analytiq_client()
+    await ad.case_llm.save_case_llm_run(
+        aq,
+        organization_id=TEST_ORG_ID,
+        case_id="CLM-run",
+        prompt_id=prompt_id,
+        prompt_revid=rev_id,
+        prompt_version=1,
+        document_ids=[str(doc_id)],
+        llm_result={"summary": "ok"},
+        run={"prompt": "x"},
+        status="completed",
+    )
+
+    results = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-run/results",
+        params={"prompt_id": prompt_id},
+        headers=get_auth_headers(),
+    )
+    assert results.status_code == 200, results.text
+    body = results.json()
+    assert body["case_run"]["llm_result"] == {"summary": "ok"}
+    assert body["stale"] is False
+    assert "documents" not in body
+
+
+@pytest.mark.asyncio
+async def test_case_llm_results_stale_when_membership_changes(test_db, mock_auth):
+    _create_case("CLM-stale")
+    doc_id = await _insert_doc(test_db, case_id="CLM-stale")
+    prompt_id, rev_id = await _insert_prompt(test_db)
+    aq = ad.common.get_analytiq_client()
+    await ad.case_llm.save_case_llm_run(
+        aq,
+        organization_id=TEST_ORG_ID,
+        case_id="CLM-stale",
+        prompt_id=prompt_id,
+        prompt_revid=rev_id,
+        prompt_version=1,
+        document_ids=[str(doc_id)],
+        llm_result={"summary": "ok"},
+        run=None,
+        status="completed",
+    )
+    extra = await _insert_doc(test_db, case_id="CLM-stale")
+    results = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-stale/results",
+        params={"prompt_id": prompt_id},
+        headers=get_auth_headers(),
+    )
+    body = results.json()
+    assert body["stale"] is True
+    assert "membership" in body["stale_reasons"]
+    assert extra  # used
+
+
+@pytest.mark.asyncio
+async def test_delete_case_removes_case_llm_runs(test_db, mock_auth):
+    _create_case("CLM-del-runs")
+    prompt_id, rev_id = await _insert_prompt(test_db)
+    aq = ad.common.get_analytiq_client()
+    await ad.case_llm.save_case_llm_run(
+        aq,
+        organization_id=TEST_ORG_ID,
+        case_id="CLM-del-runs",
+        prompt_id=prompt_id,
+        prompt_revid=rev_id,
+        prompt_version=1,
+        document_ids=[],
+        llm_result={},
+        run=None,
+        status="completed",
+    )
+    resp = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-del-runs",
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 200
+    remaining = await test_db.case_llm_runs.count_documents({"case_id": "CLM-del-runs"})
+    assert remaining == 0

@@ -17,6 +17,7 @@ ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER: dict[str, Any] = {
 WORKER_QUEUE_COLLECTIONS: tuple[str, ...] = (
     "queues.ocr",
     "queues.llm",
+    "queues.case_llm",
     "queues.webhook",
     "queues.kb_index",
     "queues.flow_run",
@@ -221,6 +222,11 @@ _PHASE2_INDEXES: tuple[IndexSpec, ...] = (
         "cases",
         "cases_org_tag_ids",
         [("organization_id", 1), ("tag_ids", 1)],
+    ),
+    _spec(
+        "case_llm_runs",
+        "case_llm_runs_org_case_prompt_created",
+        [("organization_id", 1), ("case_id", 1), ("prompt_id", 1), ("created_at", -1)],
     ),
     # Per-document cleanup in delete_doc
     _spec(

@@ -126,6 +126,28 @@ async def worker_llm(worker_id: str, slot: WorkerSlot | None = None) -> None:
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
+            msg = await ad.queue.recv_msg(analytiq_client, "case_llm")
+            if msg:
+                _queue_idle_sleep["llm"] = POLL_MIN_SLEEP
+                logger.info(f"Worker {worker_id} processing case LLM msg: {msg}")
+                if slot:
+                    slot.busy = True
+                try:
+                    await ad.msg_handlers.process_case_llm_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(
+                        f"Worker {worker_id} cancelled mid-flight on case LLM msg {msg.get('_id')}; "
+                        f"message will be recovered via visibility timeout"
+                    )
+                    raise
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
+                continue
+
             msg = await ad.queue.recv_msg(analytiq_client, "llm")
             if msg:
                 _queue_idle_sleep["llm"] = POLL_MIN_SLEEP
@@ -547,7 +569,7 @@ async def recover_all_queues(analytiq_client) -> None:
     For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
     so an unfinished claim (e.g. killed worker) does not permanently burn a try.
     """
-    queues = ["ocr", "llm", "kb_index", "webhook"]
+    queues = ["ocr", "llm", "case_llm", "kb_index", "webhook"]
     for queue_name in queues:
         try:
             recovered = await ad.queue.recover_stale_messages(analytiq_client, queue_name)

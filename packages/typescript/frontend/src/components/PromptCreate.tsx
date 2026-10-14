@@ -207,12 +207,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const savePrompt = async () => {
     try {
       setIsLoading(true);
-      // Parse grouped prompt fields
-      // Support both chip entry (preferred) and pasting comma-separated text (legacy UX).
-      const metadataGroupBy = metadataGroupByKeys
-        .flatMap((s) => s.split(','))
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
       const metadataKeysResolvedRaw = metadataKeys
         .flatMap((s) => s.split(','))
         .map((s) => s.trim())
@@ -228,7 +222,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         tag_ids: selectedTagIds,
         model: currentPrompt.model,
         kb_id: selectedKbId || undefined,
-        peer_match_keys: metadataGroupBy,
+        peer_match_keys: [],
         include: {
           ocr_text: includeOcrText,
           metadata_keys: metadataKeysResolved,
@@ -708,47 +702,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               )}
 
               <div className="p-4 bg-gray-50 rounded-md space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">
-                  Grouped Inputs (Optional)
-                </h3>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Metadata group-by keys
-                  </label>
-                  <Autocomplete
-                    multiple
-                    freeSolo
-                    options={[]}
-                    value={metadataGroupByKeys}
-                    onChange={(_, next) => setMetadataGroupByKeys(next as string[])}
-                    disabled={isLoading || isReadOnly}
-                    renderTags={(value, getTagProps) =>
-                      value.map((option, index) => (
-                        (() => {
-                          const tagProps = getTagProps({ index });
-                          // `getTagProps` returns a `key` prop; React doesn't like it being spread.
-                          const { key, ...rest } = tagProps as { key?: React.Key };
-                          return (
-                            <Chip
-                              key={key}
-                              variant="outlined"
-                              label={option}
-                              {...rest}
-                            />
-                          );
-                        })()
-                      ))
-                    }
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        variant="outlined"
-                        size="small"
-                        placeholder="Type key and press Enter"
-                      />
-                    )}
-                  />
-                </div>
+                <h3 className="text-sm font-medium text-gray-700">Document context</h3>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <input
@@ -760,7 +714,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       className="h-4 w-4 text-blue-600 border-gray-300 rounded"
                     />
                     <label htmlFor="include-ocr-text" className="text-xs text-gray-700">
-                      Include OCR text in grouped prompt context
+                      Include OCR text in LLM context
                     </label>
                   </div>
 

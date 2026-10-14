@@ -823,6 +823,36 @@ export interface UpdateCaseParams {
   metadata?: Record<string, string>;
 }
 
+export interface CaseLlmRunStartResponse {
+  message: string;
+  queue_message_id: string;
+}
+
+export interface CaseLlmRunSummary {
+  run_id: string;
+  prompt_revid: string;
+  prompt_version: number;
+  document_ids: string[];
+  llm_result: Record<string, unknown> | null;
+  created_at: string;
+  status: string;
+  run?: {
+    prompt?: string;
+    document_ids?: string[];
+    match_values?: Record<string, unknown>;
+    match_document_ids?: string[];
+  };
+}
+
+export interface CaseLlmResultsResponse {
+  prompt_id: string;
+  latest_prompt_revid: string;
+  stale: boolean;
+  stale_reasons: string[];
+  current_document_ids: string[];
+  case_run: CaseLlmRunSummary | null;
+}
+
 export interface Tag {
   id: string;
   name: string;

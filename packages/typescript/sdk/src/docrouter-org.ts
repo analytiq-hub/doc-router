@@ -24,6 +24,8 @@ import {
   ListCasesResponse,
   CreateCaseParams,
   UpdateCaseParams,
+  CaseLlmRunStartResponse,
+  CaseLlmResultsResponse,
   JsonValue,
   Tag,
   OCRBlock,
@@ -648,6 +650,28 @@ export class DocRouterOrg {
     const { caseId, documentId } = params;
     return this.http.delete<{ message: string }>(
       `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}/documents/${documentId}`
+    );
+  }
+
+  async startCaseLlmRun(params: {
+    caseId: string;
+    promptId: string;
+  }): Promise<CaseLlmRunStartResponse> {
+    const { caseId, promptId } = params;
+    return this.http.post<CaseLlmRunStartResponse>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}/runs`,
+      { prompt_id: promptId }
+    );
+  }
+
+  async getCaseLlmResults(params: {
+    caseId: string;
+    promptId: string;
+  }): Promise<CaseLlmResultsResponse> {
+    const { caseId, promptId } = params;
+    return this.http.get<CaseLlmResultsResponse>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}/results`,
+      { params: { prompt_id: promptId } }
     );
   }
 

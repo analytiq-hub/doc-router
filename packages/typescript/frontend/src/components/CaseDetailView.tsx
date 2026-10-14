@@ -4,16 +4,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import DocumentList from './DocumentList';
+import CaseResultsSidebar from './CaseResultsSidebar';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
 import { caseDisplayName } from '@/utils/caseDisplayName';
 import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { useSession } from 'next-auth/react';
-import { isOrgAdmin } from '@/utils/roles';
 
 type CaseDetailViewProps = {
   organizationId: string;
@@ -23,19 +20,12 @@ type CaseDetailViewProps = {
 const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId }) => {
   const decodedCaseId = decodeURIComponent(caseId);
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const router = useRouter();
-  const { currentOrganization } = useOrganization();
-  const { data: session } = useSession();
-  const canCascadeDelete = currentOrganization
-    ? isOrgAdmin(currentOrganization, session)
-    : false;
 
   const [caseRow, setCaseRow] = useState<Case | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
-  const [cascadeDelete, setCascadeDelete] = useState(false);
+  const [activeTab, setActiveTab] = useState<'documents' | 'results'>('documents');
 
   const loadCase = useCallback(async () => {
     setLoading(true);
@@ -64,25 +54,6 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
   }, [loadCase, docRouterOrgApi]);
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
-
-  const handleDelete = async () => {
-    if (deleteConfirm !== decodedCaseId) {
-      toast.error('Type the case ID exactly to confirm');
-      return;
-    }
-    try {
-      await docRouterOrgApi.deleteCase({ caseId: decodedCaseId, cascade: cascadeDelete });
-      if (cascadeDelete) {
-        toast.success('Case delete started (documents removed in background)');
-        router.push(`/orgs/${organizationId}/cases`);
-        return;
-      }
-      toast.success('Case deleted');
-      router.push(`/orgs/${organizationId}/cases`);
-    } catch (error) {
-      toast.error(getApiErrorMsg(error) || 'Delete failed');
-    }
-  };
 
   if (loading) {
     return <p className="p-4">Loading case…</p>;
@@ -162,42 +133,50 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
         </div>
       )}
 
-      <div className="border rounded p-4 bg-white">
-        <h2 className="text-lg font-semibold mb-3">Documents in this case</h2>
-        <DocumentList organizationId={organizationId} fixedCaseId={decodedCaseId} hideCaseFilter />
-      </div>
-
-      <div className="border border-red-200 rounded p-4 bg-red-50 max-w-xl">
-        <h3 className="font-semibold text-red-800 mb-2">Delete case</h3>
-        <p className="text-sm text-red-700 mb-3">
-          Default: documents are kept and removed from this case. Org admins may also delete all
-          member documents (background job, returns 202).
-        </p>
-        {canCascadeDelete && (
-          <label className="flex items-center gap-2 text-sm mb-3">
-            <input
-              type="checkbox"
-              checked={cascadeDelete}
-              onChange={(e) => setCascadeDelete(e.target.checked)}
-            />
-            Delete all documents in this case
-          </label>
-        )}
-        <input
-          type="text"
-          className="w-full p-2 border rounded mb-2 text-sm"
-          placeholder={`Type ${decodedCaseId} to confirm`}
-          value={deleteConfirm}
-          onChange={(e) => setDeleteConfirm(e.target.value)}
-        />
+      <div className="border-b flex gap-4 text-sm">
         <button
           type="button"
-          onClick={() => void handleDelete()}
-          className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+          className={`pb-2 border-b-2 ${
+            activeTab === 'documents'
+              ? 'border-blue-600 text-blue-700 font-medium'
+              : 'border-transparent text-gray-600'
+          }`}
+          onClick={() => setActiveTab('documents')}
         >
-          Delete case
+          Documents
+        </button>
+        <button
+          type="button"
+          className={`pb-2 border-b-2 ${
+            activeTab === 'results'
+              ? 'border-blue-600 text-blue-700 font-medium'
+              : 'border-transparent text-gray-600'
+          }`}
+          onClick={() => setActiveTab('results')}
+        >
+          Results
         </button>
       </div>
+
+      {activeTab === 'documents' ? (
+        <div className="border rounded p-4 bg-white">
+          <h2 className="text-lg font-semibold mb-3">Documents in this case</h2>
+          <DocumentList organizationId={organizationId} fixedCaseId={decodedCaseId} hideCaseFilter />
+        </div>
+      ) : (
+        <div className="border rounded bg-white overflow-hidden min-h-[32rem] flex flex-col md:flex-row">
+          <div className="w-full md:w-[min(100%,28rem)] md:max-w-md flex-shrink-0 min-h-[32rem]">
+            <CaseResultsSidebar
+              organizationId={organizationId}
+              caseId={decodedCaseId}
+              caseTagIds={caseRow.tag_ids ?? []}
+            />
+          </div>
+          <div className="hidden md:flex flex-1 items-center justify-center bg-gray-50/80 text-sm text-gray-500 border-t md:border-t-0 md:border-l border-black/10 p-8 text-center">
+            Expand a prompt to view case-level extraction fields (same layout as document Extraction).
+          </div>
+        </div>
+      )}
     </div>
   );
 };

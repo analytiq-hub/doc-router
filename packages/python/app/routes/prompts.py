@@ -36,6 +36,12 @@ class IncludeConfig(BaseModel):
 
 
 class PromptConfig(BaseModel):
+    @field_validator("peer_match_keys", mode="before")
+    @classmethod
+    def _deprecated_peer_match_keys(cls, _value: object) -> list[str]:
+        """``peer_match_keys`` is deprecated; case runs replace metadata peer grouping."""
+        return []
+
     name: str
     content: str
     schema_id: Optional[str] = None
@@ -252,7 +258,7 @@ async def create_prompt(
         "organization_id": organization_id,
         "kb_id": prompt.kb_id,  # Store KB ID for RAG
         # Grouped peer fields
-        "peer_match_keys": prompt.peer_match_keys or [],
+        "peer_match_keys": [],
         "include": prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP,
     }
     
@@ -450,7 +456,6 @@ async def update_prompt(
         prompt.schema_version == latest_prompt_revision.get("schema_version") and
         prompt.model == latest_prompt_revision["model"] and
         set(prompt.tag_ids or []) == set(latest_prompt_revision.get("tag_ids") or []) and
-        (prompt.peer_match_keys or []) == latest_prompt_revision.get("peer_match_keys", []) and
         (prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP)
         == latest_prompt_revision.get("include", DEFAULT_INCLUDE_DUMP)
     )
@@ -490,7 +495,7 @@ async def update_prompt(
         "organization_id": organization_id,
         "kb_id": prompt.kb_id,  # Store KB ID for RAG
         # Grouped peer fields
-        "peer_match_keys": prompt.peer_match_keys or [],
+        "peer_match_keys": [],
         "include": prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP,
     }
     
