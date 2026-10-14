@@ -59,9 +59,9 @@ function caseResultsToLlmResponse(
     created_at: run.created_at,
     updated_at: run.created_at,
     run: {
-      ...(run.run as object),
+      ...run.run,
       document_ids: run.document_ids,
-    } as GetLLMResultResponse['run'],
+    },
   };
 }
 

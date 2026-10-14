@@ -646,6 +646,8 @@ export interface GetLLMResultResponse {
     prompt?: string;
     match_values?: Record<string, unknown>;
     match_document_ids?: string[];
+    /** Document IDs included in a case-scoped LLM run. */
+    document_ids?: string[];
   };
 }
 
