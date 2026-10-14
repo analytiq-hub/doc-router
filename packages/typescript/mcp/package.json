@@ -18,7 +18,11 @@
     "CLAUDE.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "install:sdk:local": "node scripts/sdk-install.mjs local",
+    "install:sdk:publish": "node scripts/sdk-install.mjs publish",
+    "build": "npm run build:local",
+    "build:local": "npm run install:sdk:local && tsup",
+    "build:publish": "npm run install:sdk:publish && tsup",
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "start:dev": "tsx src/index.ts",
@@ -26,7 +30,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts,.tsx",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "npm run build:publish && npm run type-check"
   },
   "keywords": [
     "docrouter",
@@ -40,7 +45,7 @@
   "author": "Analytiq",
   "license": "MIT",
   "dependencies": {
-    "@docrouter/sdk": "^2.0.1",
+    "@docrouter/sdk": "^2.0.2",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "zod": "^4.3.6"
   },

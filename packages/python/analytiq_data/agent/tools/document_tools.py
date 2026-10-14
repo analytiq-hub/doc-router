@@ -32,6 +32,7 @@ def _doc_to_serializable(doc: dict) -> dict:
         "state": doc.get("state", ""),
         "tag_ids": doc.get("tag_ids", []),
         "metadata": doc.get("metadata", {}),
+        "case_id": doc.get("case_id"),
     }
 
 
@@ -61,6 +62,14 @@ async def list_documents(context: dict, params: dict) -> dict[str, Any]:
     elif not isinstance(metadata_search, dict):
         metadata_search = None
 
+    case_id = params.get("case_id")
+    list_case_id = None
+    if case_id is not None and str(case_id).strip():
+        try:
+            list_case_id = ad.common.validate_case_id(str(case_id).strip())
+        except ValueError as e:
+            return {"error": str(e)}
+
     docs, total_count = await ad.common.list_docs(
         context["analytiq_client"],
         organization_id=org_id,
@@ -69,6 +78,7 @@ async def list_documents(context: dict, params: dict) -> dict[str, Any]:
         tag_ids=tag_ids,
         name_search=name_search,
         metadata_search=metadata_search,
+        case_id=list_case_id,
     )
     return {
         "documents": [_doc_to_serializable(d) for d in docs],
@@ -120,6 +130,9 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
     document_name = params.get("document_name")
     tag_ids = params.get("tag_ids")
     metadata = params.get("metadata")
+    case_assign = "case_id" in params
+    case_id = params.get("case_id") if case_assign else None
+    create_case_if_missing = bool(params.get("create_case_if_missing", False))
 
     db = _db(context)
     document = await db.docs.find_one(
@@ -155,15 +168,41 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
             return {"error": "metadata must be an object (key-value pairs)"}
         update_dict["metadata"] = {str(k): str(v) for k, v in metadata.items()}
 
-    if not update_dict:
+    if not update_dict and not case_assign:
         return {"message": "No updates provided", "document_id": document_id}
 
-    update_dict["updated_at"] = datetime.now(UTC)
     old_tag_ids = document.get("tag_ids", [])
-    updated = await db.docs.find_one_and_update(
-        {"_id": ObjectId(document_id), "organization_id": org_id},
-        {"$set": update_dict},
-        return_document=True,
+    aq = context["analytiq_client"]
+    user_id = context.get("user_id") or ""
+    try:
+        if case_assign and case_id is None:
+            await ad.common.remove_documents_from_case(
+                aq, org_id, [document_id], set_fields=update_dict or None
+            )
+        elif case_assign:
+            await ad.common.assign_documents_to_case(
+                aq,
+                org_id,
+                [document_id],
+                str(case_id),
+                create_case_if_missing=create_case_if_missing,
+                created_by=user_id,
+                set_fields=update_dict or None,
+            )
+        else:
+            update_dict["updated_at"] = datetime.now(UTC)
+            updated_row = await db.docs.find_one_and_update(
+                {"_id": ObjectId(document_id), "organization_id": org_id},
+                {"$set": update_dict},
+                return_document=True,
+            )
+            if not updated_row:
+                return {"error": "Document not found"}
+    except (ValueError, LookupError) as e:
+        return {"error": str(e)}
+
+    updated = await db.docs.find_one(
+        {"_id": ObjectId(document_id), "organization_id": org_id}
     )
     if not updated:
         return {"error": "Document not found"}
@@ -193,4 +232,5 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
         "document_name": updated.get("user_file_name"),
         "tag_ids": updated.get("tag_ids", []),
         "metadata": updated.get("metadata", {}),
+        "case_id": updated.get("case_id"),
     }

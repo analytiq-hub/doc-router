@@ -100,6 +100,10 @@ async def build_system_message(
     parts.append("## Formatting resource IDs")
     parts.append("When you mention resource IDs in your response text, format them as markdown links using these URI schemes:")
     parts.append("- Document: [doc_id](doc:doc_id)")
+    parts.append(
+        "- Case: use the case id in the URL; link text may be the display name or case id, "
+        "e.g. [Smith claim](case:CLM-100) or [CLM-100](case:CLM-100)"
+    )
     parts.append("- Schema (revision): [schema_revid](schema_rev:schema_revid)")
     parts.append("- Schema (stable ID): [schema_id](schema:schema_id)")
     parts.append("- Prompt (revision): [prompt_revid](prompt_rev:prompt_revid)")

@@ -365,20 +365,6 @@ async def list_docs(
         doc.pop("match_rank", None)
     return documents, total_count
 
-async def bump_doc_updated_at(
-    analytiq_client,
-    document_id: str,
-    organization_id: str | None = None,
-) -> None:
-    """Set ``updated_at`` on a document row (membership / metadata writes)."""
-    db = analytiq_client.mongodb_async[analytiq_client.env]
-    query: dict[str, Any] = {"_id": ObjectId(document_id)}
-    if organization_id:
-        query["organization_id"] = organization_id
-    now = datetime.now(UTC)
-    await db.docs.update_one(query, {"$set": {"updated_at": now}})
-
-
 async def update_doc_state(analytiq_client, document_id: str, state: str):
     """
     Update document state

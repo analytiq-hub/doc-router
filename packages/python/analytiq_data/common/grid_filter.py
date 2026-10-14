@@ -9,7 +9,7 @@ display-name→ID resolution for arbitrary ref fields.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from bson import ObjectId
@@ -17,21 +17,51 @@ from bson import ObjectId
 from analytiq_data.common.tag_grid_filters import resolve_tag_filter_values_to_ids
 
 
+def _utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _is_date_only_input(v: Any) -> bool:
+    if not isinstance(v, str):
+        return False
+    s = v.strip()
+    return len(s) == 10 and s[4] == "-" and s[7] == "-"
+
+
+def _utc_day_start(dt: datetime) -> datetime:
+    d = _utc(dt).date()
+    return datetime.combine(d, datetime.min.time(), tzinfo=UTC)
+
+
+def _utc_day_end_exclusive(dt: datetime) -> datetime:
+    return _utc_day_start(dt) + timedelta(days=1)
+
+
+def _filter_is_date_granularity(raw_value: Any, dt: datetime) -> bool:
+    """True when the UI likely picked a calendar day (MUI date column / midnight UTC)."""
+    if _is_date_only_input(raw_value):
+        return True
+    u = _utc(dt)
+    return u.hour == 0 and u.minute == 0 and u.second == 0 and u.microsecond == 0
+
+
 def parse_dt(v: Any) -> datetime | None:
     if v is None:
         return None
     if isinstance(v, datetime):
-        return v
+        return _utc(v)
     s = str(v).strip()
     if not s:
         return None
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"
     try:
-        return datetime.fromisoformat(s)
+        return _utc(datetime.fromisoformat(s))
     except Exception:
         try:
-            return datetime.fromisoformat(s + "T00:00:00+00:00")
+            return _utc(datetime.fromisoformat(s + "T00:00:00+00:00"))
         except Exception:
             return None
 
@@ -168,18 +198,47 @@ async def build_filter_match(
         # Datetime fields
         if mf in datetime_fields:
             dt = parse_dt(value)
-            if op in ("is", "equals") and dt:
-                clauses.append({mf: dt})
-            elif op in ("not", "doesNotEqual", "does not equal") and dt:
-                clauses.append({mf: {"$ne": dt}})
-            elif op == "after" and dt:
-                clauses.append({mf: {"$gt": dt}})
-            elif op in ("onOrAfter", "on or after") and dt:
-                clauses.append({mf: {"$gte": dt}})
-            elif op == "before" and dt:
-                clauses.append({mf: {"$lt": dt}})
-            elif op in ("onOrBefore", "on or before") and dt:
-                clauses.append({mf: {"$lte": dt}})
+            if not dt:
+                continue
+            date_granularity = _filter_is_date_granularity(value, dt)
+            if op in ("is", "equals"):
+                if date_granularity:
+                    start = _utc_day_start(dt)
+                    clauses.append({mf: {"$gte": start, "$lt": _utc_day_end_exclusive(dt)}})
+                else:
+                    minute = _utc(dt).replace(second=0, microsecond=0)
+                    clauses.append(
+                        {mf: {"$gte": minute, "$lt": minute + timedelta(minutes=1)}}
+                    )
+            elif op in ("not", "doesNotEqual", "does not equal"):
+                if date_granularity:
+                    start = _utc_day_start(dt)
+                    end = _utc_day_end_exclusive(dt)
+                    clauses.append({"$or": [{mf: {"$lt": start}}, {mf: {"$gte": end}}]})
+                else:
+                    minute = _utc(dt).replace(second=0, microsecond=0)
+                    end = minute + timedelta(minutes=1)
+                    clauses.append({"$or": [{mf: {"$lt": minute}}, {mf: {"$gte": end}}]})
+            elif op == "after":
+                if date_granularity:
+                    clauses.append({mf: {"$gte": _utc_day_end_exclusive(dt)}})
+                else:
+                    clauses.append({mf: {"$gt": dt}})
+            elif op in ("onOrAfter", "on or after"):
+                if date_granularity:
+                    clauses.append({mf: {"$gte": _utc_day_start(dt)}})
+                else:
+                    clauses.append({mf: {"$gte": dt}})
+            elif op == "before":
+                if date_granularity:
+                    clauses.append({mf: {"$lt": _utc_day_start(dt)}})
+                else:
+                    clauses.append({mf: {"$lt": dt}})
+            elif op in ("onOrBefore", "on or before"):
+                if date_granularity:
+                    clauses.append({mf: {"$lt": _utc_day_end_exclusive(dt)}})
+                else:
+                    clauses.append({mf: {"$lte": dt}})
             continue
 
         # tag_ids fields — text operators resolve tag names → IDs

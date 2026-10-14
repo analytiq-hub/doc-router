@@ -3,7 +3,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import {
+  DataGrid,
+  GridColDef,
+  GridRenderCellParams,
+  GridFilterModel,
+  GridSortModel,
+} from '@mui/x-data-grid';
 import {
   TextField,
   InputAdornment,
@@ -25,9 +31,49 @@ import { formatLocalDate } from '@/utils/date';
 import { caseDisplayName } from '@/utils/caseDisplayName';
 import { parseAndEncodeMetadataSearch } from '@/utils/documentListQuery';
 import { toast } from 'react-toastify';
+import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
+
+const jsonStringifyForQuery = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) => (typeof v === 'bigint' ? v.toString() : v));
 
 const caseDetailHref = (organizationId: string, caseId: string) =>
   `/orgs/${organizationId}/cases/${encodeURIComponent(caseId)}`;
+
+function caseDateTimeColumn(field: 'created_at' | 'updated_at', headerName: string): GridColDef {
+  return {
+    field,
+    headerName,
+    // Date-only column: matches formatLocalDate display and MUI day-level filter operators.
+    type: 'date',
+    width: 200,
+    flex: 0.85,
+    headerAlign: 'left',
+    align: 'left',
+    valueGetter: (value: unknown, row: Case) => {
+      const v = (row[field] ?? value) as string | Date | null | undefined;
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    },
+    valueFormatter: (params: GridRenderCellParams) => {
+      const p = params as unknown as { value?: unknown } | null;
+      if (!p?.value) return '';
+      const v = p.value as Date | string;
+      const iso = v instanceof Date ? v.toISOString() : String(v);
+      return formatLocalDate(iso);
+    },
+    renderCell: (params: GridRenderCellParams<Case>) => {
+      const raw = params.row[field];
+      if (!raw) return '';
+      return (
+        <div className="flex items-center h-full min-w-0 text-gray-600">
+          <span className="truncate">{formatLocalDate(String(raw))}</span>
+        </div>
+      );
+    },
+  };
+}
 
 const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -43,9 +89,13 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [total, setTotal] = useState(0);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'updated_at', sort: 'desc' }]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
   useEffect(() => {
-    void docRouterOrgApi.listTags({ limit: 100 }).then((r) => setAvailableTags(r.tags)).catch(() => {});
+    void fetchAllOrgTags(docRouterOrgApi)
+      .then(setAvailableTags)
+      .catch((error) => toast.error(getApiErrorMsg(error) || 'Failed to load tags'));
   }, [docRouterOrgApi]);
 
   const loadCases = useCallback(async () => {
@@ -59,6 +109,8 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         metadataSearch: metadataSearch.trim()
           ? parseAndEncodeMetadataSearch(metadataSearch.trim()) || undefined
           : undefined,
+        sort: sortModel.length ? jsonStringifyForQuery(sortModel) : undefined,
+        filters: filterModel.items.length ? jsonStringifyForQuery(filterModel) : undefined,
       });
       setCases(response.cases);
       setTotal(response.total_count);
@@ -68,7 +120,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [docRouterOrgApi, paginationModel, searchTerm, metadataSearch, tagFilters]);
+  }, [docRouterOrgApi, paginationModel, searchTerm, metadataSearch, tagFilters, sortModel, filterModel]);
 
   useEffect(() => {
     void loadCases();
@@ -206,13 +258,11 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         headerName: 'Documents',
         width: 110,
         type: 'number',
+        sortable: false,
+        filterable: false,
       },
-      {
-        field: 'updated_at',
-        headerName: 'Updated',
-        flex: 1,
-        valueFormatter: (value) => formatLocalDate(String(value)),
-      },
+      caseDateTimeColumn('created_at', 'Created'),
+      caseDateTimeColumn('updated_at', 'Updated'),
       {
         field: 'actions',
         headerName: '',
@@ -235,7 +285,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       <div className="flex flex-wrap gap-3 items-center">
         <TextField
           size="small"
-          placeholder="Search case ID..."
+          placeholder="Search cases (ID or name)..."
           value={searchTerm}
           onChange={(e) => {
             setSearchTerm(e.target.value);
@@ -301,6 +351,18 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           pageSizeOptions={[5, 10, 25, 50]}
           rowCount={total}
           paginationMode="server"
+          sortingMode="server"
+          sortModel={sortModel}
+          onSortModelChange={(model) => {
+            setSortModel(model);
+            setPaginationModel((p) => ({ ...p, page: 0 }));
+          }}
+          filterMode="server"
+          filterModel={filterModel}
+          onFilterModelChange={(model) => {
+            setFilterModel(model);
+            setPaginationModel((p) => ({ ...p, page: 0 }));
+          }}
           disableRowSelectionOnClick
         />
       </div>

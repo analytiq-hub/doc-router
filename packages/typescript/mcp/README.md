@@ -18,13 +18,12 @@ export DOCROUTER_ORG_API_TOKEN="your-token"
 ## Publishing Quick Reference
 
 ```bash
-# Build and test
-npm run build && npm run lint && npm run type-check && npm test
+# Publish build uses the npm registry SDK (not the sibling ../sdk)
+npm run build:publish && npm run lint && npm run type-check && npm test
 
-# Update version and publish
+# prepublishOnly runs build:publish + type-check automatically
 npm version patch && npm publish
 
-# Check published package
 npm view @docrouter/mcp
 ```
 
@@ -60,7 +59,15 @@ Clone and install dependencies:
 git clone <repository-url>
 cd packages/typescript/mcp
 npm install
+npm run build          # same as build:local — sibling ../sdk, does not change package.json
 ```
+
+| Script | SDK source | When |
+|--------|------------|------|
+| `npm run build` / `build:local` | Symlink to `../sdk` (after building SDK) | Day-to-day in this monorepo |
+| `npm run build:publish` | npm `@docrouter/sdk@^2.0.2` | Before release; also via `prepublishOnly` on `npm publish` |
+
+Publish `@docrouter/sdk` before `@docrouter/mcp` when MCP needs a newer SDK than npm has.
 
 ## Configuration
 

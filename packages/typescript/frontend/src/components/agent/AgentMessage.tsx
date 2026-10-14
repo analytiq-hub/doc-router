@@ -43,7 +43,7 @@ function DiffBlock({ content }: { content: string }) {
 }
 
 /** URI scheme regex for custom resource links */
-const RESOURCE_URI_RE = /^(doc|schema_rev|schema|prompt_rev|prompt|tag|form_rev|form|kb):(.+)$/;
+const RESOURCE_URI_RE = /^(doc|case|schema_rev|schema|prompt_rev|prompt|tag|form_rev|form|kb):(.+)$/;
 
 /** Pass through our custom schemes; otherwise use defaultUrlTransform. React-markdown's defaultUrlTransform rejects non-http(s) protocols and returns '', which makes href="" resolve to the current page. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- urlTransform signature requires (url, key, node)
@@ -57,6 +57,8 @@ function resolveResourceUri(scheme: string, id: string, orgId: string): string {
   switch (scheme) {
     case 'doc':
       return `/orgs/${orgId}/docs/${id}`;
+    case 'case':
+      return `/orgs/${orgId}/cases/${encodeURIComponent(id)}`;
     case 'schema_rev':
       return `/orgs/${orgId}/schemas/${id}`;
     case 'schema':

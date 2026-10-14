@@ -733,6 +733,8 @@ const tools: Tool[] = [
               name: { type: 'string', description: 'Document name (optional, defaults to filename)' },
               tag_ids: { type: 'array', items: { type: 'string' }, description: 'Optional list of tag IDs' },
               metadata: { type: 'object', description: 'Optional metadata' },
+              case_id: { type: 'string', description: 'Optional case id to assign on upload' },
+              create_case_if_missing: { type: 'boolean', description: 'Create case if case_id is unknown', default: false },
             },
             required: ['file_path'],
           },
@@ -752,6 +754,7 @@ const tools: Tool[] = [
         tagIds: { type: 'string', description: 'Comma-separated list of tag IDs to filter by' },
         nameSearch: { type: 'string', description: 'Search by document name' },
         metadataSearch: { type: 'string', description: 'Search by metadata' },
+        caseId: { type: 'string', description: 'Filter by exact case id' },
       },
     },
   },
@@ -778,6 +781,8 @@ const tools: Tool[] = [
         documentName: { type: 'string', description: 'New document name' },
         tagIds: { type: 'array', items: { type: 'string' }, description: 'Array of tag IDs' },
         metadata: { type: 'object', description: 'Document metadata' },
+        caseId: { type: 'string', description: 'Case id to assign, or null to remove from case' },
+        createCaseIfMissing: { type: 'boolean', description: 'When assigning caseId, create case if missing', default: false },
       },
       required: ['documentId'],
     },
@@ -791,6 +796,83 @@ const tools: Tool[] = [
         documentId: { type: 'string', description: 'ID of the document to delete' },
       },
       required: ['documentId'],
+    },
+  },
+
+  // ========== CASES ==========
+  {
+    name: 'list_cases',
+    description: 'List document cases (search matches case id or display name)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skip: { type: 'number', default: 0 },
+        limit: { type: 'number', default: 50 },
+        caseIdSearch: { type: 'string', description: 'Substring search on case id or name' },
+        tagIds: { type: 'string', description: 'Comma-separated tag ids (all must match)' },
+        metadataSearch: { type: 'string', description: 'Metadata filter key=value,...' },
+      },
+    },
+  },
+  {
+    name: 'get_case',
+    description: 'Get a case by case id',
+    inputSchema: {
+      type: 'object',
+      properties: { caseId: { type: 'string' } },
+      required: ['caseId'],
+    },
+  },
+  {
+    name: 'create_case',
+    description: 'Create a case',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string' },
+        displayName: { type: 'string' },
+        tagIds: { type: 'array', items: { type: 'string' } },
+        metadata: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'update_case',
+    description: 'Update case display name, tags, or metadata',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string' },
+        displayName: { type: 'string' },
+        tagIds: { type: 'array', items: { type: 'string' } },
+        metadata: { type: 'object' },
+      },
+      required: ['caseId'],
+    },
+  },
+  {
+    name: 'delete_case',
+    description: 'Delete a case (documents unassigned by default)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string' },
+        cascade: { type: 'boolean', default: false },
+      },
+      required: ['caseId'],
+    },
+  },
+  {
+    name: 'assign_documents_to_case',
+    description: 'Assign documents to a case',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string' },
+        documentIds: { type: 'array', items: { type: 'string' } },
+        createCaseIfMissing: { type: 'boolean', default: false },
+      },
+      required: ['caseId', 'documentIds'],
     },
   },
 
@@ -1330,6 +1412,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit: getOptionalArg(args, 'limit', 10),
           nameSearch: getOptionalArg(args, 'nameSearch'),
           tagIds: getOptionalArg(args, 'tagIds'),
+          metadataSearch: getOptionalArg(args, 'metadataSearch'),
+          caseId: getOptionalArg(args, 'caseId'),
         });
         return {
           content: [
@@ -1548,7 +1632,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // ========== DOCUMENTS ==========
       case 'upload_documents': {
-        const documentsInput = getArg(args, 'documents') as Array<{ file_path: string; name?: string; tag_ids?: string[]; metadata?: Record<string, string>; }>;
+        const documentsInput = getArg(args, 'documents') as Array<{
+          file_path: string;
+          name?: string;
+          tag_ids?: string[];
+          metadata?: Record<string, string>;
+          case_id?: string;
+          create_case_if_missing?: boolean;
+        }>;
         
         // Read files from disk and encode to base64
         const documents = [];
@@ -1579,6 +1670,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: base64Content,
             tag_ids: doc.tag_ids,
             metadata: doc.metadata,
+            case_id: doc.case_id,
+            create_case_if_missing: doc.create_case_if_missing,
           });
         }
         
@@ -1594,12 +1687,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'update_document': {
-        const result = await docrouterClient.updateDocument({
+        const updateParams: Parameters<DocRouterOrg['updateDocument']>[0] = {
           documentId: getArg(args, 'documentId'),
           documentName: getOptionalArg(args, 'documentName'),
           tagIds: getOptionalArg(args, 'tagIds'),
           metadata: getOptionalArg(args, 'metadata'),
-        });
+        };
+        if (args && 'caseId' in args) {
+          updateParams.caseId = getOptionalArg(args, 'caseId') as string | null | undefined;
+          updateParams.createCaseIfMissing = getOptionalArg(args, 'createCaseIfMissing', false);
+        }
+        const result = await docrouterClient.updateDocument(updateParams);
         return {
           content: [
             {
@@ -1621,6 +1719,71 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify(serializeDates(result), null, 2),
             },
           ],
+        };
+      }
+
+      // ========== CASES ==========
+      case 'list_cases': {
+        const result = await docrouterClient.listCases({
+          skip: getOptionalArg(args, 'skip', 0),
+          limit: getOptionalArg(args, 'limit', 50),
+          caseIdSearch: getOptionalArg(args, 'caseIdSearch'),
+          tagIds: getOptionalArg(args, 'tagIds'),
+          metadataSearch: getOptionalArg(args, 'metadataSearch'),
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
+        };
+      }
+      case 'get_case': {
+        const result = await docrouterClient.getCase({ caseId: getArg(args, 'caseId') });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
+        };
+      }
+      case 'create_case': {
+        const result = await docrouterClient.createCase({
+          body: {
+            case_id: getOptionalArg(args, 'caseId'),
+            display_name: getOptionalArg(args, 'displayName'),
+            tag_ids: getOptionalArg(args, 'tagIds'),
+            metadata: getOptionalArg(args, 'metadata'),
+          },
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
+        };
+      }
+      case 'update_case': {
+        const result = await docrouterClient.updateCase({
+          caseId: getArg(args, 'caseId'),
+          body: {
+            display_name: getOptionalArg(args, 'displayName'),
+            tag_ids: getOptionalArg(args, 'tagIds'),
+            metadata: getOptionalArg(args, 'metadata'),
+          },
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
+        };
+      }
+      case 'delete_case': {
+        const result = await docrouterClient.deleteCase({
+          caseId: getArg(args, 'caseId'),
+          cascade: getOptionalArg(args, 'cascade', false),
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
+        };
+      }
+      case 'assign_documents_to_case': {
+        const result = await docrouterClient.assignDocumentsToCase({
+          caseId: getArg(args, 'caseId'),
+          documentIds: getArg(args, 'documentIds'),
+          createCaseIfMissing: getOptionalArg(args, 'createCaseIfMissing', false),
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
         };
       }
 

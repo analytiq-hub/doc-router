@@ -3528,6 +3528,29 @@ class RenameFlowTriggersEventTypeField(Migration):
             return False
 
 
+class BackfillDocumentUpdatedAt(Migration):
+    def __init__(self):
+        super().__init__(description="Set docs.updated_at from upload_date or state_updated_at when missing")
+
+    async def up(self, db) -> bool:
+        docs = db["docs"]
+        cursor = docs.find(
+            {"updated_at": {"$exists": False}},
+            projection={"upload_date": 1, "state_updated_at": 1},
+        )
+        updated = 0
+        async for doc in cursor:
+            ts = doc.get("state_updated_at") or doc.get("upload_date") or datetime.now(UTC)
+            await docs.update_one({"_id": doc["_id"]}, {"$set": {"updated_at": ts}})
+            updated += 1
+        if updated:
+            logger.info(f"BackfillDocumentUpdatedAt: set updated_at on {updated} document(s)")
+        return True
+
+    async def down(self, db) -> bool:
+        return True
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3575,6 +3598,7 @@ MIGRATIONS = [
     RenameFlowTriggersEventTypeField(),
     FixKbLexicalSearchIndexFilterFields(),
     EnsureKbSearchIndexes(),
+    BackfillDocumentUpdatedAt(),
     # Add more migrations here
 ]
 

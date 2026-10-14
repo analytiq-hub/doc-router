@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import json
 
 import pytest
 from bson import ObjectId
@@ -465,6 +466,110 @@ async def test_delete_doc_without_docs_row_still_cleans_up(test_db, mock_auth):
     await test_db.form_submissions.insert_one({**scope, "form_revid": "x"})
     await ad.common.delete_doc(ad.common.get_analytiq_client(), did, TEST_ORG_ID)
     assert await test_db.form_submissions.count_documents(scope) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_cases_search_matches_display_name(test_db, mock_auth):
+    await ad.common.create_case(
+        ad.common.get_analytiq_client(),
+        TEST_ORG_ID,
+        case_id="CLM-NAME-1",
+        display_name="Smith auto loss",
+        tag_ids=[],
+        metadata={},
+        created_by="u1",
+    )
+    await ad.common.create_case(
+        ad.common.get_analytiq_client(),
+        TEST_ORG_ID,
+        case_id="CLM-OTHER",
+        display_name="Other",
+        tag_ids=[],
+        metadata={},
+        created_by="u1",
+    )
+    cases, total = await ad.common.list_cases(
+        ad.common.get_analytiq_client(),
+        TEST_ORG_ID,
+        case_id_search="smith auto",
+    )
+    assert total == 1
+    assert cases[0]["case_id"] == "CLM-NAME-1"
+
+
+@pytest.mark.asyncio
+async def test_list_cases_grid_created_at_date_range(test_db, mock_auth):
+    """Created column filters: day bucket (is) and onOrAfter/onOrBefore range."""
+    coll = test_db["cases"]
+    await coll.insert_many(
+        [
+            {
+                "organization_id": TEST_ORG_ID,
+                "case_id": "CASE-EARLY",
+                "display_name": "Early",
+                "tag_ids": [],
+                "metadata": {},
+                "created_by": "u1",
+                "created_at": datetime(2026, 1, 10, 12, 0, tzinfo=UTC),
+                "updated_at": datetime(2026, 1, 10, 12, 0, tzinfo=UTC),
+            },
+            {
+                "organization_id": TEST_ORG_ID,
+                "case_id": "CASE-MID",
+                "display_name": "Mid",
+                "tag_ids": [],
+                "metadata": {},
+                "created_by": "u1",
+                "created_at": datetime(2026, 2, 15, 8, 30, tzinfo=UTC),
+                "updated_at": datetime(2026, 2, 15, 8, 30, tzinfo=UTC),
+            },
+            {
+                "organization_id": TEST_ORG_ID,
+                "case_id": "CASE-LATE",
+                "display_name": "Late",
+                "tag_ids": [],
+                "metadata": {},
+                "created_by": "u1",
+                "created_at": datetime(2026, 3, 20, 23, 59, tzinfo=UTC),
+                "updated_at": datetime(2026, 3, 20, 23, 59, tzinfo=UTC),
+            },
+        ]
+    )
+
+    filters = json.dumps(
+        {
+            "items": [
+                {"field": "created_at", "operator": "is", "value": "2026-02-15T00:00:00.000Z"},
+            ],
+            "logicOperator": "and",
+        }
+    )
+    resp = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases",
+        params={"filters": filters, "limit": 50},
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 200, resp.text
+    ids = {c["case_id"] for c in resp.json()["cases"]}
+    assert ids == {"CASE-MID"}
+
+    filters = json.dumps(
+        {
+            "items": [
+                {"field": "created_at", "operator": "onOrAfter", "value": "2026-02-01T00:00:00.000Z"},
+                {"field": "created_at", "operator": "onOrBefore", "value": "2026-02-28T00:00:00.000Z"},
+            ],
+            "logicOperator": "and",
+        }
+    )
+    resp = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases",
+        params={"filters": filters, "limit": 50},
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 200, resp.text
+    ids = {c["case_id"] for c in resp.json()["cases"]}
+    assert ids == {"CASE-MID"}
 
 
 @pytest.mark.parametrize("case_id", [".", "..", "..."])

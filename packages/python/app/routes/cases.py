@@ -1,5 +1,6 @@
 # cases.py
 
+import json
 import logging
 from datetime import datetime, UTC
 from typing import Any, Optional, List, Dict
@@ -104,18 +105,52 @@ async def _finish_case_delete_in_background(
         )
 
 
+def _parse_optional_datetime(value: str | None) -> datetime | None:
+    if not value or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid datetime: {value}") from e
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
 @cases_router.get("/v0/orgs/{organization_id}/cases", response_model=ListCasesResponse)
 async def list_cases_route(
     organization_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    case_id_search: str | None = Query(None),
+    case_id_search: str | None = Query(
+        None,
+        description="Substring match on case id or display name (case-insensitive)",
+    ),
     tag_ids: str | None = Query(None, description="Comma-separated tag IDs"),
     metadata_search: str | None = Query(None),
+    updated_after: str | None = Query(None, description="ISO datetime; cases updated at or after"),
+    updated_before: str | None = Query(None, description="ISO datetime; cases updated at or before"),
+    sort: str | None = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)"),
+    filters: str | None = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)"),
     current_user: User = Depends(get_org_user),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     tag_id_list = [t.strip() for t in tag_ids.split(",") if t.strip()] if tag_ids else None
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON") from e
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON") from e
     cases, total = await ad.common.list_cases(
         analytiq_client,
         organization_id,
@@ -124,6 +159,10 @@ async def list_cases_route(
         case_id_search=case_id_search,
         tag_ids=tag_id_list,
         metadata_search=_parse_metadata_search(metadata_search),
+        updated_after=_parse_optional_datetime(updated_after),
+        updated_before=_parse_optional_datetime(updated_before),
+        sort_model=sort_model,
+        filter_model=filter_model,
     )
     counts = await ad.common.count_documents_in_cases(
         analytiq_client, organization_id, [case["case_id"] for case in cases]

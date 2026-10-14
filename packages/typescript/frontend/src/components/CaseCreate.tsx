@@ -7,6 +7,7 @@ import TagSelector from './TagSelector';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
+import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
 
 const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   organizationId,
@@ -22,9 +23,8 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([]);
 
   useEffect(() => {
-    void docRouterOrgApi
-      .listTags({ limit: 100 })
-      .then((r) => setAvailableTags(r.tags))
+    void fetchAllOrgTags(docRouterOrgApi)
+      .then(setAvailableTags)
       .catch((error) => {
         toast.error(getApiErrorMsg(error) || 'Failed to load tags');
       });

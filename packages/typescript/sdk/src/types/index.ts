@@ -335,6 +335,8 @@ export interface UpdateDocumentParams {
   documentName?: string;
   tagIds?: string[];
   metadata?: Record<string, string>;
+  caseId?: string | null;
+  createCaseIfMissing?: boolean;
 }
 
 export interface DeleteDocumentParams {
@@ -347,6 +349,7 @@ export interface ListDocumentsParams {
   tagIds?: string;
   nameSearch?: string;
   metadataSearch?: string;
+  caseId?: string;
   /** JSON-encoded MUI DataGrid sortModel (array). */
   sort?: string;
   /** JSON-encoded MUI DataGrid filterModel (object). */
@@ -793,6 +796,12 @@ export interface ListCasesParams {
   caseIdSearch?: string;
   tagIds?: string;
   metadataSearch?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListCasesResponse {

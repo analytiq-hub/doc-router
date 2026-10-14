@@ -204,19 +204,43 @@ async def build_cases_match_query(
     case_id_search: str | None = None,
     tag_ids: list[str] | None = None,
     metadata_search: dict[str, str] | None = None,
+    updated_after: datetime | None = None,
+    updated_before: datetime | None = None,
 ) -> dict[str, Any]:
     query: dict[str, Any] = {
         "organization_id": organization_id,
         "deleting_at": None,
     }
     if case_id_search:
-        query["case_id"] = {"$regex": re.escape(case_id_search.strip()), "$options": "i"}
+        term = re.escape(case_id_search.strip())
+        query["$or"] = [
+            {"case_id": {"$regex": term, "$options": "i"}},
+            {"display_name": {"$regex": term, "$options": "i"}},
+        ]
     if tag_ids:
         query["tag_ids"] = {"$all": tag_ids}
     if metadata_search:
         for key, value in metadata_search.items():
             query[f"metadata.{key}"] = value
+    if updated_after is not None or updated_before is not None:
+        bounds: dict[str, Any] = {}
+        if updated_after is not None:
+            bounds["$gte"] = updated_after
+        if updated_before is not None:
+            bounds["$lte"] = updated_before
+        query["updated_at"] = bounds
     return query
+
+
+_CASE_LIST_FIELD_MAP: dict[str, str | None] = {
+    "case_id": "case_id",
+    "display_name": "display_name",
+    "updated_at": "updated_at",
+    "created_at": "created_at",
+    "tag_ids": "tag_ids",
+}
+
+_CASE_LIST_DATETIME_FIELDS = {"updated_at", "created_at"}
 
 
 async def list_cases(
@@ -228,23 +252,42 @@ async def list_cases(
     case_id_search: str | None = None,
     tag_ids: list[str] | None = None,
     metadata_search: dict[str, str] | None = None,
+    updated_after: datetime | None = None,
+    updated_before: datetime | None = None,
+    sort_model: list | None = None,
+    filter_model: dict | None = None,
     sort_field: str = "updated_at",
     sort_dir: int = -1,
 ) -> tuple[list[dict], int]:
+    from analytiq_data.common.grid_filter import build_filter_match, build_sort_doc
+
+    db = analytiq_client.mongodb_async[analytiq_client.env]
     coll = _cases_coll(analytiq_client)
     query = await build_cases_match_query(
         organization_id,
         case_id_search=case_id_search,
         tag_ids=tag_ids,
         metadata_search=metadata_search,
+        updated_after=updated_after,
+        updated_before=updated_before,
     )
+    grid_match = await build_filter_match(
+        filter_model,
+        _CASE_LIST_FIELD_MAP,
+        db=db,
+        organization_id=organization_id,
+        datetime_fields=_CASE_LIST_DATETIME_FIELDS,
+        tag_id_fields={"tag_ids"},
+    )
+    if grid_match:
+        query = {"$and": [query, grid_match]}
+
+    sort_doc = build_sort_doc(sort_model, _CASE_LIST_FIELD_MAP, default_tiebreaker="case_id")
+    if not sort_doc:
+        sort_doc = {sort_field: sort_dir}
+
     total = await coll.count_documents(query)
-    cursor = (
-        coll.find(query)
-        .sort(sort_field, sort_dir)
-        .skip(skip)
-        .limit(limit)
-    )
+    cursor = coll.find(query).sort(list(sort_doc.items())).skip(skip).limit(limit)
     cases = await cursor.to_list(length=limit)
     return cases, total
 

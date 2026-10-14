@@ -10,6 +10,7 @@ import DocumentList from './DocumentList';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
 import { caseDisplayName } from '@/utils/caseDisplayName';
+import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useSession } from 'next-auth/react';
 import { isOrgAdmin } from '@/utils/roles';
@@ -57,7 +58,9 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
 
   useEffect(() => {
     void loadCase();
-    void docRouterOrgApi.listTags({ limit: 100 }).then((r) => setTags(r.tags)).catch(() => {});
+    void fetchAllOrgTags(docRouterOrgApi)
+      .then(setTags)
+      .catch((error) => toast.error(getApiErrorMsg(error) || 'Failed to load tags'));
   }, [loadCase, docRouterOrgApi]);
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);

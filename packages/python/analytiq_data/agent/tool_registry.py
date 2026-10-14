@@ -26,6 +26,8 @@ READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "list_prompts",
     "get_tag",
     "list_tags",
+    "list_cases",
+    "get_case",
     "help_schemas",
     "help_prompts",
     "list_llm_models",
@@ -46,6 +48,7 @@ READ_WRITE_TOOLS: frozenset[str] = frozenset({
     "create_tag",
     "update_tag",
     "delete_tag",
+    "assign_documents_to_case",
 })
 
 
@@ -139,6 +142,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "name_search": {"type": "string", "description": "Search term for document names"},
                     "tag_ids": {"type": "array", "items": {"type": "string"}, "description": "Filter by tag IDs (all must match)"},
                     "metadata_search": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Metadata key-value pairs to filter by"},
+                    "case_id": {"type": "string", "description": "Filter by exact case id"},
                 },
                 "additionalProperties": False,
             },
@@ -156,6 +160,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "document_name": {"type": "string", "description": "New display name for the document"},
                     "tag_ids": {"type": "array", "items": {"type": "string"}, "description": "List of tag IDs to set on the document"},
                     "metadata": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Key-value metadata to set (string values only)"},
+                    "case_id": {"type": "string", "description": "Assign case id; JSON null removes from case"},
+                    "create_case_if_missing": {"type": "boolean", "description": "When assigning case_id, create the case if needed", "default": False},
                 },
                 "additionalProperties": False,
             },
@@ -415,6 +421,54 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_cases",
+            "description": "List document cases in the organization (search matches case id or display name).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skip": {"type": "integer", "default": 0},
+                    "limit": {"type": "integer", "default": 10},
+                    "case_id_search": {"type": "string", "description": "Substring search on case id or name"},
+                    "tag_ids": {"type": "array", "items": {"type": "string"}},
+                    "metadata_search": {"type": "object", "additionalProperties": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_case",
+            "description": "Get one case by case id.",
+            "parameters": {
+                "type": "object",
+                "properties": {"case_id": {"type": "string"}},
+                "required": ["case_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_documents_to_case",
+            "description": "Assign one or more documents to a case (batch up to server limit).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "case_id": {"type": "string"},
+                    "document_ids": {"type": "array", "items": {"type": "string"}},
+                    "create_case_if_missing": {"type": "boolean", "default": False},
+                },
+                "required": ["case_id", "document_ids"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_tags",
             "description": "List tags with optional skip, limit, name_search, and optional MUI DataGrid sort/filters (JSON strings).",
             "parameters": {
@@ -497,6 +551,9 @@ _TOOL_HANDLERS: dict[str, Callable] = {
     "list_documents": agent_tools.list_documents,
     "update_document": agent_tools.update_document,
     "delete_document": agent_tools.delete_document,
+    "list_cases": agent_tools.list_cases,
+    "get_case": agent_tools.get_case,
+    "assign_documents_to_case": agent_tools.assign_documents_to_case,
     "create_schema": agent_tools.create_schema,
     "get_schema": agent_tools.get_schema,
     "list_schemas": agent_tools.list_schemas,

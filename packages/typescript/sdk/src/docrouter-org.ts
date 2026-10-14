@@ -5,7 +5,9 @@ import {
   UploadDocumentMultipartPart,
   UploadDocumentResponse,
   UploadDocumentsResponse,
+  ListDocumentsParams,
   ListDocumentsResponse,
+  UpdateDocumentParams,
   GetDocumentResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
@@ -218,16 +220,7 @@ export class DocRouterOrg {
     return { documents: results.map((r) => r.document) };
   }
 
-  async listDocuments(params?: {
-    skip?: number;
-    limit?: number;
-    tagIds?: string;
-    nameSearch?: string;
-    metadataSearch?: string;
-    caseId?: string;
-    sort?: string;
-    filters?: string;
-  }): Promise<ListDocumentsResponse> {
+  async listDocuments(params?: ListDocumentsParams): Promise<ListDocumentsResponse> {
     const queryParams: Record<string, string | number | undefined> = {
       skip: params?.skip || 0,
       limit: params?.limit || 10,
@@ -315,14 +308,7 @@ export class DocRouterOrg {
     return `${base}/v0/orgs/${this.organizationId}/documents/${documentId}/file?${query.toString()}`;
   }
 
-  async updateDocument(params: {
-    documentId: string;
-    documentName?: string;
-    tagIds?: string[];
-    metadata?: Record<string, string>;
-    caseId?: string | null;
-    createCaseIfMissing?: boolean;
-  }) {
+  async updateDocument(params: UpdateDocumentParams) {
     const { documentId, documentName, tagIds, metadata, caseId, createCaseIfMissing } = params;
     const updateData: {
       tag_ids?: string[];
@@ -610,6 +596,10 @@ export class DocRouterOrg {
     if (params?.caseIdSearch) queryParams.case_id_search = params.caseIdSearch;
     if (params?.tagIds) queryParams.tag_ids = params.tagIds;
     if (params?.metadataSearch) queryParams.metadata_search = params.metadataSearch;
+    if (params?.updatedAfter) queryParams.updated_after = params.updatedAfter;
+    if (params?.updatedBefore) queryParams.updated_before = params.updatedBefore;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
     return this.http.get<ListCasesResponse>(`/v0/orgs/${this.organizationId}/cases`, {
       params: queryParams,
     });
