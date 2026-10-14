@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from .documents import encode_metadata_search
 from .models.case import CaseOut, ListCasesResponse
+from .models.case_llm import CaseLlmResultsResponse, CaseLlmRunStartResponse
 
 
 class CasesAPI:
@@ -100,3 +101,24 @@ class CasesAPI:
             "DELETE",
             f"/v0/orgs/{organization_id}/cases/{case_id}/documents/{document_id}",
         )
+
+    def start_llm_run(
+        self, organization_id: str, case_id: str, prompt_id: str
+    ) -> CaseLlmRunStartResponse:
+        """Queue a case-scoped LLM run (HTTP 202)."""
+        data = self.client.request(
+            "POST",
+            f"/v0/orgs/{organization_id}/cases/{case_id}/runs",
+            json={"prompt_id": prompt_id},
+        )
+        return CaseLlmRunStartResponse(**data)
+
+    def get_llm_results(
+        self, organization_id: str, case_id: str, prompt_id: str
+    ) -> CaseLlmResultsResponse:
+        data = self.client.request(
+            "GET",
+            f"/v0/orgs/{organization_id}/cases/{case_id}/results",
+            params={"prompt_id": prompt_id},
+        )
+        return CaseLlmResultsResponse(**data)

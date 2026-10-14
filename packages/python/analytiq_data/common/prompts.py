@@ -260,26 +260,9 @@ async def get_prompt_revision_ids_by_tag_ids(analytiq_client, tag_ids: list[str]
 
 
 async def get_prompt_group_config(analytiq_client, prompt_revid: str) -> Dict[str, Any]:
-    """
-    Get grouped prompt configuration fields for a prompt revision.
-
-    Returns:
-        {
-            "peer_match_keys": List[str],
-            "include": {
-                "ocr_text": bool,
-                "pdf": bool,
-                "metadata_keys": List[str],
-            }
-        }
-
-    If `peer_match_keys` is empty, the worker still applies `include` when building
-    the single-document LLM context.
-    """
-    # Default prompt uses standard include defaults (single-document, no peer grouping)
+    """Get ``include`` settings for LLM context building for a prompt revision."""
     if prompt_revid == "default":
         return {
-            "peer_match_keys": [],
             "include": {"ocr_text": True, "metadata_keys": [], "pdf": True},
         }
 
@@ -301,7 +284,4 @@ async def get_prompt_group_config(analytiq_client, prompt_revid: str) -> Dict[st
         "pdf": bool(include.get("pdf", True)),
     }
 
-    return {
-        "peer_match_keys": [],
-        "include": include,
-    }
+    return {"include": include}

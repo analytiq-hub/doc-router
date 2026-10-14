@@ -5,7 +5,7 @@ import json
 import logging
 from datetime import datetime, UTC
 from typing import Optional, List, Literal, Dict
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict
 
 # Third-party imports
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
@@ -36,11 +36,7 @@ class IncludeConfig(BaseModel):
 
 
 class PromptConfig(BaseModel):
-    @field_validator("peer_match_keys", mode="before")
-    @classmethod
-    def _deprecated_peer_match_keys(cls, _value: object) -> list[str]:
-        """``peer_match_keys`` is deprecated; case runs replace metadata peer grouping."""
-        return []
+    model_config = ConfigDict(extra="ignore")
 
     name: str
     content: str
@@ -49,8 +45,6 @@ class PromptConfig(BaseModel):
     tag_ids: List[str] = []
     model: str = "gpt-4o-mini"
     kb_id: Optional[str] = None  # Optional knowledge base ID for RAG
-    # Grouped peer prompt fields (see docs/plan-prompt-group-by.md)
-    peer_match_keys: List[str] = []
     include: IncludeConfig = IncludeConfig()
 
 
@@ -62,6 +56,8 @@ DEFAULT_INCLUDE_DUMP: Dict[str, object] = IncludeConfig().model_dump()
 
 
 class Prompt(PromptConfig):
+    model_config = ConfigDict(extra="ignore")
+
     prompt_revid: str           # MongoDB's _id
     prompt_id: str    # Stable identifier
     prompt_version: int
@@ -72,6 +68,28 @@ class ListPromptsResponse(BaseModel):
     prompts: List[Prompt]
     total_count: int
     skip: int
+
+
+def _prompt_revision_body_matches(prompt: PromptConfig, revision: dict) -> bool:
+    include_dump = prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP
+    rev_include = revision.get("include", DEFAULT_INCLUDE_DUMP)
+    return (
+        prompt.content == revision["content"]
+        and prompt.schema_id == revision.get("schema_id")
+        and prompt.schema_version == revision.get("schema_version")
+        and prompt.model == revision["model"]
+        and set(prompt.tag_ids or []) == set(revision.get("tag_ids") or [])
+        and include_dump == rev_include
+        and (prompt.kb_id or None) == (revision.get("kb_id") or None)
+    )
+
+
+def _revision_to_prompt(revision: dict, name: str) -> Prompt:
+    rev = revision.copy()
+    rev["prompt_revid"] = str(rev.pop("_id"))
+    rev["name"] = name
+    rev.pop("peer_match_keys", None)
+    return Prompt(**rev)
 
 # Helper functions
 async def get_prompt_id_and_version(prompt_id: Optional[str] = None) -> tuple[str, int]:
@@ -257,8 +275,6 @@ async def create_prompt(
         "model": prompt.model,
         "organization_id": organization_id,
         "kb_id": prompt.kb_id,  # Store KB ID for RAG
-        # Grouped peer fields
-        "peer_match_keys": [],
         "include": prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP,
     }
     
@@ -385,10 +401,7 @@ async def get_prompt(
         raise HTTPException(status_code=404, detail="Prompt not found or not in this organization")
     
     # Combine the data
-    revision['prompt_revid'] = str(revision.pop('_id'))
-    revision['name'] = prompt['name']
-    
-    return Prompt(**revision)
+    return _revision_to_prompt(revision, prompt["name"])
 
 @prompts_router.put("/v0/orgs/{organization_id}/prompts/{prompt_id}", response_model=Prompt)
 async def update_prompt(
@@ -469,14 +482,13 @@ async def update_prompt(
 
         if only_name_changed:
             if result.modified_count > 0:
-                # Return the updated prompt
-                updated_revision = latest_prompt_revision.copy()
-                updated_revision["prompt_revid"] = str(updated_revision.pop("_id"))
-                updated_revision["name"] = prompt.name
-                return Prompt(**updated_revision)
+                return _revision_to_prompt(latest_prompt_revision, prompt.name)
             else:
                 raise HTTPException(status_code=500, detail="Failed to update prompt name")
-    
+
+    if _prompt_revision_body_matches(prompt, latest_prompt_revision):
+        return _revision_to_prompt(latest_prompt_revision, prompt.name)
+
     # If other fields changed, create a new version
     # Get the next version number using the stable prompt_id
     _, new_prompt_version = await get_prompt_id_and_version(prompt_id)
@@ -494,8 +506,6 @@ async def update_prompt(
         "model": prompt.model,
         "organization_id": organization_id,
         "kb_id": prompt.kb_id,  # Store KB ID for RAG
-        # Grouped peer fields
-        "peer_match_keys": [],
         "include": prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP,
     }
     

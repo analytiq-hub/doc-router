@@ -50,7 +50,6 @@ async def test_build_prompt_context_metadata_keys_filters(test_db, mock_auth, se
         "user_file_name": "doc.pdf",
     }
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": ["invoice_id"]},
     }
     with (
@@ -85,7 +84,6 @@ async def test_build_prompt_context_empty_metadata_keys_omits_metadata_section(
     analytiq_client = ad.common.get_analytiq_client()
     doc = {"_id": ObjectId(), "metadata": {"x": 1}, "user_file_name": "d.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
     }
     with (
@@ -112,7 +110,6 @@ async def test_build_prompt_context_metadata_star_includes_all(test_db, mock_aut
     analytiq_client = ad.common.get_analytiq_client()
     doc = {"_id": ObjectId(), "metadata": {"a": 1, "b": 2}, "user_file_name": "d.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": ["*"]},
     }
     with (
@@ -141,10 +138,10 @@ async def test_build_prompt_context_ocr_toggle(test_db, mock_auth, setup_test_mo
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "scan.pdf"}
 
     async def _group_off(_client, _revid):
-        return {"peer_match_keys": [], "include": {"ocr_text": False, "pdf": False, "metadata_keys": []}}
+        return {"include": {"ocr_text": False, "pdf": False, "metadata_keys": []}}
 
     async def _group_on(_client, _revid):
-        return {"peer_match_keys": [], "include": {"ocr_text": True, "pdf": False, "metadata_keys": []}}
+        return {"include": {"ocr_text": True, "pdf": False, "metadata_keys": []}}
 
     with patch("analytiq_data.llm.llm.ad.common.get_prompt_content", new_callable=AsyncMock, return_value="X"):
         with patch(
@@ -184,7 +181,6 @@ async def test_build_prompt_context_pdf_toggle_off_skips_attachment(test_db, moc
     analytiq_client = ad.common.get_analytiq_client()
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "z.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
     }
     attach = AsyncMock(return_value=(b"%PDF fake", "z.pdf"))
@@ -210,7 +206,6 @@ async def test_build_prompt_context_pdf_file_block_non_openai(test_db, mock_auth
     pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj trailer<<>>\n%%EOF\n"
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "x.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": True, "metadata_keys": []},
     }
     with (
@@ -237,7 +232,6 @@ async def test_build_prompt_context_pdf_openai_uploads_file(test_db, mock_auth, 
     pdf_bytes = b"%PDF-1.4\nfake\n%%EOF\n"
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "q.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": True, "metadata_keys": []},
     }
     mock_create = AsyncMock(return_value=SimpleNamespace(id="file-openai-xyz"))
@@ -264,7 +258,6 @@ async def test_build_prompt_context_pdf_embedded_when_no_vision(test_db, mock_au
     pdf_bytes = b"%PDF-1.4\nz\n%%EOF\n"
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "z.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": True, "metadata_keys": []},
     }
     with (
@@ -288,7 +281,6 @@ async def test_build_prompt_context_xai_embeds_pdf_even_if_vision_supported(test
     pdf_bytes = b"%PDF-1.4\nxai\n%%EOF\n"
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "x.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": True, "metadata_keys": []},
     }
     with (
@@ -323,7 +315,6 @@ async def test_build_prompt_context_ordered_documents_group_header(test_db, mock
         "user_file_name": "second.pdf",
     }
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": ["slot"]},
     }
     with (
@@ -455,7 +446,6 @@ async def test_build_prompt_context_prepends_kb_system_prompt(test_db, mock_auth
     analytiq_client = ad.common.get_analytiq_client()
     doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "doc.pdf"}
     group_cfg = {
-        "peer_match_keys": [],
         "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
     }
     with (

@@ -8,6 +8,7 @@ import pytest
 from docrouter_sdk.cases import CasesAPI
 from docrouter_sdk.documents import DocumentsAPI
 from docrouter_sdk.models.case import CaseOut, ListCasesResponse
+from docrouter_sdk.models.case_llm import CaseLlmResultsResponse, CaseLlmRunStartResponse
 
 
 ORG = "org-123"
@@ -149,6 +150,38 @@ class TestCasesAPI:
             f"/v0/orgs/{ORG}/cases/CLM-1/documents/doc-9",
         )
 
+    def test_start_llm_run(self, cases_api, mock_client):
+        mock_client.request.return_value = {
+            "message": "Case LLM run queued",
+            "queue_message_id": "msg-1",
+        }
+        out = cases_api.start_llm_run(ORG, "CLM-1", "prompt-abc")
+        mock_client.request.assert_called_once_with(
+            "POST",
+            f"/v0/orgs/{ORG}/cases/CLM-1/runs",
+            json={"prompt_id": "prompt-abc"},
+        )
+        assert isinstance(out, CaseLlmRunStartResponse)
+        assert out.queue_message_id == "msg-1"
+
+    def test_get_llm_results(self, cases_api, mock_client):
+        mock_client.request.return_value = {
+            "prompt_id": "prompt-abc",
+            "latest_prompt_revid": "rev-1",
+            "stale": True,
+            "stale_reasons": ["no_completed_run"],
+            "current_document_ids": ["d1"],
+            "case_run": None,
+        }
+        out = cases_api.get_llm_results(ORG, "CLM-1", "prompt-abc")
+        mock_client.request.assert_called_once_with(
+            "GET",
+            f"/v0/orgs/{ORG}/cases/CLM-1/results",
+            params={"prompt_id": "prompt-abc"},
+        )
+        assert isinstance(out, CaseLlmResultsResponse)
+        assert out.stale is True
+
 
 class TestDocumentsAPICaseFields:
     def test_list_includes_case_id_param(self, documents_api, mock_client):
@@ -201,4 +234,11 @@ def test_document_update_dump_leaves_out_unset_fields():
 
 
 def test_case_models_exported():
-    from docrouter_sdk.models import CaseCreate, CaseUpdate, CaseOut, ListCasesResponse  # noqa: F401
+    from docrouter_sdk.models import (  # noqa: F401
+        CaseCreate,
+        CaseUpdate,
+        CaseOut,
+        ListCasesResponse,
+        CaseLlmRunStartResponse,
+        CaseLlmResultsResponse,
+    )

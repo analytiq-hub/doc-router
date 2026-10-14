@@ -1038,8 +1038,6 @@ export interface Prompt {
   tag_ids?: string[];
   model?: string;
   kb_id?: string;
-  // Grouped peer prompt fields (see docs/plan-prompt-group-by.md)
-  peer_match_keys?: string[];
   include?: {
     ocr_text?: boolean;
     metadata_keys?: string[];

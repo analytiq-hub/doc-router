@@ -52,7 +52,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     tag_ids: [],
     model: undefined,
     kb_id: undefined,
-    peer_match_keys: [],
     include: {
       ocr_text: true,
       metadata_keys: [],
@@ -72,7 +71,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [llmModels, setLLMModels] = useState<LLMChatModel[]>([]);
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [selectedKbId, setSelectedKbId] = useState<string>('');
-  const [metadataGroupByKeys, setMetadataGroupByKeys] = useState<string[]>([]);
   const [metadataKeys, setMetadataKeys] = useState<string[]>([]);
   const [includeOcrText, setIncludeOcrText] = useState<boolean>(true);
   const [includePdf, setIncludePdf] = useState<boolean>(true);
@@ -141,7 +139,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             tag_ids: prompt.tag_ids || [],
             model: prompt.model,
             kb_id: prompt.kb_id,
-            peer_match_keys: prompt.peer_match_keys || [],
             include: prompt.include || {
               ocr_text: true,
               metadata_keys: [],
@@ -151,7 +148,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           setSelectedTagIds(prompt.tag_ids || []);
           setSelectedSchema(prompt.schema_id || '');
           setSelectedKbId(prompt.kb_id || '');
-          setMetadataGroupByKeys(prompt.peer_match_keys || []);
           setMetadataKeys(prompt.include?.metadata_keys || []);
           setIncludeOcrText(prompt.include?.ocr_text ?? true);
           setIncludePdf(prompt.include?.pdf ?? true);
@@ -222,7 +218,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         tag_ids: selectedTagIds,
         model: currentPrompt.model,
         kb_id: selectedKbId || undefined,
-        peer_match_keys: [],
         include: {
           ocr_text: includeOcrText,
           metadata_keys: metadataKeysResolved,
@@ -247,7 +242,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         tag_ids: [],
         model: undefined,
         kb_id: undefined,
-        peer_match_keys: [],
         include: {
           ocr_text: true,
           metadata_keys: [],
@@ -259,7 +253,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       setSelectedSchemaDetails(null);
       setSelectedTagIds([]);
       setSelectedKbId('');
-      setMetadataGroupByKeys([]);
       setMetadataKeys([]);
       setIncludeOcrText(true);
       setIncludePdf(true);
@@ -406,7 +399,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       tag_ids: prompt.tag_ids || [],
                       model: prompt.model,
                       kb_id: prompt.kb_id,
-                      peer_match_keys: prompt.peer_match_keys || [],
                       include: prompt.include || {
                         ocr_text: true,
                         metadata_keys: [],
@@ -416,7 +408,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
-                    setMetadataGroupByKeys(prompt.peer_match_keys || []);
                     setMetadataKeys(prompt.include?.metadata_keys || []);
                     setIncludeOcrText(prompt.include?.ocr_text ?? true);
                     setIncludePdf(prompt.include?.pdf ?? true);
@@ -499,7 +490,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       tag_ids: prompt.tag_ids || [],
                       model: prompt.model,
                       kb_id: prompt.kb_id,
-                      peer_match_keys: prompt.peer_match_keys || [],
                       include: prompt.include || {
                         ocr_text: true,
                         metadata_keys: [],
@@ -509,7 +499,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
-                    setMetadataGroupByKeys(prompt.peer_match_keys || []);
                     setMetadataKeys(prompt.include?.metadata_keys || []);
                     setIncludeOcrText(prompt.include?.ocr_text ?? true);
                     setIncludePdf(prompt.include?.pdf ?? true);
@@ -557,7 +546,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     tag_ids: [],
                     model: undefined,
                     kb_id: undefined,
-                    peer_match_keys: [],
                     include: {
                       ocr_text: true,
                       metadata_keys: [],
@@ -568,7 +556,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   setSelectedSchemaDetails(null);
                   setSelectedTagIds([]);
                   setSelectedKbId('');
-                  setMetadataGroupByKeys([]);
                   setMetadataKeys([]);
                   setIncludeOcrText(true);
                   setIncludePdf(true);

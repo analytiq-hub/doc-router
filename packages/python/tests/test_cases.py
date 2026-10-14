@@ -703,7 +703,6 @@ async def _insert_prompt(test_db, *, name="Case prompt"):
             "organization_id": TEST_ORG_ID,
             "tag_ids": [],
             "model": "gpt-4o-mini",
-            "peer_match_keys": ["legacy"],
             "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
             "created_at": datetime.now(UTC),
             "created_by": "test",

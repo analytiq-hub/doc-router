@@ -1,12 +1,15 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
+
+from pydantic import BaseModel, ConfigDict
 
 
 class IncludeConfig(BaseModel):
     """
     Controls which parts of each document are included in the generated LLM context.
     """
+    model_config = ConfigDict(extra="ignore")
+
     ocr_text: bool = True
     # New-style metadata inclusion: only these keys are exposed to the model.
     # Use ["*"] to mean "include all metadata".
@@ -15,6 +18,8 @@ class IncludeConfig(BaseModel):
 
 
 class PromptConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     name: str
     content: str
     schema_id: Optional[str] = None
@@ -22,8 +27,6 @@ class PromptConfig(BaseModel):
     tag_ids: List[str] = []
     model: str = "gpt-4o-mini"
     kb_id: Optional[str] = None  # Optional knowledge base ID for RAG
-    # Grouped peer prompt fields (see docs/plan-prompt-group-by.md)
-    peer_match_keys: List[str] = []
     include: IncludeConfig = IncludeConfig()
 
 

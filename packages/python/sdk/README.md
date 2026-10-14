@@ -218,6 +218,21 @@ updated_prompt = client.prompts.update(organization_id, prompt_id, prompt_config
 client.prompts.delete(organization_id, prompt_id)
 ```
 
+### Cases API
+
+```python
+# Create and list cases
+case = client.cases.create(organization_id, {"case_id": "CLM-100", "display_name": "Claim"})
+cases = client.cases.list(organization_id, case_id_search="CLM")
+
+# Assign documents
+client.cases.assign_documents(organization_id, "CLM-100", ["doc-id-1"], create_case_if_missing=False)
+
+# Case-scoped LLM run (queues worker job; returns 202)
+queued = client.cases.start_llm_run(organization_id, "CLM-100", prompt_id="...")
+results = client.cases.get_llm_results(organization_id, "CLM-100", prompt_id="...")
+```
+
 ### Tags API
 
 ```python

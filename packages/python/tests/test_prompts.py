@@ -881,4 +881,57 @@ async def test_list_prompt_versions(test_db, mock_auth, setup_test_models):
         headers=get_auth_headers()
     )
     
-    logger.info(f"test_list_prompt_versions() end") 
+    logger.info(f"test_list_prompt_versions() end")
+
+
+@pytest.mark.asyncio
+async def test_legacy_peer_match_keys_request_ignored(test_db, mock_auth, setup_test_models):
+    """Requests may still send removed peer_match_keys; API ignores them."""
+    create_resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts",
+        json={
+            "name": "Peer legacy prompt",
+            "content": "Body",
+            "model": "gpt-4o-mini",
+            "tag_ids": [],
+            "peer_match_keys": ["policy_number"],
+        },
+        headers=get_auth_headers(),
+    )
+    assert create_resp.status_code == 200
+    body = create_resp.json()
+    assert "peer_match_keys" not in body
+    prompt_id = body["prompt_id"]
+    rev_id = body["prompt_revid"]
+
+    await test_db.prompt_revisions.update_one(
+        {"_id": ObjectId(rev_id)},
+        {"$set": {"peer_match_keys": ["legacy_in_db"]}},
+    )
+
+    get_resp = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{rev_id}",
+        headers=get_auth_headers(),
+    )
+    assert get_resp.status_code == 200
+    assert "peer_match_keys" not in get_resp.json()
+
+    update_resp = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{prompt_id}",
+        json={
+            "name": "Peer legacy prompt",
+            "content": "Body",
+            "model": "gpt-4o-mini",
+            "tag_ids": [],
+            "peer_match_keys": ["should_not_create_v2"],
+        },
+        headers=get_auth_headers(),
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["prompt_version"] == 1
+    assert "peer_match_keys" not in update_resp.json()
+
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{prompt_id}",
+        headers=get_auth_headers(),
+    )
