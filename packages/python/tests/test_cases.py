@@ -577,3 +577,40 @@ def test_validate_case_id_rejects_dot_only_ids(case_id):
     with pytest.raises(ValueError):
         ad.common.validate_case_id(case_id)
     assert ad.common.validate_case_id("a.b") == "a.b"
+
+
+@pytest.mark.asyncio
+async def test_list_cases_default_sort_is_updated_at_desc(test_db, mock_auth):
+    """With no sort model, cases come back most recently updated first (not by case id)."""
+    await test_db["cases"].insert_many(
+        [
+            {
+                "organization_id": TEST_ORG_ID,
+                "case_id": case_id,
+                "display_name": case_id,
+                "tag_ids": [],
+                "metadata": {},
+                "created_by": "u1",
+                "created_at": updated,
+                "updated_at": updated,
+            }
+            for case_id, updated in [
+                ("CASE-Z-OLD", datetime(2026, 1, 1, tzinfo=UTC)),
+                ("CASE-A-NEW", datetime(2026, 3, 1, tzinfo=UTC)),
+                ("CASE-M-MID", datetime(2026, 2, 1, tzinfo=UTC)),
+            ]
+        ]
+    )
+    aq = ad.common.get_analytiq_client()
+    cases, _ = await ad.common.list_cases(aq, TEST_ORG_ID)
+    assert [c["case_id"] for c in cases] == ["CASE-A-NEW", "CASE-M-MID", "CASE-Z-OLD"]
+
+    # An explicit sort by case_id alone is still honored.
+    cases, _ = await ad.common.list_cases(
+        aq, TEST_ORG_ID, sort_model=[{"field": "case_id", "sort": "asc"}]
+    )
+    assert [c["case_id"] for c in cases] == ["CASE-A-NEW", "CASE-M-MID", "CASE-Z-OLD"]
+    cases, _ = await ad.common.list_cases(
+        aq, TEST_ORG_ID, sort_model=[{"field": "case_id", "sort": "desc"}]
+    )
+    assert [c["case_id"] for c in cases] == ["CASE-Z-OLD", "CASE-M-MID", "CASE-A-NEW"]

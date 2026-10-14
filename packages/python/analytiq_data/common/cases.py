@@ -282,9 +282,15 @@ async def list_cases(
     if grid_match:
         query = {"$and": [query, grid_match]}
 
-    sort_doc = build_sort_doc(sort_model, _CASE_LIST_FIELD_MAP, default_tiebreaker="case_id")
-    if not sort_doc:
+    has_usable_sort = any(
+        isinstance(item, dict) and _CASE_LIST_FIELD_MAP.get(str(item.get("field", "")))
+        for item in (sort_model or [])
+    )
+    if has_usable_sort:
+        sort_doc = build_sort_doc(sort_model, _CASE_LIST_FIELD_MAP, default_tiebreaker="case_id")
+    else:
         sort_doc = {sort_field: sort_dir}
+        sort_doc.setdefault("case_id", -1)
 
     total = await coll.count_documents(query)
     cursor = coll.find(query).sort(list(sort_doc.items())).skip(skip).limit(limit)
