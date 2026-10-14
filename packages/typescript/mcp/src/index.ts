@@ -811,6 +811,10 @@ const tools: Tool[] = [
         caseIdSearch: { type: 'string', description: 'Substring search on case id or name' },
         tagIds: { type: 'string', description: 'Comma-separated tag ids (all must match)' },
         metadataSearch: { type: 'string', description: 'Metadata filter key=value,...' },
+        updatedAfter: { type: 'string', description: 'ISO datetime; cases updated at or after' },
+        updatedBefore: { type: 'string', description: 'ISO datetime; cases updated at or before' },
+        sort: { type: 'string', description: 'JSON-encoded MUI DataGrid sortModel (array)' },
+        filters: { type: 'string', description: 'JSON-encoded MUI DataGrid filterModel (object)' },
       },
     },
   },
@@ -1730,6 +1734,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           caseIdSearch: getOptionalArg(args, 'caseIdSearch'),
           tagIds: getOptionalArg(args, 'tagIds'),
           metadataSearch: getOptionalArg(args, 'metadataSearch'),
+          updatedAfter: getOptionalArg(args, 'updatedAfter'),
+          updatedBefore: getOptionalArg(args, 'updatedBefore'),
+          sort: getOptionalArg(args, 'sort'),
+          filters: getOptionalArg(args, 'filters'),
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],

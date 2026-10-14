@@ -77,6 +77,30 @@ class TestCasesAPI:
         )
         assert isinstance(ListCasesResponse(**mock_client.request.return_value), ListCasesResponse)
 
+    def test_list_passes_grid_and_updated_range_params(self, cases_api, mock_client):
+        mock_client.request.return_value = {"cases": [], "total_count": 0, "skip": 0}
+        sort = [{"field": "updated_at", "sort": "desc"}]
+        filters = {"items": [], "logicOperator": "and"}
+        cases_api.list(
+            ORG,
+            updated_after="2026-01-01T00:00:00Z",
+            updated_before="2026-12-31T23:59:59Z",
+            sort=sort,
+            filters=filters,
+        )
+        mock_client.request.assert_called_once_with(
+            "GET",
+            f"/v0/orgs/{ORG}/cases",
+            params={
+                "skip": 0,
+                "limit": 50,
+                "updated_after": "2026-01-01T00:00:00Z",
+                "updated_before": "2026-12-31T23:59:59Z",
+                "sort": '[{"field": "updated_at", "sort": "desc"}]',
+                "filters": '{"items": [], "logicOperator": "and"}',
+            },
+        )
+
     def test_get_case_path(self, cases_api, mock_client):
         mock_client.request.return_value = _case_payload("A:B")
         cases_api.get(ORG, "A:B")

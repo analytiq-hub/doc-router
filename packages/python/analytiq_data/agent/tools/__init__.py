@@ -2,7 +2,14 @@
 # Each module exports async functions that take (context, params) and return a result dict.
 
 from .document_tools import list_documents, update_document, delete_document
-from .case_tools import list_cases, get_case, assign_documents_to_case
+from .case_tools import (
+    list_cases,
+    get_case,
+    create_case,
+    update_case,
+    delete_case,
+    assign_documents_to_case,
+)
 from .extraction_tools import (
     get_ocr_text,
     run_extraction,
@@ -41,6 +48,9 @@ __all__ = [
     "delete_document",
     "list_cases",
     "get_case",
+    "create_case",
+    "update_case",
+    "delete_case",
     "assign_documents_to_case",
     "get_ocr_text",
     "run_extraction",

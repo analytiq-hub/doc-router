@@ -434,6 +434,74 @@ async def test_concurrent_assign_and_delete_leave_no_orphans(test_db, mock_auth)
 
 
 @pytest.mark.asyncio
+async def test_delete_document_in_case_leaves_case_intact(test_db, mock_auth):
+    """Deleting a member document removes the doc but not the case row (plan §2.3)."""
+    _create_case("DOC-IN-CASE")
+    doc_id = await _insert_doc(test_db, case_id="DOC-IN-CASE")
+    did = str(doc_id)
+
+    resp = client.delete(f"/v0/orgs/{TEST_ORG_ID}/documents/{did}", headers=get_auth_headers())
+    assert resp.status_code == 200, resp.text
+    assert await test_db.docs.find_one({"_id": doc_id}) is None
+    assert await test_db.cases.count_documents({"case_id": "DOC-IN-CASE"}) == 1
+
+    listed = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/DOC-IN-CASE",
+        headers=get_auth_headers(),
+    )
+    assert listed.status_code == 200
+    assert listed.json()["document_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_cases_api_updated_after_and_sort(test_db, mock_auth):
+    await test_db["cases"].insert_many(
+        [
+            {
+                "organization_id": TEST_ORG_ID,
+                "case_id": "API-OLD",
+                "display_name": "Old",
+                "tag_ids": [],
+                "metadata": {},
+                "created_by": "u1",
+                "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+                "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+            },
+            {
+                "organization_id": TEST_ORG_ID,
+                "case_id": "API-NEW",
+                "display_name": "New",
+                "tag_ids": [],
+                "metadata": {},
+                "created_by": "u1",
+                "created_at": datetime(2026, 3, 1, tzinfo=UTC),
+                "updated_at": datetime(2026, 3, 1, tzinfo=UTC),
+            },
+        ]
+    )
+    resp = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases",
+        params={"updated_after": "2026-02-01T00:00:00Z", "limit": 50},
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 200, resp.text
+    ids = {c["case_id"] for c in resp.json()["cases"]}
+    assert ids == {"API-NEW"}
+
+    sort = json.dumps([{"field": "case_id", "sort": "asc"}])
+    resp = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases",
+        params={"sort": sort, "limit": 50},
+        headers=get_auth_headers(),
+    )
+    assert resp.status_code == 200, resp.text
+    assert [c["case_id"] for c in resp.json()["cases"] if c["case_id"].startswith("API-")] == [
+        "API-NEW",
+        "API-OLD",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_delete_document_removes_related_data(test_db, mock_auth):
     doc_id = await _insert_doc(test_db)
     did = str(doc_id)

@@ -48,6 +48,9 @@ READ_WRITE_TOOLS: frozenset[str] = frozenset({
     "create_tag",
     "update_tag",
     "delete_tag",
+    "create_case",
+    "update_case",
+    "delete_case",
     "assign_documents_to_case",
 })
 
@@ -431,6 +434,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "case_id_search": {"type": "string", "description": "Substring search on case id or name"},
                     "tag_ids": {"type": "array", "items": {"type": "string"}},
                     "metadata_search": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "updated_after": {"type": "string", "description": "ISO datetime; updated at or after"},
+                    "updated_before": {"type": "string", "description": "ISO datetime; updated at or before"},
+                    "sort": {"type": "string", "description": "JSON-encoded MUI sortModel array"},
+                    "filters": {"type": "string", "description": "JSON-encoded MUI filterModel object"},
                 },
                 "additionalProperties": False,
             },
@@ -444,6 +451,57 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {"case_id": {"type": "string"}},
+                "required": ["case_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_case",
+            "description": "Create a document case (optional case_id; auto-generated if omitted).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "case_id": {"type": "string"},
+                    "display_name": {"type": "string"},
+                    "tag_ids": {"type": "array", "items": {"type": "string"}},
+                    "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_case",
+            "description": "Update case display name, tags, or metadata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "case_id": {"type": "string"},
+                    "display_name": {"type": "string"},
+                    "tag_ids": {"type": "array", "items": {"type": "string"}},
+                    "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+                },
+                "required": ["case_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_case",
+            "description": "Delete a case. Default clears case_id on member documents; cascade deletes documents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "case_id": {"type": "string"},
+                    "cascade": {"type": "boolean", "default": False},
+                },
                 "required": ["case_id"],
                 "additionalProperties": False,
             },
@@ -553,6 +611,9 @@ _TOOL_HANDLERS: dict[str, Callable] = {
     "delete_document": agent_tools.delete_document,
     "list_cases": agent_tools.list_cases,
     "get_case": agent_tools.get_case,
+    "create_case": agent_tools.create_case,
+    "update_case": agent_tools.update_case,
+    "delete_case": agent_tools.delete_case,
     "assign_documents_to_case": agent_tools.assign_documents_to_case,
     "create_schema": agent_tools.create_schema,
     "get_schema": agent_tools.get_schema,

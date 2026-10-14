@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional
+import json
+from typing import Any, Dict, List, Optional, Union
 
 from .documents import encode_metadata_search
 from .models.case import CaseOut, ListCasesResponse
@@ -24,6 +25,10 @@ class CasesAPI:
         case_id_search: Optional[str] = None,
         tag_ids: Optional[List[str]] = None,
         metadata_search: Optional[Dict[str, str]] = None,
+        updated_after: Optional[str] = None,
+        updated_before: Optional[str] = None,
+        sort: Optional[Union[str, List[Dict[str, Any]]]] = None,
+        filters: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> ListCasesResponse:
         """List cases. ``tag_ids`` and ``metadata_search`` take the same types as ``documents.list``."""
         params: Dict[str, Any] = {"skip": skip, "limit": limit}
@@ -33,6 +38,14 @@ class CasesAPI:
             params["tag_ids"] = ",".join(tag_ids)
         if metadata_search:
             params["metadata_search"] = encode_metadata_search(metadata_search)
+        if updated_after:
+            params["updated_after"] = updated_after
+        if updated_before:
+            params["updated_before"] = updated_before
+        if sort is not None:
+            params["sort"] = sort if isinstance(sort, str) else json.dumps(sort)
+        if filters is not None:
+            params["filters"] = filters if isinstance(filters, str) else json.dumps(filters)
         data = self.client.request(
             "GET",
             f"/v0/orgs/{organization_id}/cases",

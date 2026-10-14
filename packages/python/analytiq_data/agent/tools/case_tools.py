@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from typing import Any
 
 import analytiq_data as ad
+
+
+def _parse_optional_iso_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
 
 
 def _case_to_dict(case: dict, document_count: int = 0) -> dict[str, Any]:
@@ -24,6 +40,20 @@ def _case_to_dict(case: dict, document_count: int = 0) -> dict[str, Any]:
         "created_at": created,
         "updated_at": updated,
     }
+
+
+def _parse_grid_json(params: dict, key: str) -> tuple[Any | None, dict[str, Any] | None]:
+    raw = params.get(key)
+    if raw is None or raw == "":
+        return None, None
+    if isinstance(raw, (dict, list)):
+        return raw, None
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw), None
+        except json.JSONDecodeError:
+            return None, {"error": f"Invalid {key} JSON"}
+    return None, {"error": f"Invalid {key}"}
 
 
 async def list_cases(context: dict, params: dict) -> dict[str, Any]:
@@ -49,6 +79,19 @@ async def list_cases(context: dict, params: dict) -> dict[str, Any]:
     else:
         metadata_search = None
 
+    sort_model, err = _parse_grid_json(params, "sort")
+    if err:
+        return err
+    filter_model, err = _parse_grid_json(params, "filters")
+    if err:
+        return err
+
+    try:
+        updated_after = _parse_optional_iso_datetime(params.get("updated_after"))
+        updated_before = _parse_optional_iso_datetime(params.get("updated_before"))
+    except ValueError as e:
+        return {"error": f"Invalid datetime: {e}"}
+
     aq = context["analytiq_client"]
     cases, total = await ad.common.list_cases(
         aq,
@@ -58,6 +101,10 @@ async def list_cases(context: dict, params: dict) -> dict[str, Any]:
         case_id_search=case_search,
         tag_ids=tag_ids,
         metadata_search=metadata_search,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        sort_model=sort_model,
+        filter_model=filter_model,
     )
     counts = await ad.common.count_documents_in_cases(
         aq, org_id, [c["case_id"] for c in cases]
@@ -81,14 +128,102 @@ async def get_case(context: dict, params: dict) -> dict[str, Any]:
     except ValueError as e:
         return {"error": str(e)}
     aq = context["analytiq_client"]
-    db = ad.common.get_async_db(aq)
-    row = await db.cases.find_one(
-        {"organization_id": org_id, "case_id": case_id, "deleting_at": None}
-    )
+    row = await ad.common.get_case(aq, org_id, str(case_id))
     if not row:
         return {"error": "Case not found"}
-    count = await ad.common.count_documents_in_case(aq, org_id, case_id)
+    count = await ad.common.count_documents_in_case(aq, org_id, str(case_id))
     return _case_to_dict(row, count)
+
+
+async def create_case(context: dict, params: dict) -> dict[str, Any]:
+    org_id = context.get("organization_id")
+    if not org_id:
+        return {"error": "No organization context"}
+    user_id = context.get("user_id") or context.get("created_by") or "agent"
+    case_id = params.get("case_id")
+    display_name = params.get("display_name")
+    tag_ids = params.get("tag_ids")
+    metadata = params.get("metadata")
+    if tag_ids is not None and not isinstance(tag_ids, list):
+        return {"error": "tag_ids must be a list"}
+    if metadata is not None and not isinstance(metadata, dict):
+        return {"error": "metadata must be an object"}
+    try:
+        row = await ad.common.create_case(
+            context["analytiq_client"],
+            org_id,
+            case_id=str(case_id).strip() if case_id else None,
+            display_name=display_name,
+            tag_ids=tag_ids,
+            metadata=metadata,
+            created_by=user_id,
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    return _case_to_dict(row, 0)
+
+
+async def update_case(context: dict, params: dict) -> dict[str, Any]:
+    org_id = context.get("organization_id")
+    if not org_id:
+        return {"error": "No organization context"}
+    case_id = params.get("case_id")
+    if not case_id:
+        return {"error": "case_id is required"}
+    display_name = params.get("display_name")
+    tag_ids = params.get("tag_ids")
+    metadata = params.get("metadata")
+    if tag_ids is not None and not isinstance(tag_ids, list):
+        return {"error": "tag_ids must be a list"}
+    if metadata is not None and not isinstance(metadata, dict):
+        return {"error": "metadata must be an object"}
+    try:
+        updated = await ad.common.update_case(
+            context["analytiq_client"],
+            org_id,
+            str(case_id),
+            display_name=display_name,
+            tag_ids=tag_ids,
+            metadata=metadata,
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    if not updated:
+        return {"error": "Case not found"}
+    count = await ad.common.count_documents_in_case(
+        context["analytiq_client"], org_id, str(case_id)
+    )
+    return _case_to_dict(updated, count)
+
+
+async def delete_case(context: dict, params: dict) -> dict[str, Any]:
+    org_id = context.get("organization_id")
+    if not org_id:
+        return {"error": "No organization context"}
+    case_id = params.get("case_id")
+    if not case_id:
+        return {"error": "case_id is required"}
+    cascade = bool(params.get("cascade", False))
+    try:
+        ad.common.validate_case_id(str(case_id))
+    except ValueError as e:
+        return {"error": str(e)}
+    try:
+        deleted = await ad.common.delete_case(
+            context["analytiq_client"],
+            org_id,
+            str(case_id),
+            cascade_documents=cascade,
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    if not deleted:
+        return {"error": "Case not found"}
+    return {
+        "message": "Case deleted",
+        "case_id": str(case_id),
+        "cascade_documents": cascade,
+    }
 
 
 async def assign_documents_to_case(context: dict, params: dict) -> dict[str, Any]:
