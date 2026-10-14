@@ -6,7 +6,7 @@ Hyperscience groups work under a persisted **Case ID** ([case collation](https:/
 
 Org **cases** group documents for browse, bulk actions, and **one prompt over all documents in the case**. Uploads and flows **assign** documents; remove-from-case does **not** delete the document.
 
-**Phase 3** adds **org-wide permissions** on all org REST (not cases only). Per-case ACL is deferred.
+Org-wide **roles and permissions** (phase 3) are specified in [`permissions.md`](permissions.md). Per-case ACL stays deferred there.
 
 Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the case only; assign does not copy case metadata onto documents unless a client or flow sets it.
 
@@ -15,9 +15,9 @@ Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the cas
 - **Case row + `docs.case_id`.** One case per document in v1 (nullable). Many-to-many deferred.
 - **Case id:** client-supplied or auto `DR-{ulid}`; unique per org; pattern `^[A-Za-z0-9._:-]{1,128}$` (URL-safe). Case-sensitive.
 - **Tags and metadata** on cases, same as documents (`tag_ids`, `Dict[str, str]`, trim/empty rules). No server-side case-to-case links—metadata values are plain strings (e.g. `policy_number=POL-998` is not validated as another case id).
-- **Unknown case id on assign fails by default.** `create_case_if_missing` defaults `false` (upload, PUT, bulk, assign API). Flow assign node defaults `true` (§6).
-- **Delete case:** clear `case_id` on docs by default; optional admin **cascade** deletes member documents via `delete_doc` (§2.4).
-- **Phase 2:** case prompt runs; **retire** prompt `peer_match_keys` (API accepts, ignores—§4.1).
+- **Unknown case id on assign fails by default.** `create_case_if_missing` defaults `false` (upload, PUT, bulk, assign API). Flow assign node defaults `true` (§5).
+- **Delete case:** clear `case_id` on docs by default; optional org **admin** **cascade** deletes member documents via `delete_doc` (§2.4); see [`permissions.md`](permissions.md).
+- **Phase 2:** case prompt runs; **retire** prompt `peer_match_keys` (removed from API; legacy request fields ignored—§4.1).
 - **OCR re-run:** does **not** require refreshing stored LLM results (per-document or case-scoped). Re-run case or document prompts explicitly when new OCR text should be extracted.
 
 ## 1. Data model
@@ -114,72 +114,47 @@ URLs: `/orgs/{orgId}/cases`, `/orgs/{orgId}/cases/{caseId}`, `/docs?case_id=`.
 
 ### 4.1 Retire `peer_match_keys`
 
-Case runs replace peer grouping on single-document prompts. Keep field on API/SDK optional + deprecated; server **ignores** on write; responses `[]`; drop from revision equality and `_build_prompt_context` peer lookup; remove UI control; update tests and release notes.
+Case runs replace peer grouping on single-document prompts. Field **removed** from API/SDK responses; server **ignores** legacy fields on write; no peer lookup in `_build_prompt_context`; UI control removed.
 
 ### 4.2 Runs
 
 - `POST .../cases/{case_id}/runs` `{ prompt_id }` → `queues.case_llm`.
-- Worker: all docs with `case_id`, sorted by upload date, cap 50, token check, one `_build_prompt_context` call.
+- Worker: all docs with `case_id`, sorted by upload date, cap 50, SPU pre-check (page floor), one `_build_prompt_context` call.
 - **`case_llm_runs`** with `document_ids` snapshot; indexes in `index_registry.py`.
-- **Stale** when: case membership ≠ run's `document_ids`; prompt revision ≠ run's `prompt_revid`; or any member document has `updated_at` **after** the run's `created_at` (name, tags, metadata, or case assignment—not OCR). OCR re-run alone does **not** mark results stale and does not auto-queue new LLM runs.
-- **Results:** `GET .../results?prompt_id=` — grid like v1 group results; UI Results tab, run/re-run, CSV, run missing via bulk LLM on case.
+- **Stale** when: case membership ≠ run's `document_ids`; prompt revision ≠ run's `prompt_revid`; or any member document has `updated_at` **after** the run's `created_at` (name, tags, metadata, or case assignment—not OCR). OCR re-run alone does **not** mark results stale and does not auto-queue new LLM runs. Staleness reflects **structural** changes, not extraction quality after OCR.
+- **Results:** `GET .../results?prompt_id=` — UI Results tab, run/re-run, JSON download (shipped). Optional later: grid layout, CSV, bulk “run missing” prompts on case.
 
-Phase 3: start run requires document **read_write** (§5).
+Phase 3: start run requires **operator**, **builder**, or **admin** ([`permissions.md`](permissions.md)).
 
-## 5. Org permissions (phase 3)
+## 5. Flows — Assign to case (phase 3)
 
-Each org member (non-admin) gets:
+Flow node: `case_id` (or generate), `document_id`, `create_case_if_missing` default **true**, optional case display_name/tags/metadata. Calls same assign helper as API. Runs as system on execution; flow definitions editable only by **builder** or **admin** ([`permissions.md`](permissions.md)).
 
-- **`document_access`:** `read_only` | `read_write`
-- **`permissions`:** subset of `tags`, `schemas`, `prompts`, `forms`, `flows`, or `all` (config **definitions**, not org admin)
+## 6. SDK / MCP
 
-Admins: full admin + implicit read_write + all config.
+Case + document APIs in phase 1–2; case runs/results in phase 2. Member **`role`** and **`system_role`** in phase 3 ([`permissions.md`](permissions.md)). Phase 4: MCP/agent respect org role.
 
-**Migration:** existing members → `read_write` + `permissions: ["all"]`. New members default read_write, no config perms until granted.
-
-| Write requires | |
-|----------------|--|
-| Upload, edit docs/cases, bulk, OCR/LLM/flow runs, case runs | `read_write` |
-| Tag/schema/prompt/form/flow definitions | matching permission |
-| Org settings, members, billing | admin |
-
-Read config (tags, prompts, etc.) stays open to all members. Flows run as system; **`flows`** permission is powerful (can change documents including case membership via §6).
-
-Enforce with FastAPI deps on every org route; route-table regression test; API tokens inherit user; UI disables writes globally.
-
-Deferred: per-case ACL, KB permission name (§10).
-
-## 6. Flows — Assign to case (phase 3)
-
-Flow node: `case_id` (or generate), `document_id`, `create_case_if_missing` default **true**, optional case display_name/tags/metadata. Calls same assign helper as API. Runs as system on execution; authored by users with `flows` permission.
-
-## 7. SDK / MCP
-
-Phase 1–3: case + document APIs as above; phase 2 runs/results; phase 3 member permission fields; phase 4 MCP tools respect user permissions.
-
-## 8. Phases
+## 7. Phases
 
 | Phase | Exit |
 |-------|------|
 | **1** | Cases, assign, delete, full `delete_doc`, UI, SDK, tests |
-| **2** | Case runs + results; document `updated_at` on name/tag/metadata/case writes (not OCR); ignore `peer_match_keys` |
-| **3** | Org permissions on all REST; assign-to-case node |
+| **2** | Case runs + results; document `updated_at` on name/tag/metadata/case writes (not OCR); peer_match_keys removed |
+| **3** | [`permissions.md`](permissions.md) on all REST; assign-to-case flow node (§5) |
 | **4** | MCP/agent; optional case webhook events |
 
-## 9. Why cases (not metadata-only groups)
+## 8. Why cases (not metadata-only groups)
 
 Explicit membership and case-level tags/metadata; stable id like Hyperscience; one case per doc simplifies future per-case ACL. See [`document_groups_plan.md`](document_groups_plan.md) / [`document_group_plan2.md`](document_group_plan2.md) for abandoned approaches.
 
-## 10. Open questions
+## 9. Open questions
 
 1. Auto id: `DR-{ulid}` vs sequential.
 2. Empty cases via `POST /cases` — allowed; confirm product copy.
 3. Merge cases — defer.
 4. Batch upload sharing one `case_id`.
-5. Per-case ACL later.
-6. Required metadata per case tag (JSON Schema) — defer.
-7. KB: own permission vs `all` only.
+5. Per-case ACL — see [`permissions.md`](permissions.md) deferred.
 
-## 11. Deferred
+## 10. Deferred
 
-Retention/scheduled deletion; multi-case membership; case JSON export; case-level LLM on case record; auto case prompt when processing complete; ImageRight import; access audit.
+Retention/scheduled deletion; multi-case membership; case JSON export; case-level LLM on case record; auto case prompt when processing complete; ImageRight import.
