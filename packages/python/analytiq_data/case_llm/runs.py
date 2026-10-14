@@ -56,6 +56,8 @@ async def list_case_documents_for_llm(
 
 
 async def resolve_latest_prompt_revid(analytiq_client, organization_id: str, prompt_id: str) -> dict:
+    if not ad.common.is_valid_object_id(prompt_id):
+        raise LookupError("prompt_not_found")
     db = analytiq_client.mongodb_async[analytiq_client.env]
     prompt = await db.prompts.find_one(
         {"_id": ObjectId(prompt_id), "organization_id": organization_id},

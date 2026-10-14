@@ -110,8 +110,10 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
     })();
   }, [docRouterOrgApi, caseTagIds]);
 
+  // Returns true when a result is available. When ``afterRunId`` is given (a run id, or null if no run
+  // existed yet), only a run different from it counts, so a re-run is not mistaken for its stale predecessor.
   const fetchCaseResult = useCallback(
-    async (prompt: Prompt): Promise<boolean> => {
+    async (prompt: Prompt, afterRunId?: string | null): Promise<boolean> => {
       const revId = prompt.prompt_revid;
       setLoadingPrompts((prev) => new Set(prev).add(revId));
       try {
@@ -131,7 +133,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
             next.delete(revId);
             return next;
           });
-          return true;
+          return afterRunId === undefined || data.case_run?.run_id !== afterRunId;
         }
         setLlmResults((prev) => {
           const next = { ...prev };
@@ -170,11 +172,13 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
     const revId = prompt.prompt_revid;
     setRunningPrompts((prev) => new Set(prev).add(revId));
     try {
+      const before = await docRouterOrgApi.getCaseLlmResults({ caseId, promptId: prompt.prompt_id });
+      const baselineRunId = before.case_run?.run_id ?? null;
       await docRouterOrgApi.startCaseLlmRun({ caseId, promptId: prompt.prompt_id });
       toast.success('Case prompt run queued');
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        if (await fetchCaseResult(prompt)) break;
+        if (await fetchCaseResult(prompt, baselineRunId)) break;
       }
     } catch (error) {
       toast.error(getApiErrorMsg(error) || 'Failed to start run');

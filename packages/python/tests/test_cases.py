@@ -848,3 +848,23 @@ async def test_delete_case_removes_case_llm_runs(test_db, mock_auth):
     assert resp.status_code == 200
     remaining = await test_db.case_llm_runs.count_documents({"case_id": "CLM-del-runs"})
     assert remaining == 0
+
+
+@pytest.mark.asyncio
+async def test_case_llm_endpoints_malformed_prompt_id_returns_404(test_db, mock_auth):
+    _create_case("CLM-bad-prompt")
+    await _insert_doc(test_db, case_id="CLM-bad-prompt")
+
+    run_resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-bad-prompt/runs",
+        json={"prompt_id": "not-an-object-id"},
+        headers=get_auth_headers(),
+    )
+    assert run_resp.status_code == 404, run_resp.text
+
+    results_resp = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/cases/CLM-bad-prompt/results",
+        params={"prompt_id": "not-an-object-id"},
+        headers=get_auth_headers(),
+    )
+    assert results_resp.status_code == 404, results_resp.text
