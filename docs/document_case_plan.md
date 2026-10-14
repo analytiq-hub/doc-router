@@ -18,6 +18,7 @@ Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the cas
 - **Unknown case id on assign fails by default.** `create_case_if_missing` defaults `false` (upload, PUT, bulk, assign API). Flow assign node defaults `true` (§6).
 - **Delete case:** clear `case_id` on docs by default; optional admin **cascade** deletes member documents via `delete_doc` (§2.4).
 - **Phase 2:** case prompt runs; **retire** prompt `peer_match_keys` (API accepts, ignores—§4.1).
+- **OCR re-run:** does **not** require refreshing stored LLM results (per-document or case-scoped). Re-run case or document prompts explicitly when new OCR text should be extracted.
 
 ## 1. Data model
 
@@ -47,11 +48,11 @@ Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the cas
 | Field | Phase | Notes |
 |-------|-------|--------|
 | `case_id` | 1 | `str \| null` |
-| `updated_at` | 1 | Bumped on every document write (below). Case run staleness (§4.2). |
+| `updated_at` | 1 | Bumped on document **metadata** writes (below). Case run staleness (§4.2). |
 
 Index: `(organization_id, case_id, upload_date desc)`.
 
-**Document `updated_at`:** set whenever `document_name`, `tag_ids`, `metadata`, or `case_id` changes, and when OCR completes (anything that changes prompt `include` inputs). Use one document update helper on upload, PUT, bulk, assign-to-case, worker OCR, and flow writes. Optional backfill: `updated_at = upload_date` where missing.
+**Document `updated_at`:** set when `document_name`, `tag_ids`, `metadata`, or `case_id` changes (upload, PUT, bulk, assign-to-case, flow writes that touch those fields). **Do not** bump on OCR completion or OCR re-run—stored LLM and case LLM results stay valid until the user re-runs a prompt. Use one document update helper for the fields above. Optional backfill: `updated_at = upload_date` where missing.
 
 ### 1.3 Document vs case
 
@@ -120,7 +121,7 @@ Case runs replace peer grouping on single-document prompts. Keep field on API/SD
 - `POST .../cases/{case_id}/runs` `{ prompt_id }` → `queues.case_llm`.
 - Worker: all docs with `case_id`, sorted by upload date, cap 50, token check, one `_build_prompt_context` call.
 - **`case_llm_runs`** with `document_ids` snapshot; indexes in `index_registry.py`.
-- **Stale** when: case membership ≠ run's `document_ids`; prompt revision ≠ run's `prompt_revid`; or any member document has `updated_at` **after** the run's `created_at` (covers name/tags/metadata/OCR changes without extra fields).
+- **Stale** when: case membership ≠ run's `document_ids`; prompt revision ≠ run's `prompt_revid`; or any member document has `updated_at` **after** the run's `created_at` (name, tags, metadata, or case assignment—not OCR). OCR re-run alone does **not** mark results stale and does not auto-queue new LLM runs.
 - **Results:** `GET .../results?prompt_id=` — grid like v1 group results; UI Results tab, run/re-run, CSV, run missing via bulk LLM on case.
 
 Phase 3: start run requires document **read_write** (§5).
@@ -161,7 +162,7 @@ Phase 1–3: case + document APIs as above; phase 2 runs/results; phase 3 member
 | Phase | Exit |
 |-------|------|
 | **1** | Cases, assign, delete, full `delete_doc`, UI, SDK, tests |
-| **2** | Case runs + results; document `updated_at` on all write paths; ignore `peer_match_keys` |
+| **2** | Case runs + results; document `updated_at` on name/tag/metadata/case writes (not OCR); ignore `peer_match_keys` |
 | **3** | Org permissions on all REST; assign-to-case node |
 | **4** | MCP/agent; optional case webhook events |
 
