@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { DocRouterAccountApi } from '@/utils/api';
 import SubscriptionPlans from './SubscriptionPlans';
 import SubscriptionUsage from './SubscriptionUsage';
@@ -142,23 +144,18 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
 
 
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-40">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  const orgSettingsHref = `/settings/organizations/${organizationId}`;
+  const orgSettingsButtonClass =
+    'inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500';
 
-  return (
-    <div className="bg-white p-4 rounded-lg shadow">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Billing</h2>
+  const billingPageHeader = (
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-lg font-semibold text-gray-900">Billing</h2>
+      <div className="flex gap-4 items-center">
         {stripePaymentsPortal && customerPortalUrl && (
-          <a 
-            href={customerPortalUrl} 
-            target="_blank" 
+          <a
+            href={customerPortalUrl}
+            target="_blank"
             rel="noopener noreferrer"
             className="flex items-center px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
           >
@@ -168,7 +165,28 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
             {currentPlan === 'enterprise' ? 'Previous Plan Billing' : 'Manage Billing'}
           </a>
         )}
+        <Link href={orgSettingsHref} className={orgSettingsButtonClass}>
+          <SettingsIcon className="w-4 h-4 mr-2" fontSize="small" />
+          Org settings
+        </Link>
       </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow min-h-[calc(100vh-80px)]">
+        {billingPageHeader}
+        <div className="flex justify-center items-center h-40">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow min-h-[calc(100vh-80px)]">
+      {billingPageHeader}
 
       {/* Tab Navigation */}
       <div className="border-b border-gray-200 mb-4">

@@ -16,7 +16,7 @@ export default function OrganizationSubscriptionPage() {
   }
 
   return (
-    <SettingsLayout>
+    <SettingsLayout selectedMenu="organizations">
       {/* <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">Billing</h1>
         <p className="text-gray-600 mt-2">

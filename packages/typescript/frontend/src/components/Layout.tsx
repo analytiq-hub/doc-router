@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ReactNode, useEffect } from 'react';
+import { useState, ReactNode, useEffect, useLayoutEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAppSession } from '@/contexts/AppSessionContext';
@@ -73,18 +73,22 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const orgIdForLinks =
     (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null;
 
-  // Load sidebar state from localStorage on mount
-  useEffect(() => {
+  // Restore collapsed/expanded preference once on mount (do not persist on every open change —
+  // that would overwrite a contracted sidebar when state briefly resets during in-app navigation).
+  useLayoutEffect(() => {
     const savedSidebarState = localStorage.getItem('sidebarOpen');
     if (savedSidebarState !== null) {
-      setTimeout(() => setOpen(JSON.parse(savedSidebarState)), 0);
+      setOpen(JSON.parse(savedSidebarState) as boolean);
     }
   }, []);
 
-  // Save sidebar state to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('sidebarOpen', JSON.stringify(open));
-  }, [open]);
+  const toggleSidebar = useCallback(() => {
+    setOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem('sidebarOpen', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const fileMenuItems: MenuItem[] = orgIdForLinks
     ? [
@@ -227,7 +231,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="flex h-16 items-center justify-between px-3">
           <div className="flex shrink-0 items-center">
             <button
-              onClick={() => setOpen(!open)}
+              type="button"
+              onClick={toggleSidebar}
               className="p-2 rounded-md hover:bg-blue-500"
             >
               <Bars3Icon className="h-6 w-6 text-white" />

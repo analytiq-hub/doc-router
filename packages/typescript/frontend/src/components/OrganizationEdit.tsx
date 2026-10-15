@@ -2,6 +2,7 @@
 
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { LLMChatModel, OcrMode, OrgOcrConfig } from '@docrouter/sdk'
 import type { FlowLogLevel } from '@/types/organizations'
@@ -656,7 +657,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               const isUserSysAdmin = isSysAdmin(session);
               return (isUserOrgAdmin || isUserSysAdmin) ? (
                 <>
-                  <a
+                  <Link
                     href={`/settings/organizations/${organizationId}/subscription`}
                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
@@ -664,7 +665,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                     Billing
-                  </a>
+                  </Link>
                 </>
               ) : null;
             })()}

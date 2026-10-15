@@ -104,7 +104,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
 
     fetchOrganizations();
-  }, [pathname, session, status, docRouterAccountApi]);
+  }, [session, status, docRouterAccountApi]);
 
   // Sync currentOrganization with URL path - this is the source of truth when on org pages
   useEffect(() => {
