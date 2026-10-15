@@ -102,6 +102,86 @@ async def test_org_member_can_get_co_member_user(org_and_users, test_db):
 
 
 @pytest.mark.asyncio
+async def test_sysadmin_permissions_me_without_membership(org_and_users, test_db):
+    from tests.conftest_utils import client
+    from app.main import app
+    from app.auth import get_current_user
+    from app.models import User
+    from analytiq_data.org_permissions import ALL_CAPABILITIES
+
+    org_id = org_and_users["org_id"]
+    sysadmin_id = str(ObjectId())
+    await test_db.users.insert_one(
+        {
+            "_id": ObjectId(sysadmin_id),
+            "email": "support-sysadmin2@example.com",
+            "name": "Support",
+            "system_role": "sysadmin",
+            "email_verified": True,
+        }
+    )
+
+    async def support_user():
+        return User(user_id=sysadmin_id, user_name="Support", token_type="jwt")
+
+    app.dependency_overrides[get_current_user] = support_user
+    try:
+        resp = client.get(f"/v0/orgs/{org_id}/permissions/me")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert set(data["capabilities"]) == set(ALL_CAPABILITIES)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_sysadmin_can_read_subscription_without_org_membership(org_and_users, test_db):
+    from tests.conftest_utils import client
+
+    org_id = org_and_users["org_id"]
+    sysadmin_id = str(ObjectId())
+    await test_db.users.insert_one(
+        {
+            "_id": ObjectId(sysadmin_id),
+            "email": "support-sysadmin@example.com",
+            "name": "Support",
+            "system_role": "sysadmin",
+            "email_verified": True,
+        }
+    )
+    from app.main import app
+    from app.auth import get_current_user
+    from app.models import User
+
+    async def support_user():
+        return User(user_id=sysadmin_id, user_name="Support", token_type="jwt")
+
+    app.dependency_overrides[get_current_user] = support_user
+    try:
+        resp = client.get(f"/v0/orgs/{org_id}/payments/subscription")
+        assert resp.status_code == 200, resp.text
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_viewer_cannot_read_subscription(org_and_users, test_db):
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    member_id = org_and_users["member"]["id"]
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_VIEWER]}},
+    )
+    resp = client.get(
+        f"/v0/orgs/{org_id}/payments/subscription",
+        headers=get_token_headers(org_and_users["member"]["token"]),
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.asyncio
 async def test_viewer_cannot_create_tag(org_and_users, test_db):
     from tests.conftest_utils import client, get_token_headers
 

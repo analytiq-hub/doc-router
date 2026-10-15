@@ -367,10 +367,13 @@ async def get_chat_tools(
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    return ToolsMetadata(
-        read_only=sorted(ad.agent.tool_registry.READ_ONLY_TOOLS),
-        read_write=sorted(ad.agent.tool_registry.READ_WRITE_TOOLS),
+    db = ad.common.get_async_db()
+    ctx = await ad.org_permissions.load_org_member_context(
+        db, organization_id, current_user.user_id
     )
+    caps = ctx.capabilities if ctx else frozenset()
+    read_only, read_write = ad.agent.tool_registry.filter_tools_metadata(caps)
+    return ToolsMetadata(read_only=read_only, read_write=read_write)
 
 
 @agent_router.get(
@@ -381,7 +384,7 @@ async def list_threads(
     organization_id: str,
     document_id: str,
     limit: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(require_org_config_read),
+    current_user: User = Depends(require_org_documents_read),
 ):
     """List chat threads for the document, most recent first."""
     doc = await ad.common.doc.get_doc(
@@ -404,7 +407,7 @@ async def create_thread(
     organization_id: str,
     document_id: str,
     body: CreateThreadBody | None = Body(None),
-    current_user: User = Depends(require_org_config_write),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Create a new chat thread for the document."""
     doc = await ad.common.doc.get_doc(
@@ -431,7 +434,7 @@ async def get_thread(
     organization_id: str,
     document_id: str,
     thread_id: str,
-    current_user: User = Depends(require_org_config_read),
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Get a thread with full messages and extraction."""
     doc = await ad.common.doc.get_doc(
@@ -458,7 +461,7 @@ async def delete_thread(
     organization_id: str,
     document_id: str,
     thread_id: str,
-    current_user: User = Depends(require_org_config_write),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Delete a chat thread."""
     doc = await ad.common.doc.get_doc(

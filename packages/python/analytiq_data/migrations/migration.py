@@ -3551,6 +3551,42 @@ class BackfillDocumentUpdatedAt(Migration):
         return True
 
 
+class UnsetLegacyMemberRoleMigration(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Remove legacy members[].role after permission_group_ids migration"
+        )
+
+    async def up(self, db) -> bool:
+        from analytiq_data.org_permissions import prepare_members_for_storage
+
+        try:
+            updated = 0
+            async for org in db.organizations.find({}, projection={"members": 1}):
+                members = org.get("members") or []
+                if not members:
+                    continue
+                if not any(isinstance(m, dict) and "role" in m for m in members):
+                    continue
+                normalized = prepare_members_for_storage(
+                    [m for m in members if m.get("user_id")]
+                )
+                await db.organizations.update_one(
+                    {"_id": org["_id"]},
+                    {"$set": {"members": normalized}},
+                )
+                updated += 1
+            if updated:
+                logger.info(f"UnsetLegacyMemberRoleMigration: normalized members on {updated} org(s)")
+            return True
+        except Exception as e:
+            logger.error(f"UnsetLegacyMemberRoleMigration failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        return True
+
+
 class OrgPermissionGroupsMigration(Migration):
     def __init__(self):
         super().__init__(
@@ -3673,6 +3709,7 @@ MIGRATIONS = [
     EnsureKbSearchIndexes(),
     BackfillDocumentUpdatedAt(),
     OrgPermissionGroupsMigration(),
+    UnsetLegacyMemberRoleMigration(),
     # Add more migrations here
 ]
 

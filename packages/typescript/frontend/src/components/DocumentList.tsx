@@ -25,6 +25,12 @@ import { DocumentBulkUpdate } from './DocumentBulkUpdate';
 import { DocRouterOrgApi } from '@/utils/api';
 import DocumentInfoModal from './DocumentInfoModal';
 import { buildListDocumentsQuery } from '@/utils/documentListQuery';
+import { useOrganizationCapabilities } from '@/contexts/OrganizationContext';
+import {
+  CAP_DOCUMENTS_WRITE,
+  CAP_RUNS_EXECUTE,
+  hasOrgCapability,
+} from '@/utils/orgCapabilities';
 
 const jsonStringifyForQuery = (value: unknown): string =>
   JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
@@ -44,6 +50,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
   initialCaseIdFilter,
 }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const { capabilities } = useOrganizationCapabilities();
+  const canWriteDocuments = hasOrgCapability(capabilities, CAP_DOCUMENTS_WRITE);
+  const canExecuteRuns = hasOrgCapability(capabilities, CAP_RUNS_EXECUTE);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [totalRows, setTotalRows] = useState<number>(0);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
@@ -620,16 +629,18 @@ const DocumentList: React.FC<DocumentListProps> = ({
             sx={filterFieldSx}
           />
         )}
-        <button
-          type="button"
-          onClick={() => setIsBulkUpdateOpen(true)}
-          className={`inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 ${
-            isCaseScopedList ? 'h-10 whitespace-nowrap' : 'w-full sm:w-auto justify-center'
-          }`}
-        >
-          <BoltIcon className="h-5 w-5" />
-          Actions
-        </button>
+        {canWriteDocuments && (
+          <button
+            type="button"
+            onClick={() => setIsBulkUpdateOpen(true)}
+            className={`inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 ${
+              isCaseScopedList ? 'h-10 whitespace-nowrap' : 'w-full sm:w-auto justify-center'
+            }`}
+          >
+            <BoltIcon className="h-5 w-5" />
+            Actions
+          </button>
+        )}
       </div>
 
       <Box sx={{ flex: 1, minHeight: 0 }}>
@@ -681,15 +692,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem 
-          onClick={() => {
-            if (selectedDocument) handleRenameDocument(selectedDocument);
-          }}
-          className="flex items-center gap-2"
-        >
-          <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
-          <span>Rename</span>
-        </MenuItem>
+        {canWriteDocuments && (
+          <MenuItem 
+            onClick={() => {
+              if (selectedDocument) handleRenameDocument(selectedDocument);
+            }}
+            className="flex items-center gap-2"
+          >
+            <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
+            <span>Rename</span>
+          </MenuItem>
+        )}
         <MenuItem 
           onClick={() => {
             if (selectedDocument) {
@@ -703,15 +716,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <BadgeIcon fontSize="small" className="text-blue-600" />
           <span>Properties</span>
         </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedDocument) handleEditTags(selectedDocument);
-          }}
-          className="flex items-center gap-2"
-        >
-          <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-          <span>Edit Tags & Metadata</span>
-        </MenuItem>
+        {canWriteDocuments && (
+          <MenuItem 
+            onClick={() => {
+              if (selectedDocument) handleEditTags(selectedDocument);
+            }}
+            className="flex items-center gap-2"
+          >
+            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+            <span>Edit Tags & Metadata</span>
+          </MenuItem>
+        )}
         <MenuItem 
           onClick={() => {
             if (selectedDocument) handleDownloadFile(selectedDocument);
@@ -721,24 +736,28 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <DownloadIcon fontSize="small" className="text-green-600" />
           <span>Download</span>
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (selectedDocument) handleRerunOCR(selectedDocument.id);
-          }}
-          className="flex items-center gap-2"
-        >
-          <BoltIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-orange-500" />
-          <span>Rerun OCR</span>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (selectedDocument) handleDeleteFile(selectedDocument.id);
-          }}
-          className="flex items-center gap-2"
-        >
-          <DeleteIcon fontSize="small" className="text-red-600" />
-          <span>Delete</span>
-        </MenuItem>
+        {canExecuteRuns && (
+          <MenuItem
+            onClick={() => {
+              if (selectedDocument) handleRerunOCR(selectedDocument.id);
+            }}
+            className="flex items-center gap-2"
+          >
+            <BoltIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-orange-500" />
+            <span>Rerun OCR</span>
+          </MenuItem>
+        )}
+        {canWriteDocuments && (
+          <MenuItem
+            onClick={() => {
+              if (selectedDocument) handleDeleteFile(selectedDocument.id);
+            }}
+            className="flex items-center gap-2"
+          >
+            <DeleteIcon fontSize="small" className="text-red-600" />
+            <span>Delete</span>
+          </MenuItem>
+        )}
       </Menu>
       
       {/* Tag Editor Modal */}

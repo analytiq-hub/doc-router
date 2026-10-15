@@ -220,20 +220,20 @@ Entra is the **first** enterprise IdP target; **Okta** and **Google Workspace** 
 - Org routes: **`require_capability(...)`** via the shared resolver.
 - Account/platform routes: `system_role` as today.
 - Route-table regression test on **capabilities**.
-- **Phase 4:** MCP/agent tools use the same resolver (+ sysadmin on platform tools if any).
+- **Phase 4 (document agent):** each agent tool maps to a capability; the LLM receives a filtered tool list and `execute_tool` enforces the same map. MCP continues to use org REST (already capability-gated).
 
 ## Phases (cross-reference)
 
 | Phase | Work |
 |-------|------|
-| **3** | `system_role`; seed **four built-in groups** per org; **`members[].permission_group_ids`**; **capability resolver** + route capability table on all REST (see [`document_case_plan.md`](document_case_plan.md) for assign-to-case flow node) |
+| **3** | **Shipped (cases7):** `system_role`; four built-in groups; **`permission_group_ids`**; resolver + `require_org_*` on org REST; `GET .../permissions/me`; frontend capability gating (docs upload/actions); billing → `org.admin`. **Phase 4:** MCP/agent per-tool resolver. **3b+** below. |
 | **3b** | **Microsoft Entra** SSO (OIDC/SAML), per-org mapping → built-in group ids, login sync; same hook pattern for Okta / Google Workspace |
 | **3+** | Custom permission groups, HS-style flags, flow/tag-scoped access (extend resolver only) |
-| **4** | MCP/agent use resolver; optional webhook events |
+| **4** | **Document agent:** per-tool capability map + enforce in `execute_tool` (**done**). MCP via REST (unchanged). Optional webhook events remain. |
 
 ## Open questions
 
-1. Sysadmin break-glass: org API access without membership vs must be invited (and whether break-glass grants capabilities without group membership).
+1. Sysadmin break-glass: platform **`sysadmin`** without org membership may call org APIs (capability checks bypassed), **`GET .../permissions/me`** returns all capabilities, and **billing read** uses the same sysadmin path. Billing **mutations** (checkout, portal, credit purchase) still require **`org.admin`** membership unless the user is sysadmin (then allowed). Account-level org update already allowed sysadmin.
 2. Entra unmapped user: deny login vs default **Viewer** vs invite-only error.
 3. SSO overwrite vs local override on **`permission_group_ids`**.
 4. KB: dedicated capability vs `config.write` / Admin group only.

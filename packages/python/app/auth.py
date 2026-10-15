@@ -295,4 +295,8 @@ async def get_org_id_from_token(token: str) -> Optional[str]:
     return stored_token.get("organization_id")
 
 
-from app.org_auth import get_org_user, require_org_admin_capability as get_org_admin_user
+from app.org_auth import (
+    get_org_user,
+    require_org_admin_capability as get_org_admin_user,
+    require_org_billing_read as get_org_billing_read_user,
+)

@@ -10,7 +10,6 @@ from datetime import date, datetime
 from typing import Any, Callable
 
 from . import tools as agent_tools
-
 logger = logging.getLogger(__name__)
 
 # Read-only tools: never require approval (no create/update/delete).
@@ -637,6 +636,19 @@ _TOOL_HANDLERS: dict[str, Callable] = {
     "list_llm_models": agent_tools.list_llm_models,
 }
 
+from .tool_capabilities import (
+    assert_tools_registry_complete,
+    ensure_context_capabilities,
+    member_has_tool_capability,
+    required_capability_for_tool,
+    tool_definitions_for_capabilities,
+    allowed_tool_names,
+    filter_tools_metadata,
+    load_member_capabilities,
+)
+
+assert_tools_registry_complete(_TOOL_HANDLERS.keys())
+
 
 async def execute_tool(name: str, context: dict, arguments: str | dict) -> str:
     """
@@ -646,6 +658,10 @@ async def execute_tool(name: str, context: dict, arguments: str | dict) -> str:
     handler = _TOOL_HANDLERS.get(name)
     if not handler:
         return json.dumps({"error": f"Unknown tool: {name}"})
+    caps = await ensure_context_capabilities(context)
+    if not member_has_tool_capability(caps, name):
+        required = required_capability_for_tool(name) or "unknown"
+        return json.dumps({"error": f"Missing required permission: {required}"})
     if isinstance(arguments, str):
         try:
             params = json.loads(arguments) if arguments.strip() else {}

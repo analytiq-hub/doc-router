@@ -1,12 +1,15 @@
-import { Metadata } from 'next'
-import DocumentUpload from '@/components/DocumentUpload'
+import { Metadata } from 'next';
+import UploadPageClient from './UploadPageClient';
 
 export const metadata: Metadata = {
   title: 'Upload Documents',
-}
+};
 
-export default async function UploadPage({ params }: { params: Promise<{ organizationId: string }> }) {
+export default async function UploadPage({
+  params,
+}: {
+  params: Promise<{ organizationId: string }>;
+}) {
   const { organizationId } = await params;
-  return <DocumentUpload organizationId={organizationId} />
+  return <UploadPageClient organizationId={organizationId} />;
 }
- 

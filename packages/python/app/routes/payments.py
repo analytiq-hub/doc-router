@@ -13,13 +13,13 @@ import analytiq_data as ad
 from analytiq_data.org_permissions import member_has_admin_group
 
 from app.auth import (
+    get_admin_user,
     get_current_user,
     get_org_admin_user,
-    get_admin_or_org_user,
-    is_organization_admin,
+    get_org_billing_read_user,
     is_system_admin,
-    is_organization_member
 )
+from app.org_auth import require_org_runs_execute
 from app.models import User
 
 import asyncio
@@ -1561,7 +1561,7 @@ async def customer_portal(
 async def create_checkout_session(
     organization_id: str,
     request: CheckoutSessionRequest,
-    current_user: User = Depends(get_admin_or_org_user)
+    current_user: User = Depends(get_org_admin_user),
 ) -> PortalSessionResponse:
     """Create a Stripe Checkout session for subscription setup"""
 
@@ -1635,11 +1635,6 @@ async def create_checkout_session(
             raise HTTPException(status_code=500, detail=f"Failed to update organization: {str(e)}")
 
     try:
-        is_org_admin = await is_organization_admin(organization_id, current_user.user_id)
-
-        if not is_org_admin:
-            raise HTTPException(status_code=403, detail="You are not authorized to create a checkout session")
-
         # Get the customer
         customer = await db.payments_customers.find_one({"org_id": organization_id})
         if not customer:
@@ -1721,18 +1716,11 @@ async def create_checkout_session(
 async def record_usage(
     organization_id: str,
     usage: UsageRecord,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Record usage for an organization"""
 
     logger.info(f"api_record_usage called with org_id: {organization_id}, spus: {usage.spus}, operation: {usage.operation}, source: {usage.source}")
-
-    # Check if the current user is a member of the organization
-    if not await is_organization_member(org_id=organization_id, user_id=current_user.user_id):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access denied, user {current_user.user_id} is not a member of organization {organization_id}"
-        )
 
     try:
         result = await record_payment_usage(
@@ -2055,7 +2043,7 @@ async def delete_all_payments_customers(dryrun: bool = True) -> Dict[str, Any]:
 @payments_router.get("/v0/orgs/{organization_id}/payments/subscription")
 async def get_subscription_info(
     organization_id: str = None,
-    current_user: User = Depends(get_admin_or_org_user)
+    current_user: User = Depends(get_org_billing_read_user),
 ) -> SubscriptionResponse:
     """Get available subscription plans and user's current plan"""
 
@@ -2291,17 +2279,11 @@ async def sync_subscription(db, org_id: str, org_type: str) -> bool:
 @payments_router.put("/v0/orgs/{organization_id}/payments/subscription")
 async def activate_subscription(
     organization_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_admin_user),
 ):
     """Activate a subscription"""
     
     logger.info(f"Activating subscription for org_id: {organization_id}")
-
-    is_sys_admin = await is_system_admin(current_user.user_id)
-    is_org_admin = await is_organization_admin(org_id=organization_id, user_id=current_user.user_id)
-
-    if not is_sys_admin and not is_org_admin:
-        raise HTTPException(status_code=403, detail="You are not authorized to activate a subscription")
 
     db = ad.common.get_async_db()
 
@@ -2337,17 +2319,11 @@ async def activate_subscription(
 @payments_router.delete("/v0/orgs/{organization_id}/payments/subscription")
 async def deactivate_subscription(
     organization_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_admin_user),
 ):
     """Cancel a subscription at the end of the current period"""
     
     logger.info(f"Deactivating subscription for org_id: {organization_id}")
-
-    is_sys_admin = await is_system_admin(current_user.user_id)
-    is_org_admin = await is_organization_admin(org_id=organization_id, user_id=current_user.user_id)
-
-    if not is_sys_admin and not is_org_admin:
-        raise HTTPException(status_code=403, detail="You are not authorized to cancel a subscription")
 
     db = ad.common.get_async_db()
 
@@ -2389,16 +2365,9 @@ async def deactivate_subscription(
 async def get_usage_range(
     organization_id: str,
     request: UsageRangeRequest = Depends(),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_billing_read_user),
 ) -> UsageRangeResponse:
     """Get SPU usage data for a date range with daily granularity"""
-    
-    # Check if user has access to this organization
-    if not await is_organization_admin(org_id=organization_id, user_id=current_user.user_id) and not await is_system_admin(user_id=current_user.user_id):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Org admin access required for org_id: {organization_id}"
-        )
 
     db = ad.common.get_async_db()
 
@@ -2472,15 +2441,8 @@ async def get_usage_range(
 @payments_router.get("/v0/orgs/{organization_id}/payments/usage")
 async def get_current_usage(
     organization_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_billing_read_user),
 ) -> UsageResponse:
-    # Check if user has access to this organization
-    if not await is_organization_admin(org_id=organization_id, user_id=current_user.user_id) and not await is_system_admin(user_id=current_user.user_id):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Org admin access required for org_id: {organization_id}"
-        )
-
     db = ad.common.get_async_db()
 
     try:
@@ -2914,12 +2876,9 @@ async def record_payment_usage(org_id: str, spus: int,
 async def add_spu_credits(
     organization_id: str,
     update: CreditUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_admin_user),
 ):
     logger.info(f"Adding {update.amount} admin credits to org {organization_id}")
-
-    if not await is_system_admin(current_user.user_id):
-        raise HTTPException(status_code=403, detail="Admin only")
 
     db = ad.common.get_async_db()   
     customer = await db.payments_customers.find_one({"org_id": organization_id})
@@ -2935,7 +2894,7 @@ async def add_spu_credits(
 @payments_router.get("/v0/orgs/{organization_id}/payments/credits/config")
 async def get_payments_credit_config(
     organization_id: str,
-    current_user: User = Depends(get_admin_or_org_user)
+    current_user: User = Depends(get_org_billing_read_user),
 ):
     """Get credit purchase configuration"""
     
@@ -2950,15 +2909,11 @@ async def get_payments_credit_config(
 async def purchase_credits(
     organization_id: str,
     request: PurchaseCreditsRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_admin_user),
 ):
     """Create a Stripe checkout session for credit purchase with dynamic pricing"""
     
     logger.info(f"purchase_credits called for org_id: {organization_id}, credits: {request.credits}")
-    
-    if not await is_organization_member(org_id=organization_id, user_id=current_user.user_id):
-        logger.error(f"Access denied for user {current_user.user_id} to org {organization_id}")
-        raise HTTPException(status_code=403, detail="Access denied")
 
     db = ad.common.get_async_db()
 

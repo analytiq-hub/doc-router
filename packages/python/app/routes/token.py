@@ -21,10 +21,9 @@ import analytiq_data as ad
 from app.auth import (
     get_current_user,
     get_admin_user,
-    is_system_admin,
-    is_organization_member,
-    get_org_id_from_token
+    get_org_id_from_token,
 )
+from app.org_auth import get_org_user
 from app.models import User
 
 # Configure logger
@@ -58,16 +57,9 @@ ALGORITHM = "HS256"
 async def create_org_token(
     organization_id: str,
     request: CreateAccessTokenRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_user),
 ):
     """Create an organization-level API token"""
-    # Verify organization membership
-    is_sys_admin = await is_system_admin(current_user.user_id)
-    is_org_member = await is_organization_member(organization_id, current_user.user_id)
-
-    if not is_sys_admin and not is_org_member:
-        raise HTTPException(status_code=403, detail="You are not authorized to create an organization-level API token")
-    
     db = ad.common.get_async_db()
     
     # Generate a globally unique token
@@ -108,16 +100,9 @@ async def create_org_token(
 @token_router.get("/v0/orgs/{organization_id}/access_tokens", response_model=ListAccessTokensResponse, tags=["access_tokens"])
 async def list_org_tokens(
     organization_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_user),
 ):
     """List organization-level API tokens"""
-    # Verify organization membership
-    is_sys_admin = await is_system_admin(current_user.user_id)
-    is_org_member = await is_organization_member(organization_id, current_user.user_id)
-
-    if not is_sys_admin and not is_org_member:
-        raise HTTPException(status_code=403, detail="You are not authorized to list organization-level API tokens")
-    
     db = ad.common.get_async_db()
     cursor = db.access_tokens.find({
         "user_id": current_user.user_id,
@@ -150,16 +135,9 @@ async def list_org_tokens(
 async def delete_org_token(
     organization_id: str,
     token_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_org_user),
 ):
     """Delete an organization-level API token"""
-    # Verify organization membership
-    is_sys_admin = await is_system_admin(current_user.user_id)
-    is_org_member = await is_organization_member(organization_id, current_user.user_id)
-
-    if not is_sys_admin and not is_org_member:
-        raise HTTPException(status_code=403, detail="You are not authorized to delete an organization-level API token")
-    
     db = ad.common.get_async_db()
     result = await db.access_tokens.delete_one({
         "_id": ObjectId(token_id),

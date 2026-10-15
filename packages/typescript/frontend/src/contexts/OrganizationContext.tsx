@@ -1,13 +1,11 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { DocRouterAccountApi } from '@/utils/api';
+import { DocRouterAccountApi, apiClient } from '@/utils/api';
 import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import { AppSession } from '@/types/AppSession'
 import { usePathname } from 'next/navigation'
-import { isSysAdmin } from '@/utils/roles'
-import { userHasOrgAdminGroup } from '@/utils/orgPermissionGroups'
 
 interface OrganizationContextType {
   organizations: Organization[]
@@ -16,6 +14,12 @@ interface OrganizationContextType {
   switchOrganization: (organizationId: string) => void
   refreshOrganizations: () => Promise<void>
   isLoading: boolean
+  /** Effective org capabilities for the current user (from GET .../permissions/me). */
+  capabilities: string[]
+  permissionGroupIds: string[]
+  persona: string | null
+  capabilitiesLoading: boolean
+  refreshCapabilities: () => Promise<void>
 }
 
 export const OrganizationContext = createContext<OrganizationContextType>({
@@ -24,15 +28,35 @@ export const OrganizationContext = createContext<OrganizationContextType>({
   setCurrentOrganization: () => {},
   switchOrganization: () => {},
   refreshOrganizations: async () => {},
-  isLoading: true
+  isLoading: true,
+  capabilities: [],
+  permissionGroupIds: [],
+  persona: null,
+  capabilitiesLoading: false,
+  refreshCapabilities: async () => {},
 })
 
 export const useOrganization = () => useContext(OrganizationContext)
+
+export const useOrganizationCapabilities = () => {
+  const ctx = useContext(OrganizationContext)
+  return {
+    capabilities: ctx.capabilities,
+    permissionGroupIds: ctx.permissionGroupIds,
+    persona: ctx.persona,
+    loading: ctx.capabilitiesLoading,
+    refreshCapabilities: ctx.refreshCapabilities,
+  }
+}
 
 export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [capabilities, setCapabilities] = useState<string[]>([])
+  const [permissionGroupIds, setPermissionGroupIds] = useState<string[]>([])
+  const [persona, setPersona] = useState<string | null>(null)
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(false)
   const pathname = usePathname()
   const { session, status } = useAppSession()
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
@@ -67,21 +91,10 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const fetchOrganizations = async () => {
       try {
+        // Workspace org list (header switcher): memberships only, including for sysadmins.
+        // Sysadmins manage other orgs via Settings → Organizations, not the switcher.
         const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id, limit: 50 });
-
-        let filtered: Organization[] = response.organizations;
-        const sysAdmin = isSysAdmin(appSession);
-        const isSettingsPage = pathname.startsWith('/settings/organizations');
-        if (isSettingsPage) {
-          if (sysAdmin) {
-            filtered = response.organizations;
-          } else {
-            filtered = response.organizations.filter((org) =>
-              userHasOrgAdminGroup(org, appSession.user.id),
-            );
-          }
-        }
-        setOrganizations(filtered);
+        setOrganizations(response.organizations);
       } catch (error) {
         console.error('Failed to fetch organizations:', error);
       } finally {
@@ -110,7 +123,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     if (orgIdFromPath) {
-      // We're on an org-specific page - URL is the source of truth
+      // Sync switcher to URL only for orgs the user belongs to (/orgs/... or member settings edit).
       const orgFromPath = organizations.find(org => org.id === orgIdFromPath)
       if (orgFromPath) {
         setCurrentOrganization(prev => {
@@ -168,27 +181,53 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
 
       const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id, limit: 50 });
-
-      // Re-apply filtering logic
-      let filtered: Organization[] = response.organizations;
-      const sysAdmin = isSysAdmin(appSession);
-      const isSettingsPage = pathname.startsWith('/settings/organizations');
-
-      if (isSettingsPage) {
-        if (sysAdmin) {
-          filtered = response.organizations;
-        } else {
-          filtered = response.organizations.filter((org) =>
-            userHasOrgAdminGroup(org, appSession.user.id),
-          );
-        }
-      }
-
-      setOrganizations(filtered);
+      setOrganizations(response.organizations);
     } catch (error) {
       console.error('Failed to refresh organizations:', error);
     }
-  }, [pathname, session, docRouterAccountApi])
+  }, [session, docRouterAccountApi])
+
+  const refreshCapabilities = useCallback(async () => {
+    const appSession = session as AppSession | null
+    let orgId = currentOrganization?.id
+    const orgsMatch = pathname.match(/^\/orgs\/([^/]+)/)
+    if (orgsMatch) {
+      orgId = orgsMatch[1]
+    } else {
+      const settingsMatch = pathname.match(/^\/settings\/organizations\/([^/]+)/)
+      if (settingsMatch) {
+        orgId = settingsMatch[1]
+      }
+    }
+    if (!appSession?.user?.id || !orgId) {
+      setCapabilities([])
+      setPermissionGroupIds([])
+      setPersona(null)
+      return
+    }
+    setCapabilitiesLoading(true)
+    try {
+      const { data } = await apiClient.get<{
+        capabilities: string[]
+        permission_group_ids: string[]
+        persona: string | null
+      }>(`/v0/orgs/${orgId}/permissions/me`)
+      setCapabilities(data.capabilities ?? [])
+      setPermissionGroupIds(data.permission_group_ids ?? [])
+      setPersona(data.persona ?? null)
+    } catch (error) {
+      console.error('Failed to load org capabilities:', error)
+      setCapabilities([])
+      setPermissionGroupIds([])
+      setPersona(null)
+    } finally {
+      setCapabilitiesLoading(false)
+    }
+  }, [currentOrganization?.id, session, pathname])
+
+  useEffect(() => {
+    void refreshCapabilities()
+  }, [refreshCapabilities])
 
   return (
     <OrganizationContext.Provider value={{
@@ -197,7 +236,12 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setCurrentOrganization,
       switchOrganization,
       refreshOrganizations,
-      isLoading
+      isLoading,
+      capabilities,
+      permissionGroupIds,
+      persona,
+      capabilitiesLoading,
+      refreshCapabilities,
     }}>
       {children}
     </OrganizationContext.Provider>

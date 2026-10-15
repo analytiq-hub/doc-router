@@ -7,9 +7,11 @@ from pydantic import BaseModel
 
 import analytiq_data as ad
 from analytiq_data.org_permissions import (
+    ALL_CAPABILITIES,
     display_persona_from_group_ids,
     resolve_member_group_ids,
 )
+from app.auth import is_system_admin
 from app.org_auth import get_org_user
 from app.models import User
 
@@ -35,6 +37,12 @@ async def get_my_org_permissions(
         db, organization_id, current_user.user_id
     )
     if ctx is None:
+        if await is_system_admin(current_user.user_id):
+            return MemberPermissionsResponse(
+                capabilities=sorted(ALL_CAPABILITIES),
+                permission_group_ids=[],
+                persona=None,
+            )
         return MemberPermissionsResponse(capabilities=[], permission_group_ids=[], persona=None)
     group_ids = resolve_member_group_ids(ctx.member)
     return MemberPermissionsResponse(

@@ -21,6 +21,10 @@ import { randomUUID } from '@/utils/uuid';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from './TagSelector';
 import { CaseAssignmentFields } from './CaseAssignmentFields';
+import { toast } from 'react-toastify';
+import { toastActionError } from '@/utils/toastActionError';
+import { useOrganizationCapabilities } from '@/contexts/OrganizationContext';
+import { CAP_DOCUMENTS_WRITE, hasOrgCapability } from '@/utils/orgCapabilities';
 
 interface DocumentUploadProps {
   organizationId: string;
@@ -35,9 +39,10 @@ interface PendingUploadFile {
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, defaultCaseId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const { capabilities, loading: capabilitiesLoading } = useOrganizationCapabilities();
+  const canUpload = hasOrgCapability(capabilities, CAP_DOCUMENTS_WRITE);
   const [files, setFiles] = useState<PendingUploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [metadataFields, setMetadataFields] = useState<Array<{id: string, key: string, value: string}>>([]);
@@ -73,6 +78,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    disabled: !canUpload || capabilitiesLoading,
     accept: {
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
@@ -94,6 +100,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
 
   const handleUpload = async () => {
     if (files.length === 0) return;
+    if (!canUpload) {
+      toast.error('You do not have permission to upload documents.');
+      return;
+    }
 
     const metadata = Object.fromEntries(
       metadataFields
@@ -102,7 +112,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
     );
 
     setUploading(true);
-    setUploadStatus(null);
 
     try {
       await Promise.all(
@@ -126,8 +135,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
             .join(", ")
         : "no tags";
 
-      setUploadStatus(`Successfully uploaded ${files.length} file(s): ${fileNames} with ${tagNames}`);
-      
+      toast.success(
+        `Uploaded ${files.length} file(s): ${fileNames}${tagNames !== 'no tags' ? ` (${tagNames})` : ''}`,
+      );
+
       setFiles([]);
       setSelectedTags([]); // Reset selected tags after successful upload
       setMetadataFields([]); // Reset metadata after successful upload
@@ -136,7 +147,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
       setActiveStep(0); // Reset to first step
     } catch (error) {
       console.error('Error uploading files:', error);
-      setUploadStatus('Error uploading files. Please try again.');
+      toastActionError('Upload failed', error);
     } finally {
       setUploading(false);
     }
@@ -186,36 +197,30 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
     }
     
     setActiveStep((prev) => Math.min(prev + 1, 2));
-    // Clear upload status when moving between steps
-    if (uploadStatus) {
-      setUploadStatus(null);
-    }
-    // Clear validation error when successfully moving to next step
     setValidationError(null)
-  }, [uploadStatus, activeStep, metadataFields]);
+  }, [activeStep, metadataFields]);
 
   const handlePrevStep = useCallback(() => {
     setActiveStep((prev) => Math.max(prev - 1, 0));
-    // Clear upload status when moving between steps
-    if (uploadStatus) {
-      setUploadStatus(null);
-    }
-    // Clear validation error when going back
     setValidationError(null)
-  }, [uploadStatus]);
+  }, []);
 
   const handleDeleteFile = useCallback((id: string) => {
     setFiles((prevFiles) => prevFiles.filter((row) => row.id !== id));
 
-    // If no files left, go back to step 1
     if (files.length === 1) {
       setActiveStep(0);
-      // Clear upload status when returning to step 1
-      if (uploadStatus) {
-        setUploadStatus(null);
-      }
     }
-  }, [files.length, uploadStatus]);
+  }, [files.length]);
+
+  if (!capabilitiesLoading && !canUpload) {
+    return (
+      <div className="max-w-3xl mx-auto p-4 text-gray-600">
+        You do not have permission to upload documents. Contact an organization admin if you need
+        upload access.
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -554,7 +559,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
                 variant="contained"
                 color="primary"
                 onClick={handleUpload}
-                disabled={uploading}
+                disabled={uploading || !canUpload}
                 startIcon={uploading ? <CircularProgress size={20} color="inherit" /> : <CloudUploadIcon />}
               >
                 {uploading ? 'Uploading...' : 'Upload Files'}
@@ -564,11 +569,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
         )}
       </div>
       
-      {uploadStatus && (
-        <div className={`mt-4 p-4 rounded-lg ${uploadStatus.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-          {uploadStatus}
-        </div>
-      )}
     </div>
   );
 };

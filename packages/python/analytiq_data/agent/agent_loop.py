@@ -13,7 +13,7 @@ import litellm
 
 from .session import generate_turn_id, set_turn_state, get_turn_state, clear_turn_state
 from .system_prompt import build_system_message
-from .tool_registry import TOOL_DEFINITIONS, execute_tool, is_read_only_tool
+from .tool_registry import execute_tool, is_read_only_tool, load_member_capabilities, tool_definitions_for_capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +339,8 @@ async def run_agent_turn(
         "created_by": user_id,
         "working_state": working_state,
     }
+    context["capabilities"] = await load_member_capabilities(analytiq_client, organization_id, user_id)
+    agent_tools = tool_definitions_for_capabilities(context["capabilities"])
     system_content = await build_system_message(
         analytiq_client, organization_id, document_id, working_state, resolved_mentions
     )
@@ -391,7 +393,7 @@ async def run_agent_turn(
                 model=model,
                 messages=llm_messages,
                 api_key=api_key,
-                tools=TOOL_DEFINITIONS,
+                tools=agent_tools,
                 tool_choice="auto",
                 thinking=thinking_param,
             ):
@@ -429,7 +431,7 @@ async def run_agent_turn(
                 model=model,
                 messages=llm_messages,
                 api_key=api_key,
-                tools=TOOL_DEFINITIONS,
+                tools=agent_tools,
                 tool_choice="auto",
                 thinking=thinking_param,
             )
@@ -531,13 +533,18 @@ async def run_agent_approve(
         return {"error": "Turn expired or not found"}
     await clear_turn_state(turn_id)
     approval_map = {a["call_id"]: a["approved"] for a in approvals if "call_id" in a and "approved" in a}
+    analytiq_client = ad.common.get_analytiq_client()
     context = {
-        "analytiq_client": ad.common.get_analytiq_client(),
+        "analytiq_client": analytiq_client,
         "organization_id": state["organization_id"],
         "document_id": state["document_id"],
         "created_by": state["user_id"],
         "working_state": state["working_state"],
     }
+    context["capabilities"] = await load_member_capabilities(
+        analytiq_client, state["organization_id"], state["user_id"]
+    )
+    agent_tools = tool_definitions_for_capabilities(context["capabilities"])
     llm_messages = list(state["llm_messages"])
     pending = state["pending_tool_calls"]
     assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approval_map)
@@ -548,7 +555,6 @@ async def run_agent_approve(
     executed_rounds: list[dict] = [{"thinking": None, "tool_calls": pending}]
     model = state["model"]
     llm_provider = ad.llm.get_llm_model_provider(model)
-    analytiq_client = context["analytiq_client"]
     api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
 
     try:
@@ -568,7 +574,7 @@ async def run_agent_approve(
         model=model,
         messages=llm_messages,
         api_key=api_key,
-        tools=TOOL_DEFINITIONS,
+        tools=agent_tools,
         tool_choice="auto",
         thinking=thinking_param,
     )
@@ -645,7 +651,7 @@ async def run_agent_approve(
         model=model,
         messages=llm_messages,
         api_key=api_key,
-        tools=TOOL_DEFINITIONS,
+        tools=agent_tools,
         tool_choice="auto",
         thinking=thinking_param,
     )
