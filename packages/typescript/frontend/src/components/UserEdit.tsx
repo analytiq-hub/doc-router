@@ -8,6 +8,7 @@ import { signOut } from 'next-auth/react';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isSysAdmin } from '@/utils/roles';
 import { toast } from 'react-toastify';
+import { toastActionError } from '@/utils/toastActionError';
 
 interface UserEditProps {
   userId: string;
@@ -40,7 +41,7 @@ const PasswordChangeModal: React.FC<PasswordChangeModalProps> = ({ isOpen, onClo
       onClose();
     } catch (error) {
       console.error('Password update failed:', error);
-      setError('Failed to update password');
+      toastActionError('Failed to update password', error);
     }
   };
 

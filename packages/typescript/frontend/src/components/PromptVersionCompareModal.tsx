@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Prompt } from '@docrouter/sdk';
-import { getApiErrorMsg } from '@/utils/api';
+import { toastActionError } from '@/utils/toastActionError';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 
 interface PromptVersionCompareModalProps {
@@ -24,7 +24,6 @@ const PromptVersionCompareModal: React.FC<PromptVersionCompareModalProps> = ({
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [versions, setVersions] = useState<Prompt[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [leftVersion, setLeftVersion] = useState<number>(currentPrompt.prompt_version);
   const [rightVersion, setRightVersion] = useState<number>(currentPrompt.prompt_version);
   const [leftDropdownOpen, setLeftDropdownOpen] = useState(false);
@@ -35,7 +34,6 @@ const PromptVersionCompareModal: React.FC<PromptVersionCompareModalProps> = ({
       if (!isOpen || !promptId) return;
       
       setIsLoading(true);
-      setError(null);
       try {
         const response = await docRouterOrgApi.listPromptVersions({ promptId });
         const sorted = response.prompts.sort((a, b) => b.prompt_version - a.prompt_version);
@@ -46,9 +44,8 @@ const PromptVersionCompareModal: React.FC<PromptVersionCompareModalProps> = ({
           setRightVersion(currentPrompt.prompt_version);
         }
       } catch (err) {
-        const errorMsg = getApiErrorMsg(err) || 'Failed to load prompt versions';
-        setError(errorMsg);
         console.error('Error loading prompt versions:', err);
+        toastActionError('Failed to load prompt versions', err);
       } finally {
         setIsLoading(false);
       }
@@ -79,12 +76,6 @@ const PromptVersionCompareModal: React.FC<PromptVersionCompareModalProps> = ({
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Compare Prompt Versions</h3>
         
-        {error && (
-          <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-            {error}
-          </div>
-        )}
-
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

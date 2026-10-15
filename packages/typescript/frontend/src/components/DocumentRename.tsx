@@ -32,7 +32,6 @@ const DocumentRenameModal: React.FC<DocumentRenameModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Document rename failed:', error);
-      setError('Failed to rename document');
     } finally {
       setIsSubmitting(false);
     }

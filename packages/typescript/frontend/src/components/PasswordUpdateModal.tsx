@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toastActionError } from '@/utils/toastActionError';
 
 interface PasswordUpdateModalProps {
     open: boolean;
@@ -32,7 +33,8 @@ export default function PasswordUpdateModal({ open, onClose, onUpdate }: Passwor
             await onUpdate(oldPassword, newPassword);
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to update password');
+            console.error('Failed to update password:', err);
+            toastActionError('Failed to update password', err);
         } finally {
             setLoading(false);
         }

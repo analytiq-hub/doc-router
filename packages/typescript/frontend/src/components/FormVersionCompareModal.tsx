@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Form } from '@docrouter/sdk';
-import { getApiErrorMsg } from '@/utils/api';
+import { toastActionError } from '@/utils/toastActionError';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 
 interface FormVersionCompareModalProps {
@@ -24,7 +24,6 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [versions, setVersions] = useState<Form[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [leftVersion, setLeftVersion] = useState<number>(currentForm.form_version);
   const [rightVersion, setRightVersion] = useState<number>(currentForm.form_version);
   const [leftDropdownOpen, setLeftDropdownOpen] = useState(false);
@@ -35,7 +34,6 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
       if (!isOpen || !formId) return;
       
       setIsLoading(true);
-      setError(null);
       try {
         const response = await docRouterOrgApi.listFormVersions({ formId });
         const sorted = response.forms.sort((a, b) => b.form_version - a.form_version);
@@ -46,9 +44,8 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
           setRightVersion(currentForm.form_version);
         }
       } catch (err) {
-        const errorMsg = getApiErrorMsg(err) || 'Failed to load form versions';
-        setError(errorMsg);
         console.error('Error loading form versions:', err);
+        toastActionError('Failed to load form versions', err);
       } finally {
         setIsLoading(false);
       }
@@ -79,12 +76,6 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Compare Form Versions</h3>
         
-        {error && (
-          <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-            {error}
-          </div>
-        )}
-
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

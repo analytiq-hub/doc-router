@@ -71,7 +71,6 @@ const SchemaNameModal: React.FC<SchemaNameModalProps> = ({
       onClose();
     } catch (err) {
       console.error(`Failed to ${isCloning ? 'clone' : 'rename'} schema:`, err);
-      setError(`Failed to ${isCloning ? 'clone' : 'rename'} schema`);
     } finally {
       setIsSubmitting(false);
     }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toastActionError } from '@/utils/toastActionError';
 
 interface PromptNameModalProps {
   isOpen: boolean;
@@ -38,7 +39,10 @@ const PromptNameModal: React.FC<PromptNameModalProps> = ({
       onClose();
     } catch (error) {
       console.error(`Prompt ${isCloning ? 'clone' : 'rename'} failed:`, error);
-      setError(`Failed to ${isCloning ? 'clone' : 'rename'} prompt`);
+      toastActionError(
+        `Failed to ${isCloning ? 'clone' : 'rename'} prompt`,
+        error,
+      );
     } finally {
       setIsSubmitting(false);
     }

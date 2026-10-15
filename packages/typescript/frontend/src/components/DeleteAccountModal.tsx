@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { signOut } from 'next-auth/react';
+import { toastActionError } from '@/utils/toastActionError';
 
 interface DeleteAccountModalProps {
     open: boolean;
@@ -8,12 +9,10 @@ interface DeleteAccountModalProps {
 
 export default function DeleteAccountModal({ open, onClose }: DeleteAccountModalProps) {
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     const handleDelete = async () => {
         try {
             setLoading(true);
-            setError(null);
 
             const response = await fetch('/api/user/account', {
                 method: 'DELETE',
@@ -26,7 +25,8 @@ export default function DeleteAccountModal({ open, onClose }: DeleteAccountModal
 
             await signOut({ callbackUrl: '/auth/signin' });
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to delete account');
+            console.error('Failed to delete account:', err);
+            toastActionError('Failed to delete account', err);
             setLoading(false);
         }
     };
@@ -40,12 +40,6 @@ export default function DeleteAccountModal({ open, onClose }: DeleteAccountModal
                     <h2 className="text-xl font-semibold text-red-500 mb-4">
                         Delete Account
                     </h2>
-
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
-                            {error}
-                        </div>
-                    )}
 
                     <div className="space-y-4">
                         <p className="text-gray-700">

@@ -72,7 +72,6 @@ const FormNameModal: React.FC<FormNameModalProps> = ({
       onClose();
     } catch (err) {
       console.error(`Failed to ${isCloning ? 'clone' : 'rename'} form:`, err);
-      setError(`Failed to ${isCloning ? 'clone' : 'rename'} form`);
     } finally {
       setIsSubmitting(false);
     }

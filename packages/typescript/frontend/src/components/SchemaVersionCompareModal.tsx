@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Schema } from '@docrouter/sdk';
-import { getApiErrorMsg } from '@/utils/api';
+import { toastActionError } from '@/utils/toastActionError';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 
 interface SchemaVersionCompareModalProps {
@@ -24,7 +24,6 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [versions, setVersions] = useState<Schema[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [leftVersion, setLeftVersion] = useState<number>(currentSchema.schema_version);
   const [rightVersion, setRightVersion] = useState<number>(currentSchema.schema_version);
   const [leftDropdownOpen, setLeftDropdownOpen] = useState(false);
@@ -35,7 +34,6 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
       if (!isOpen || !schemaId) return;
       
       setIsLoading(true);
-      setError(null);
       try {
         const response = await docRouterOrgApi.listSchemaVersions({ schemaId });
         const sorted = response.schemas.sort((a, b) => b.schema_version - a.schema_version);
@@ -46,9 +44,8 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
           setRightVersion(currentSchema.schema_version);
         }
       } catch (err) {
-        const errorMsg = getApiErrorMsg(err) || 'Failed to load schema versions';
-        setError(errorMsg);
         console.error('Error loading schema versions:', err);
+        toastActionError('Failed to load schema versions', err);
       } finally {
         setIsLoading(false);
       }
@@ -79,12 +76,6 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Compare Schema Versions</h3>
         
-        {error && (
-          <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-            {error}
-          </div>
-        )}
-
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

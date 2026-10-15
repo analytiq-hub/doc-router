@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { UserCreate } from '@/types/index';
-import { isAxiosError } from 'axios';
+import { toastActionError } from '@/utils/toastActionError';
 
 interface AddUserModalProps {
   open: boolean;
@@ -16,14 +16,12 @@ const UserAddModal: React.FC<AddUserModalProps> = ({ open, onClose, onAdd }) => 
     name: '',
     password: '',
   });
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
     setLoading(true);
 
     try {
@@ -31,13 +29,8 @@ const UserAddModal: React.FC<AddUserModalProps> = ({ open, onClose, onAdd }) => 
       setFormData({ email: '', name: '', password: '' });
       onClose();
     } catch (error) {
-      if (isAxiosError(error)) {
-        setError(error.response?.data?.detail || error.response?.data?.message || error.message);
-      } else if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('An unexpected error occurred');
-      }
+      console.error('Failed to create user:', error);
+      toastActionError('Failed to create user', error);
     } finally {
       setLoading(false);
     }
@@ -52,12 +45,6 @@ const UserAddModal: React.FC<AddUserModalProps> = ({ open, onClose, onAdd }) => 
           </div>
 
           <div className="p-6">
-            {error && (
-              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
-                <span className="block sm:inline">{error}</span>
-              </div>
-            )}
-            
             <div className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
