@@ -9,7 +9,7 @@ Replace today’s coarse model (`users.role` admin/user + org `members.role` adm
 - Optional **`users.system_role`** for platform staff.
 - Org member **`role`** personas: `viewer` | `operator` | `builder` | `admin`.
 
-v1 uses **personas**, not a per-resource read/write matrix. Later: named permission groups, flow/tag scope, fine-grained flags (Hyperscience-style). **Per-case ACL** is deferred.
+**Storage in v1 is personas only** (one `members[].role` per org). **Enforcement uses a shared capability resolver** so routes, UI, and MCP do not compare role strings ad hoc. Later we can add Hyperscience-style permission groups and flags **behind the same resolver** without rewriting every endpoint. **Per-case ACL** is deferred.
 
 ## Two layers
 
@@ -24,14 +24,61 @@ Use different field names so “role” is not overloaded:
 
 **Terminology in UI/docs:** **“system role”** vs **“org role”** (or “member role”)—never bare “role” without context.
 
+## Capability resolver (enforcement layer)
+
+All org authorization goes through a **single resolver** (e.g. `member_has_capability(org_id, user_id, capability) -> bool`). FastAPI dependencies, the frontend, and phase-4 MCP tools call the resolver (or thin wrappers), not raw `members[].role` comparisons scattered in handlers.
+
+### Capabilities (v1 catalog)
+
+Stable string identifiers; route and UI checks refer to these names.
+
+| Capability | Covers (examples) |
+|------------|-------------------|
+| **`documents.read`** | List/get documents and cases |
+| **`documents.write`** | Upload, PUT, bulk doc ops, assign/remove case, delete document |
+| **`runs.execute`** | OCR, doc LLM, case LLM (`POST .../cases/{id}/runs`), bulk analyze, flow trigger from UI/API |
+| **`config.read`** | Read tags, schemas, prompts, forms, flow definitions |
+| **`config.write`** | CRUD on tags, schemas, prompts, forms; author/edit flow definitions (including assign-to-case node—see [`document_case_plan.md`](document_case_plan.md)) |
+| **`org.admin`** | Members, billing, org settings, cascade case delete |
+
+Flow **execution** in the worker runs as system; human/API **trigger** and **definition edit** still use `runs.execute` and `config.write` respectively.
+
+### Persona → capabilities (v1)
+
+The resolver derives effective capabilities from **`members[].role`** (tier is inclusive: higher roles include lower):
+
+| Org role | Capabilities |
+|----------|----------------|
+| **viewer** | `documents.read`, `config.read` |
+| **operator** | viewer + `documents.write`, `runs.execute` |
+| **builder** | operator + `config.write` |
+| **admin** | builder + `org.admin` |
+
+**Tier order (for UI sugar only):** `viewer` < `operator` < `builder` < `admin`. Authorization logic should prefer **`member_has_capability`**, not ordinal role compare, except inside the resolver implementation.
+
+### API surface (implementation)
+
+- **Primary:** `require_capability("documents.write")` (or equivalent) on org routes.
+- **Optional sugar:** `require_org_operator` implemented as “member has all capabilities operator tier grants” (delegates to the resolver).
+- **Route-table regression test:** every org route declares **required capability(ies)**; the test fails if a route bypasses the resolver.
+- **Frontend:** one hook/helper that loads the member’s org role (or cached capability set from an API) and gates buttons by capability name, aligned with backend.
+
+### Later: permission groups without route churn
+
+When we add org **permission groups** and named flags (Hyperscience-style), the resolver **unions** permissions from group membership into the same capability set (or a superset catalog). Built-in groups seeded from the four personas preserve behavior for migrated orgs. **`members[].role`** may become a display default or sync from a primary group; routes stay on **`require_capability`**.
+
+Resource **scope** (flow-specific group access, tag/case restrictions) belongs in the resolver as an extra dimension after v1—not in the persona enum.
+
 ## Platform: `users.system_role`
 
 - Replace today’s `users.role` (`admin` \| `user`) with optional **`system_role`**.
 - **Migration:** `users.role == "admin"` → `system_role: "sysadmin"`; `users.role == "user"` → **unset** `system_role` (and remove legacy `role` when safe).
 - **`is_system_admin`:** `user.get("system_role") == "sysadmin"`. Additional `system_role` values may be added later; each gets explicit checks (no generic “any system role” superuser unless intended).
-- Sysadmin does **not** replace org membership; org routes still require org **`role`** unless a route is account-level and sysadmin-only. (Define break-glass support access explicitly when implementing.)
+- Sysadmin does **not** replace org membership; org routes still go through the **capability resolver** unless a route is account-level and sysadmin-only. (Define break-glass support access explicitly when implementing.)
 
-## Organization: `members[].role`
+## Organization: `members[].role` (persona matrix)
+
+Human-readable summary of the same rules as the capability table above:
 
 | Org role | Documents & cases | Runs (OCR, doc LLM, case LLM, bulk analyze, flow *trigger* from UI/API) | Config CRUD (tags, schemas, prompts, forms, flow *definitions*) | Org admin (members, billing, settings, cascade case delete) |
 |----------|-------------------|---------------------------------------------------------------------------|------------------------------------------------------------------|----------------------------------------------------------------|
@@ -42,14 +89,8 @@ Use different field names so “role” is not overloaded:
 
 **Notes:**
 
-- **Read config** is allowed for all org members (viewer and above).
-- **Flow execution** in the worker runs as system; **builder** (or **admin**) required to **author/edit** flow definitions (including nodes that assign documents to cases—see [`document_case_plan.md`](document_case_plan.md) assign-to-case node).
-- **API tokens** inherit the user’s **org role** in that org (from membership); sysadmin only applies to account/platform routes the token user has.
-- **UI** disables actions above the member’s org role.
-
-**Tier order (for helpers):** `viewer` < `operator` < `builder` < `admin`.
-
-**Case LLM:** `POST .../cases/{id}/runs` requires **operator**, **builder**, or **admin** (not viewer).
+- **API tokens** inherit the user’s effective capabilities in that org (from membership role in v1); sysadmin only applies to account/platform routes the token user has.
+- **Case LLM:** requires **`runs.execute`** (operator, builder, or admin).
 
 ## Migration & defaults
 
@@ -59,27 +100,29 @@ Use different field names so “role” is not overloaded:
 
 ## Enforcement
 
-- Org routes: dependencies on minimum org role (`require_org_viewer`, `require_org_operator`, `require_org_builder`, `require_org_admin`).
+- Org routes: **`require_capability(...)`** via the shared resolver; avoid duplicating persona matrices in route files.
 - Account/platform routes: sysadmin (or specific `system_role`) as today.
-- Route-table regression test so new org routes declare a minimum role.
-- **Phase 4:** MCP/agent tools respect org role (+ sysadmin on platform tools if any).
+- Route-table regression test: org routes declare **capabilities**, not ad hoc role checks.
+- **Phase 4:** MCP/agent tools use the same resolver (+ sysadmin on platform tools if any).
 
 ## Later extensions (not v1)
 
-- Multiple org permission groups per user, LDAP sync, flow/tag-scoped access, extra capabilities (reporting, KB admin as its own scope vs builder-only).
-- Org **`role`** remains the default template for small teams.
+- Org permission groups, custom groups, LDAP/SAML auth-group mapping, flow/tag-scoped access—each extends the **resolver**, not per-route role logic.
+- Built-in groups equivalent to the four personas for migration and small teams.
+- Extra capabilities (reporting, KB admin) added to the catalog and group editor when needed.
 
 ## Phases (cross-reference)
 
 | Phase | Permissions work |
 |-------|-------------------|
-| **3** | `system_role` + org member roles on all REST (see [`document_case_plan.md`](document_case_plan.md) for assign-to-case flow node in the same phase) |
-| **4** | MCP/agent respect org role; optional webhook events |
+| **3** | `system_role`, org member roles, **capability resolver** + route capability table on all REST (see [`document_case_plan.md`](document_case_plan.md) for assign-to-case flow node in the same phase) |
+| **3+** | Permission groups / HS-style flags and scope (resolver backend only) |
+| **4** | MCP/agent use resolver; optional webhook events |
 
 ## Open questions
 
-1. Sysadmin break-glass: org API access without membership vs must be invited to org.
-2. KB: dedicated permission vs folded under builder **admin** only.
+1. Sysadmin break-glass: org API access without membership vs must be invited to org (and whether break-glass grants capabilities without org role).
+2. KB: dedicated capability vs folded under `config.write` / `org.admin` only.
 3. Automation identity: audit attribution for flow worker writes vs human operator.
 
 ## Deferred
