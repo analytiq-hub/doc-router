@@ -1,20 +1,24 @@
 'use client'
 
-import { useRole } from "@/utils/roles";
+import { isSysAdmin } from "@/utils/roles";
+import { useAppSession } from "@/contexts/AppSessionContext";
 import { ReactNode } from "react";
 
 interface RoleBasedRenderProps {
   children: ReactNode;
+  /** Include `"admin"` to show content for platform sysadmins only. */
   allowedRoles: string[];
 }
 
-const RoleBasedRender: React.FC<RoleBasedRenderProps> = ({ 
-  children, 
-  allowedRoles 
+const RoleBasedRender: React.FC<RoleBasedRenderProps> = ({
+  children,
+  allowedRoles,
 }) => {
-  const { role } = useRole();
-  
-  if (!role || !allowedRoles.includes(role)) {
+  const { session } = useAppSession();
+  const show =
+    allowedRoles.includes('admin') && isSysAdmin(session);
+
+  if (!show) {
     return null;
   }
 

@@ -22,8 +22,8 @@ from analytiq_data.flows.credential_fields import (
     credential_validation_schema,
     merge_credential_fields_update,
 )
-from app.auth import get_org_user
 from app.licensing_deps import require_feature
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -223,7 +223,7 @@ def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
 @flow_credentials_router.get("/v0/orgs/{organization_id}/credential-kinds")
 async def list_credential_kinds(
     organization_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ) -> list[CredentialKindSummary]:
     _ = current_user
     db = ad.common.get_async_db()
@@ -274,7 +274,7 @@ async def list_credential_kinds(
 async def create_credential(
     organization_id: str,
     req: CreateCredentialRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ) -> CredentialHeader:
     try:
         kind = ad.flows.get_credential_kind(req.kind_key)
@@ -335,7 +335,7 @@ async def list_credentials(
     credential_kind: str | None = Query(None, description="Filter by kind key"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ) -> ListCredentialsResponse:
     _ = current_user
     db = ad.common.get_async_db()
@@ -367,7 +367,7 @@ async def list_credentials(
 async def get_credential(
     organization_id: str,
     credential_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ) -> CredentialHeader:
     _ = current_user
     db = ad.common.get_async_db()
@@ -393,7 +393,7 @@ async def update_credential(
     organization_id: str,
     credential_id: str,
     req: UpdateCredentialRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ) -> CredentialHeader:
     db = ad.common.get_async_db()
     try:
@@ -468,7 +468,7 @@ async def update_credential(
 async def delete_credential(
     organization_id: str,
     credential_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ) -> None:
     _ = current_user
     db = ad.common.get_async_db()
@@ -488,7 +488,7 @@ async def delete_credential(
 async def test_credential(
     organization_id: str,
     credential_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ) -> TestCredentialResponse:
     _ = current_user
     from jinja2 import Environment, Undefined
@@ -581,7 +581,7 @@ async def oauth_initiate_flow_credential(
     organization_id: str,
     credential_id: str,
     body: OAuthInitiateRequest | None = None,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ) -> OAuthInitiateResponse:
     from analytiq_data.flows.credential_runtime import (
         build_oauth_authorization_url,

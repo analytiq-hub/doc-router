@@ -47,7 +47,7 @@ async def individual_workspace(test_db):
         "members": [
             {
                 "user_id": ObjectId(user_id),
-                "role": "admin"
+                "permission_group_ids": ["admin"],
             }
         ]
     }

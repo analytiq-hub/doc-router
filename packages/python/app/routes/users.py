@@ -15,10 +15,20 @@ from bcrypt import hashpw, gensalt
 # Local imports
 import analytiq_data as ad
 from app import users, limits
+from analytiq_data.org_permissions import (
+    BUILTIN_ADMIN,
+    build_member_entry,
+    builtin_permission_groups_document,
+    member_has_admin_group,
+    mongo_elem_match_org_admin,
+)
 from app.auth import (
+    SYSTEM_ROLE_SYSADMIN,
     get_current_user,
     get_admin_user,
+    is_organization_admin,
     is_system_admin,
+    user_document_is_sysadmin,
 )
 from app.models import User
 from app.routes.payments import sync_customer, delete_payments_customer
@@ -38,7 +48,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     name: str | None = None
     password: str | None = None
-    role: str | None = None  # Replace isAdmin with role
+    is_sysadmin: bool | None = None
     email_verified: bool | None = None
     has_seen_tour: bool | None = None
 
@@ -46,7 +56,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     name: str | None
-    role: str
+    is_sysadmin: bool
     email_verified: bool | None
     created_at: datetime
     has_password: bool
@@ -68,7 +78,7 @@ def _user_document_to_response(user: dict) -> UserResponse:
         id=str(user["_id"]),
         email=email,
         name=user.get("name"),
-        role=user.get("role", "user"),
+        is_sysadmin=user_document_is_sysadmin(user),
         email_verified=user.get("email_verified"),
         created_at=user.get("created_at", datetime.now(UTC)),
         has_password=bool(user.get("password")),
@@ -127,11 +137,11 @@ async def list_users(
                 "members.user_id": user_id
             }).to_list(None)
             
-            is_org_admin = any(
-                any(m["user_id"] == current_user.user_id and m["role"] == "admin" 
-                    for m in org["members"])
-                for org in user_orgs
-            )
+            is_org_admin = False
+            for org in user_orgs:
+                if await is_organization_admin(str(org["_id"]), current_user.user_id):
+                    is_org_admin = True
+                    break
             
             if not is_org_admin:
                 raise HTTPException(
@@ -152,10 +162,7 @@ async def list_users(
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
             
-        is_org_admin = any(
-            m["user_id"] == current_user.user_id and m["role"] == "admin" 
-            for m in org["members"]
-        )
+        is_org_admin = await is_organization_admin(organization_id, current_user.user_id)
         
         if not (is_sys_admin or is_org_admin):
             raise HTTPException(
@@ -167,10 +174,9 @@ async def list_users(
         and_filters.append({"_id": {"$in": [ObjectId(uid) for uid in member_ids]}})
     elif not is_sys_admin:
         # List all users in organizations the current user is an admin of
-        orgs = await db.organizations.find({
-            "members.user_id": current_user.user_id,
-            "members.role": "admin"
-        }).to_list(None)
+        orgs = await db.organizations.find(
+            mongo_elem_match_org_admin(current_user.user_id)
+        ).to_list(None)
         member_ids = [m["user_id"] for org in orgs for m in org["members"]]
         
         # Add the current user to the list of users, if they are not already in the list
@@ -243,30 +249,25 @@ async def create_user(
     # Hash password
     hashed_password = hashpw(user.password.encode(), gensalt(12))
     
-    # Create user document with default role
     user_doc = {
         "email": user.email,
         "name": user.name,
         "password": hashed_password.decode(),
-        "role": "user",  # Always set default role as user
         "email_verified": True,
         "created_at": datetime.now(UTC),
-        "has_seen_tour": False
+        "has_seen_tour": False,
     }
-    
-    result = await db.users.insert_one(user_doc)
-    user_doc["id"] = str(result.inserted_id)
-    user_doc["has_password"] = True
 
-    logger.info(f"Created new user {user.email} with id {user_doc['id']}")
+    result = await db.users.insert_one(user_doc)
+    stored = await db.users.find_one({"_id": result.inserted_id})
+    logger.info(f"Created new user {user.email} with id {result.inserted_id}")
     
     # Create default individual organization for new user
+    user_id = str(result.inserted_id)
     result = await db.organizations.insert_one({
         "name": user.email,
-        "members": [{
-            "user_id": str(result.inserted_id),
-            "role": "admin"
-        }],
+        "permission_groups": builtin_permission_groups_document(),
+        "members": [build_member_entry(user_id, permission_group_ids=[BUILTIN_ADMIN])],
         "type": "individual",
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC)
@@ -278,7 +279,7 @@ async def create_user(
     # Sync the organization (local and Stripe if configured)
     await sync_customer(db=db, org_id=org_id)
     
-    return UserResponse(**user_doc)
+    return _user_document_to_response(stored)
 
 @users_router.put("/v0/account/users/{user_id}", response_model=UserResponse, tags=["account/users"])
 async def update_user(
@@ -308,32 +309,60 @@ async def update_user(
         if user.has_seen_tour is not None:
             update_data["has_seen_tour"] = user.has_seen_tour
     else:
-        # Admin can update all fields
-        update_data = {
-            k: v for k, v in user.model_dump().items() 
-            if v is not None
-        }
-        
-        # If password is included, hash it
+        payload = user.model_dump(exclude_none=True)
+        sysadmin_change = payload.pop("is_sysadmin", None)
+        update_data = payload
         if "password" in update_data:
             update_data["password"] = hashpw(update_data["password"].encode(), gensalt(12)).decode()
-        
-        # Don't allow updating the last admin user to non-admin
-        if user.role == "user":
-            admin_count = await db.users.count_documents({"role": "admin"})
+
+        mongo_update: dict = {}
+        if update_data:
+            mongo_update["$set"] = update_data
+        if sysadmin_change is not None:
             target_user = await db.users.find_one({"_id": ObjectId(user_id)})
-            if admin_count == 1 and target_user and target_user.get("role") == "admin":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot remove admin role from the last admin user"
-                )
-    
+            if sysadmin_change:
+                if not mongo_update.get("$set"):
+                    mongo_update["$set"] = {}
+                mongo_update["$set"]["system_role"] = SYSTEM_ROLE_SYSADMIN
+            else:
+                sysadmin_count = await db.users.count_documents({"system_role": SYSTEM_ROLE_SYSADMIN})
+                if (
+                    sysadmin_count == 1
+                    and target_user
+                    and user_document_is_sysadmin(target_user)
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot remove sysadmin from the last platform admin user",
+                    )
+                if not mongo_update.get("$unset"):
+                    mongo_update["$unset"] = {}
+                mongo_update["$unset"]["system_role"] = ""
+            if not mongo_update.get("$unset"):
+                mongo_update["$unset"] = {}
+            mongo_update["$unset"]["role"] = ""
+
+        if not mongo_update:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid update data provided",
+            )
+
+        result = await db.users.find_one_and_update(
+            {"_id": ObjectId(user_id)},
+            mongo_update,
+            return_document=True,
+        )
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+        return _user_document_to_response(result)
+
     if not update_data:
         raise HTTPException(
             status_code=400,
             detail="No valid update data provided"
         )
-    
+
     result = await db.users.find_one_and_update(
         {"_id": ObjectId(user_id)},
         {"$set": update_data},
@@ -383,7 +412,7 @@ async def delete_user(
             admin_count = 0
             is_org_admin = False
             for member in members:
-                if member["role"] == "admin":
+                if member_has_admin_group(member):
                     admin_count += 1
                     if member["user_id"] == user_id:
                         is_org_admin = True
@@ -411,12 +440,12 @@ async def delete_user(
             detail="User not found"
         )
     
-    if target_user.get("role") == "admin":
-        admin_count = await db.users.count_documents({"role": "admin"})
-        if admin_count == 1:
+    if user_document_is_sysadmin(target_user):
+        sysadmin_count = await db.users.count_documents({"system_role": SYSTEM_ROLE_SYSADMIN})
+        if sysadmin_count == 1:
             raise HTTPException(
                 status_code=400,
-                detail="Cannot delete the last system admin user"
+                detail="Cannot delete the last system admin user",
             )
     
     try:

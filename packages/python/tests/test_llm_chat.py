@@ -4,8 +4,14 @@ import secrets
 from unittest.mock import patch, AsyncMock, Mock
 from datetime import datetime, UTC
 from bson import ObjectId
-from tests.conftest_utils import client, get_token_headers
+from tests.conftest_utils import client, get_auth_headers, get_token_headers
 import analytiq_data as ad
+
+
+@pytest.fixture
+def sysadmin_auth_headers(mock_auth):
+    """Platform sysadmin auth for /v0/account/* admin-only LLM routes."""
+    return get_auth_headers()
 
 
 class MockLLMResponse:
@@ -67,7 +73,7 @@ async def mock_stream_generator(test_chunks):
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_admin_only_access(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_admin_only_access(org_and_users, setup_test_models, test_db, mock_auth):
     """Test that only admins can access the LLM chat endpoint"""
     org_id = org_and_users["org_id"]
     admin = org_and_users["admin"]
@@ -88,14 +94,18 @@ async def test_llm_chat_admin_only_access(org_and_users, setup_test_models, test
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = MockLLMResponse("Hello! I'm doing well, thank you for asking.")
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_auth_headers())
         assert resp.status_code == 200, f"Admin should be able to access LLM chat, got {resp.status_code}: {resp.text}"
         
         response_data = resp.json()
         assert "choices" in response_data
         assert response_data["choices"][0]["message"]["content"] == "Hello! I'm doing well, thank you for asking."
 
-    # Test member access (should be forbidden - admin only endpoint)
+    from app.main import app
+
+    app.dependency_overrides.clear()
+
+    # Test member access (should be forbidden - sysadmin-only account endpoint)
     resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(member["account_token"]))
     assert resp.status_code == 403, f"Member should NOT be able to access LLM chat, got {resp.status_code}: {resp.text}"
 
@@ -109,7 +119,7 @@ async def test_llm_chat_admin_only_access(org_and_users, setup_test_models, test
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_non_streaming_response(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_non_streaming_response(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test non-streaming LLM chat response"""
     admin = org_and_users["admin"]
 
@@ -128,7 +138,7 @@ async def test_llm_chat_non_streaming_response(org_and_users, setup_test_models,
         mock_response = MockLLMResponse("2 + 2 equals 4.", "stop")
         mock_llm.return_value = mock_response
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
         assert resp.status_code == 200
         
         response_data = resp.json()
@@ -166,7 +176,7 @@ async def test_llm_chat_non_streaming_response(org_and_users, setup_test_models,
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_streaming_response(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_streaming_response(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test streaming LLM chat response"""
     admin = org_and_users["admin"]
 
@@ -184,7 +194,7 @@ async def test_llm_chat_streaming_response(org_and_users, setup_test_models, tes
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = mock_stream_generator(test_chunks)
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
         assert resp.status_code == 200
         
         # Verify streaming response headers
@@ -222,7 +232,7 @@ async def test_llm_chat_streaming_response(org_and_users, setup_test_models, tes
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_streaming_error_handling(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_streaming_error_handling(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test error handling in streaming responses"""
     admin = org_and_users["admin"]
 
@@ -238,7 +248,7 @@ async def test_llm_chat_streaming_error_handling(org_and_users, setup_test_model
         # Make the mock raise an exception
         mock_llm.side_effect = Exception("Mocked LLM error")
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
         assert resp.status_code == 200  # Streaming responses return 200 even with errors
         
         # Parse streaming response to check for error
@@ -260,7 +270,7 @@ async def test_llm_chat_streaming_error_handling(org_and_users, setup_test_model
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_invalid_model(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_invalid_model(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test error handling for invalid model"""
     admin = org_and_users["admin"]
 
@@ -272,7 +282,7 @@ async def test_llm_chat_invalid_model(org_and_users, setup_test_models, test_db)
         "stream": False
     }
 
-    resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+    resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
     assert resp.status_code == 400
     
     response_data = resp.json()
@@ -280,7 +290,7 @@ async def test_llm_chat_invalid_model(org_and_users, setup_test_models, test_db)
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_missing_messages(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_missing_messages(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test validation for missing required fields"""
     admin = org_and_users["admin"]
 
@@ -290,12 +300,12 @@ async def test_llm_chat_missing_messages(org_and_users, setup_test_models, test_
         "stream": False
     }
 
-    resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+    resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
     assert resp.status_code == 422  # Validation error
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_empty_messages(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_empty_messages(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test validation for empty messages array"""
     admin = org_and_users["admin"]
 
@@ -305,12 +315,12 @@ async def test_llm_chat_empty_messages(org_and_users, setup_test_models, test_db
         "stream": False
     }
 
-    resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+    resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
     assert resp.status_code == 500  # LLM provider validation error
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_with_all_parameters(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_with_all_parameters(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test LLM chat with all optional parameters"""
     admin = org_and_users["admin"]
 
@@ -328,7 +338,7 @@ async def test_llm_chat_with_all_parameters(org_and_users, setup_test_models, te
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = MockLLMResponse("Python is a programming language.")
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
         assert resp.status_code == 200
         
         # Verify all parameters were passed to litellm
@@ -340,7 +350,7 @@ async def test_llm_chat_with_all_parameters(org_and_users, setup_test_models, te
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_non_streaming_error_handling(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_non_streaming_error_handling(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test error handling in non-streaming responses"""
     admin = org_and_users["admin"]
 
@@ -355,7 +365,7 @@ async def test_llm_chat_non_streaming_error_handling(org_and_users, setup_test_m
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.side_effect = Exception("Mocked LLM error")
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
         assert resp.status_code == 500
         
         response_data = resp.json()
@@ -364,7 +374,7 @@ async def test_llm_chat_non_streaming_error_handling(org_and_users, setup_test_m
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_conversation_context(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_conversation_context(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test LLM chat with conversation context (multiple messages)"""
     admin = org_and_users["admin"]
 
@@ -381,7 +391,7 @@ async def test_llm_chat_conversation_context(org_and_users, setup_test_models, t
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = MockLLMResponse("Your name is Alice.")
         
-        resp = client.post("/v0/account/llm/run", json=chat_request, headers=get_token_headers(admin["account_token"]))
+        resp = client.post("/v0/account/llm/run", json=chat_request, headers=sysadmin_auth_headers)
         assert resp.status_code == 200
         
         # Verify all messages were passed to litellm
@@ -395,14 +405,13 @@ async def test_llm_chat_conversation_context(org_and_users, setup_test_models, t
 
 # Organization-level LLM Chat Tests
 @pytest.mark.asyncio
-async def test_llm_chat_org_admin_only_access(org_and_users, setup_test_models, test_db):
-    """Test that only admins can access the organization-level LLM chat endpoint"""
+async def test_llm_chat_org_admin_only_access(org_and_users, setup_test_models, test_db, mock_auth):
+    """Org LLM chat is platform sysadmin-only (same as account LLM run)."""
     org_id = org_and_users["org_id"]
     admin = org_and_users["admin"]
     member = org_and_users["member"]
     outsider = org_and_users["outsider"]
 
-    # Test request payload
     chat_request = {
         "model": "gpt-4o-mini",
         "messages": [
@@ -412,22 +421,36 @@ async def test_llm_chat_org_admin_only_access(org_and_users, setup_test_models, 
         "stream": False
     }
 
-    # Test admin access (should work)
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = MockLLMResponse("Hello from organization LLM!")
-        
-        resp = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request, headers=get_token_headers(admin["token"]))
-        assert resp.status_code == 200, f"Admin should be able to access org LLM chat, got {resp.status_code}: {resp.text}"
-        
+        resp = client.post(
+            f"/v0/orgs/{org_id}/llm/run",
+            json=chat_request,
+            headers=get_auth_headers(),
+        )
+        assert resp.status_code == 200, f"Sysadmin should access org LLM chat, got {resp.status_code}: {resp.text}"
         response_data = resp.json()
         assert "choices" in response_data
         assert response_data["choices"][0]["message"]["content"] == "Hello from organization LLM!"
 
-    # Test member access (should be forbidden - admin only endpoint)
-    resp = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request, headers=get_token_headers(member["token"]))
-    assert resp.status_code == 403, f"Member should NOT be able to access org LLM chat, got {resp.status_code}: {resp.text}"
+    from app.main import app
 
-    # Test outsider access (should be forbidden)
+    app.dependency_overrides.clear()
+
+    resp = client.post(
+        f"/v0/orgs/{org_id}/llm/run",
+        json=chat_request,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 403, f"Org admin without sysadmin should be forbidden, got {resp.status_code}: {resp.text}"
+
+    resp = client.post(
+        f"/v0/orgs/{org_id}/llm/run",
+        json=chat_request,
+        headers=get_token_headers(member["token"]),
+    )
+    assert resp.status_code == 403, f"Member should NOT access org LLM chat, got {resp.status_code}: {resp.text}"
+
     resp = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request, headers=get_token_headers(outsider["token"]))
     assert resp.status_code == 403, f"Outsider should NOT be able to access org LLM chat, got {resp.status_code}: {resp.text}"
 
@@ -437,10 +460,9 @@ async def test_llm_chat_org_admin_only_access(org_and_users, setup_test_models, 
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_org_streaming_response(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_org_streaming_response(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test streaming LLM chat response via organization endpoint"""
     org_id = org_and_users["org_id"]
-    admin = org_and_users["admin"]
 
     chat_request = {
         "model": "gpt-4o-mini",
@@ -456,7 +478,11 @@ async def test_llm_chat_org_streaming_response(org_and_users, setup_test_models,
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = mock_stream_generator(test_chunks)
         
-        resp = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request, headers=get_token_headers(admin["token"]))
+        resp = client.post(
+            f"/v0/orgs/{org_id}/llm/run",
+            json=chat_request,
+            headers=sysadmin_auth_headers,
+        )
         assert resp.status_code == 200
         
         # Verify streaming response headers
@@ -493,10 +519,9 @@ async def test_llm_chat_org_streaming_response(org_and_users, setup_test_models,
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_org_invalid_model(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_org_invalid_model(org_and_users, setup_test_models, test_db, sysadmin_auth_headers):
     """Test error handling for invalid model via organization endpoint"""
     org_id = org_and_users["org_id"]
-    admin = org_and_users["admin"]
 
     chat_request = {
         "model": "invalid-org-model",
@@ -506,7 +531,11 @@ async def test_llm_chat_org_invalid_model(org_and_users, setup_test_models, test
         "stream": False
     }
 
-    resp = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request, headers=get_token_headers(admin["token"]))
+    resp = client.post(
+        f"/v0/orgs/{org_id}/llm/run",
+        json=chat_request,
+        headers=sysadmin_auth_headers,
+    )
     assert resp.status_code == 400
     
     response_data = resp.json()
@@ -514,13 +543,10 @@ async def test_llm_chat_org_invalid_model(org_and_users, setup_test_models, test
 
 
 @pytest.mark.asyncio
-async def test_llm_chat_org_wrong_organization(org_and_users, setup_test_models, test_db):
-    """Test that tokens are scoped to the correct organization"""
-    admin = org_and_users["admin"]
-    
-    # Use a different (invalid) organization ID
+async def test_llm_chat_org_wrong_organization(org_and_users, setup_test_models, test_db, mock_auth):
+    """Sysadmin org LLM run is not scoped to org membership (path org id is contextual only)."""
     fake_org_id = str(ObjectId())
-    
+
     chat_request = {
         "model": "gpt-4o-mini",
         "messages": [
@@ -529,13 +555,18 @@ async def test_llm_chat_org_wrong_organization(org_and_users, setup_test_models,
         "stream": False
     }
 
-    # Admin token is for a different org, should be forbidden
-    resp = client.post(f"/v0/orgs/{fake_org_id}/llm/run", json=chat_request, headers=get_token_headers(admin["token"]))
-    assert resp.status_code == 401, f"Should be unauthorized for wrong org, got {resp.status_code}: {resp.text}"
+    with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = MockLLMResponse("OK")
+        resp = client.post(
+            f"/v0/orgs/{fake_org_id}/llm/run",
+            json=chat_request,
+            headers=get_auth_headers(),
+        )
+        assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio 
-async def test_llm_chat_account_vs_org_endpoints(org_and_users, setup_test_models, test_db):
+async def test_llm_chat_account_vs_org_endpoints(org_and_users, setup_test_models, test_db, mock_auth):
     """Test that both account and organization endpoints work with appropriate tokens"""
     org_id = org_and_users["org_id"]
     admin = org_and_users["admin"]
@@ -552,9 +583,11 @@ async def test_llm_chat_account_vs_org_endpoints(org_and_users, setup_test_model
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = MockLLMResponse("Account endpoint response")
         
-        # Test account endpoint with account token
-        resp_account = client.post("/v0/account/llm/run", json=chat_request, 
-                                 headers=get_token_headers(admin["account_token"]))
+        resp_account = client.post(
+            "/v0/account/llm/run",
+            json=chat_request,
+            headers=get_auth_headers(),
+        )
         assert resp_account.status_code == 200
         account_data = resp_account.json()
         
@@ -564,10 +597,12 @@ async def test_llm_chat_account_vs_org_endpoints(org_and_users, setup_test_model
 
     with patch('litellm.acompletion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = MockLLMResponse("Org endpoint response")
-        
-        # Test org endpoint with org token
-        resp_org = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request,
-                              headers=get_token_headers(admin["token"]))
+
+        resp_org = client.post(
+            f"/v0/orgs/{org_id}/llm/run",
+            json=chat_request,
+            headers=get_auth_headers(),
+        )
         assert resp_org.status_code == 200
         org_data = resp_org.json()
         

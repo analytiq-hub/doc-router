@@ -14,7 +14,9 @@ from bson import ObjectId
 # Local imports
 import analytiq_data as ad
 from analytiq_data.cloud.cloud_config import TYPE_GCP, gcp_credentials_configured
-from app.auth import get_org_user, get_current_user, get_admin_user
+from app.auth import get_current_user, get_admin_user
+
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 from app.secret_mask import mask_secret_plaintext
 from analytiq_data.payments.exceptions import SPUCreditException
@@ -199,7 +201,7 @@ async def run_llm_analysis(
     document_id: str,
     prompt_revid: str = Query(default="default", description="The prompt revision ID to use"),
     force: bool = Query(default=False, description="Force new run even if result exists"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_runs_execute)
 ):
     """
     Run LLM on a document, with optional force refresh.
@@ -307,10 +309,10 @@ async def run_llm_analysis(
 async def run_llm_chat_org(
     organization_id: str,
     request: LLMPromptRequest,
-    current_user: User = Depends(get_admin_user)
+    current_user: User = Depends(get_admin_user),
 ):
     """
-    Test LLM with arbitrary prompt (admin or org admin) - Organization level.
+    Test LLM with arbitrary prompt (platform sysadmin only) - Organization level.
     Supports both streaming and non-streaming responses.
     """
     return await ad.llm.run_llm_chat(request, current_user)
@@ -337,7 +339,7 @@ async def get_llm_result(
         deprecated=True,
         description="OBSOLETE: use prompt_revid_fallback instead. Retained for backward compatibility.",
     ),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """
     Retrieve existing LLM results for a document.
@@ -390,7 +392,7 @@ async def get_llm_result(
 async def bulk_analyze_llm(
     organization_id: str,
     request: BulkAnalyzeLLMRequest = Body(...),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """
     Analyze which document-prompt pairs need LLM execution for bulk run.
@@ -427,7 +429,7 @@ async def update_llm_result(
     document_id: str,
     prompt_revid: str = Query(..., description="The prompt revision ID to update"),
     update: UpdateLLMResultRequest = Body(..., description="The update request"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_runs_execute)
 ):
     """
     Update LLM results with user edits and verification status.
@@ -467,7 +469,7 @@ async def delete_llm_result(
     organization_id: str,
     document_id: str,
     prompt_revid: str = Query(..., description="The prompt revision ID to delete"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_runs_execute)
 ):
     """
     Delete LLM results for a specific document and prompt.
@@ -493,7 +495,7 @@ async def delete_llm_result(
 async def download_all_llm_results(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_read)
 ):
     """
     Download all LLM results for a document as a JSON file.
@@ -666,7 +668,7 @@ async def list_org_llm_models(
         False,
         description="If true, return all enabled models except embedding models (for flow LLM pickers).",
     ),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List enabled LLM model names for the organization"""
     db = ad.common.get_async_db()

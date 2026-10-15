@@ -13,7 +13,7 @@ import {
   GridColDef, 
   GridRenderCellParams 
 } from '@mui/x-data-grid'
-import { Switch, IconButton, Alert } from '@mui/material'
+import { IconButton, Alert } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
@@ -23,6 +23,16 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useOrganizationData } from '@/hooks/useOrganizationData'
 import { isSysAdmin, isOrgAdmin } from '@/utils/roles'
+import {
+  BUILTIN_ADMIN,
+  BUILTIN_OPERATOR,
+  BUILTIN_PERMISSION_GROUPS,
+  memberHasAdminGroup,
+  normalizeOrgMember,
+  permissionGroupLabel,
+  primaryPermissionGroupId,
+  type BuiltinPermissionGroupId,
+} from '@/utils/orgPermissionGroups'
 
 interface OrganizationEditProps {
   organizationId: string
@@ -115,7 +125,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const { session } = useAppSession();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedMember, setSelectedMember] = useState<{ id: string, isAdmin: boolean } | null>(null);
+  const [selectedMember, setSelectedMember] = useState<{ id: string; permissionGroupId: BuiltinPermissionGroupId } | null>(null);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
 
   const [ocrLlmChatModels, setOcrLlmChatModels] = useState<LLMChatModel[]>([])
@@ -146,7 +156,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     if (organization) {
       setName(organization.name);
       setType(organization.type);
-      setMembers(organization.members);
+      setMembers(organization.members.map((m) => normalizeOrgMember(m)));
       setDefaultPromptEnabled(
         organization.default_prompt_enabled !== undefined
           ? organization.default_prompt_enabled
@@ -157,7 +167,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       // Store original values
       setOriginalName(organization.name);
       setOriginalType(organization.type);
-      setOriginalMembers(organization.members);
+      setOriginalMembers(organization.members.map((m) => normalizeOrgMember(m)));
       setOriginalDefaultPromptEnabled(
         organization.default_prompt_enabled !== undefined
           ? organization.default_prompt_enabled
@@ -304,16 +314,17 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     }
   };
 
-  const handleRoleChange = (userId: string, newRole: 'admin' | 'user') => {
-    setMembers(prevMembers => {
-      const updatedMembers = prevMembers.map(member => 
-        member.user_id === userId ? { ...member, role: newRole } : member
+  const handlePermissionGroupChange = (userId: string, groupId: BuiltinPermissionGroupId) => {
+    setMembers((prevMembers) => {
+      const updatedMembers = prevMembers.map((member) =>
+        member.user_id === userId
+          ? { user_id: member.user_id, permission_group_ids: [groupId] }
+          : member
       );
-      
-      // If the change would result in no admins, prevent it
+
       if (!validateAdminPresence(updatedMembers)) {
-        toast.error('Organization must have at least one admin');
-        return prevMembers; // Keep the original state
+        toast.error('Organization must have at least one Admin member');
+        return prevMembers;
       }
 
       return updatedMembers;
@@ -331,7 +342,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       return;
     }
 
-    setMembers(prev => [...prev, { user_id: userId, role: 'user' }]);
+    setMembers((prev) => [
+      ...prev,
+      { user_id: userId, permission_group_ids: [BUILTIN_OPERATOR] },
+    ]);
 
     if (user) {
       setAllUsers(prev =>
@@ -355,11 +369,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
 
   const handleRemoveMember = (userId: string) => {
     const memberToRemove = members.find(member => member.user_id === userId);
-    if (memberToRemove?.role === 'admin') {
-      // Check if this is the last admin
-      const remainingAdmins = members.filter(m => m.role === 'admin' && m.user_id !== userId);
+    if (memberToRemove && memberHasAdminGroup(memberToRemove.permission_group_ids)) {
+      const remainingAdmins = members.filter(
+        (m) => m.user_id !== userId && memberHasAdminGroup(m.permission_group_ids)
+      );
       if (remainingAdmins.length === 0) {
-        toast.error('Cannot remove the last admin. Promote another member to admin first.');
+        toast.error('Cannot remove the last Admin. Assign another member to Admin first.');
         return;
       }
     }
@@ -375,14 +390,18 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         id: member.user_id,
         name: user?.name || 'Unknown User',
         email: user?.email || '',
-        isAdmin: member.role === 'admin'
+        permissionGroupId: primaryPermissionGroupId(member.permission_group_ids) ?? BUILTIN_OPERATOR,
       }
     })
   }
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, memberId: string, isAdmin: boolean) => {
+  const handleMenuOpen = (
+    event: React.MouseEvent<HTMLElement>,
+    memberId: string,
+    permissionGroupId: BuiltinPermissionGroupId
+  ) => {
     setAnchorEl(event.currentTarget);
-    setSelectedMember({ id: memberId, isAdmin });
+    setSelectedMember({ id: memberId, permissionGroupId });
   };
 
   const handleMenuClose = () => {
@@ -408,14 +427,14 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       )
     },
     {
-      field: 'isAdmin',
-      headerName: 'Admin',
-      width: 120,
+      field: 'permissionGroupId',
+      headerName: 'Permission group',
+      width: 160,
       renderCell: (params: GridRenderCellParams) => (
-        <span className={params.value ? 'text-blue-600' : ''}>
-          {params.value ? 'Admin' : 'User'}
+        <span className={params.value === BUILTIN_ADMIN ? 'text-blue-600 font-medium' : ''}>
+          {permissionGroupLabel(String(params.value))}
         </span>
-      )
+      ),
     },
     {
       field: 'actions',
@@ -424,7 +443,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       renderCell: (params: GridRenderCellParams) => (
         <div>
           <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row.id, params.row.isAdmin)}
+            onClick={(e) => handleMenuOpen(e, params.row.id, params.row.permissionGroupId)}
             className="text-gray-600 hover:bg-gray-50"
           >
             <MoreVertIcon />
@@ -537,15 +556,16 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     // Compare each member and their roles
     const memberChanges = members.some(member => {
       const originalMember = originalMembers.find(m => m.user_id === member.user_id);
-      return !originalMember || originalMember.role !== member.role;
+      const norm = normalizeOrgMember(member);
+      const orig = originalMember ? normalizeOrgMember(originalMember) : null;
+      return !orig || orig.permission_group_ids.join() !== norm.permission_group_ids.join();
     });
-    
+
     return memberChanges;
   };
 
-  // Add this validation function after the hasChanges function
   const validateAdminPresence = (updatedMembers: OrganizationMember[]): boolean => {
-    return updatedMembers.some(member => member.role === 'admin');
+    return updatedMembers.some((member) => memberHasAdminGroup(member.permission_group_ids));
   };
 
   // Replace the permission check block with this:
@@ -966,38 +986,20 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
               >
-                <MenuItem
-                  onClick={() => {
-                    if (selectedMember) {
-                      handleRoleChange(
-                        selectedMember.id,
-                        selectedMember.isAdmin ? 'user' : 'admin'
-                      );
-                    }
-                    handleMenuClose();
-                  }}
-                  className="flex items-center gap-2"
-                  disabled={!selectedMember}
-                >
-                  <Switch
-                    checked={selectedMember?.isAdmin || false}
-                    onChange={() => {
+                {BUILTIN_PERMISSION_GROUPS.map((group) => (
+                  <MenuItem
+                    key={group.id}
+                    selected={selectedMember?.permissionGroupId === group.id}
+                    onClick={() => {
                       if (selectedMember) {
-                        handleRoleChange(
-                          selectedMember.id,
-                          selectedMember.isAdmin ? 'user' : 'admin'
-                        );
+                        handlePermissionGroupChange(selectedMember.id, group.id);
                       }
                       handleMenuClose();
                     }}
-                    color="primary"
-                    size="small"
-                    inputProps={{ 'aria-label': 'Toggle admin' }}
-                  />
-                  <span>
-                    {selectedMember?.isAdmin ? 'Remove Admin' : 'Make Admin'}
-                  </span>
-                </MenuItem>
+                  >
+                    {group.label}
+                  </MenuItem>
+                ))}
                 <MenuItem
                   onClick={() => {
                     if (selectedMember) handleRemoveMember(selectedMember.id);

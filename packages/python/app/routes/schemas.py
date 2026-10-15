@@ -15,7 +15,7 @@ from jsonschema import Draft7Validator
 # Local imports
 import analytiq_data as ad
 from analytiq_data.common.schema_list import list_schemas_for_org
-from app.auth import get_org_user
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 
 # Configure logger
@@ -153,7 +153,7 @@ def validate_schema_fields(fields: list) -> tuple[bool, str]:
 async def create_schema(
     organization_id: str,
     schema: SchemaConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Create a schema"""
     logger.info(f"create_schema() start: organization_id: {organization_id}, schema: {schema}")
@@ -207,7 +207,7 @@ async def list_schemas(
     name_search: str = Query(None, description="Search term for schema names"),
     sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List latest schema revisions within an organization"""
     sort_model = None
@@ -249,7 +249,7 @@ async def list_schemas(
 async def get_schema(
     organization_id: str,
     schema_revid: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Get a schema revision"""
     logger.info(f"get_schema() start: organization_id: {organization_id}, schema_revid: {schema_revid}")
@@ -281,7 +281,7 @@ async def update_schema(
     organization_id: str,
     schema_id: str,
     schema: SchemaUpdateConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Update a schema"""
     logger.info(f"update_schema() start: organization_id: {organization_id}, schema_id: {schema_id}, schema: {schema}")
@@ -371,7 +371,7 @@ async def update_schema(
 async def delete_schema(
     organization_id: str,
     schema_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Delete a schema"""
     logger.info(f"delete_schema() start: organization_id: {organization_id}, schema_id: {schema_id}")
@@ -430,7 +430,7 @@ async def validate_against_schema(
     organization_id: str,
     schema_revid: str,
     data: dict = Body(...),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Validate data against a schema revision"""
     logger.info(f"validate_against_schema() start: organization_id: {organization_id}, schema_revid: {schema_revid}")
@@ -482,7 +482,7 @@ async def validate_against_schema(
 async def list_schema_versions(
     organization_id: str,
     schema_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List all versions of a schema by schema_id"""
     logger.info(f"list_schema_versions() start: organization_id: {organization_id}, schema_id: {schema_id}")

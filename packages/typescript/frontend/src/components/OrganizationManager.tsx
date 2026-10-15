@@ -16,6 +16,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { formatLocalDate } from '@/utils/date';
+import { isOrgAdmin, isSysAdmin } from '@/utils/roles';
 
 interface AddOrganizationModalProps {
   open: boolean;
@@ -244,16 +245,6 @@ const OrganizationManager: React.FC = () => {
     }
   };
 
-  const isOrgAdmin = (organization: Organization) => {
-    return organization.members.some(
-      member => member.user_id === session?.user?.id && member.role === 'admin'
-    );
-  };
-
-  const isSysAdmin = () => {
-    return session?.user?.role === 'admin';
-  }
-
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, org: Organization) => {
     setAnchorEl(event.currentTarget);
     setSelectedOrg(org);
@@ -317,7 +308,7 @@ const OrganizationManager: React.FC = () => {
       headerName: 'Actions',
       width: 80,
       renderCell: (params) => {
-        const isAdmin = isOrgAdmin(params.row) || isSysAdmin();
+        const isAdmin = isOrgAdmin(params.row, session) || isSysAdmin(session);
         return (
           <div>
             <IconButton
@@ -436,7 +427,7 @@ const OrganizationManager: React.FC = () => {
               handleMenuClose();
             }}
             className="flex items-center gap-2"
-            disabled={!selectedOrg || !(selectedOrg && (isOrgAdmin(selectedOrg) || isSysAdmin()))}
+            disabled={!selectedOrg || !(selectedOrg && (isOrgAdmin(selectedOrg, session) || isSysAdmin(session)))}
           >
             <EditIcon fontSize="small" className="text-blue-600" />
             <span>Edit</span>
@@ -447,7 +438,7 @@ const OrganizationManager: React.FC = () => {
               handleMenuClose();
             }}
             className="flex items-center gap-2"
-            disabled={!selectedOrg || !(selectedOrg && (isOrgAdmin(selectedOrg) || isSysAdmin()))}
+            disabled={!selectedOrg || !(selectedOrg && (isOrgAdmin(selectedOrg, session) || isSysAdmin(session)))}
           >
             <DeleteIcon fontSize="small" className="text-red-600" />
             <span>Delete</span>
@@ -497,7 +488,7 @@ const OrganizationManager: React.FC = () => {
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddOrganization}
-        isSysAdmin={isSysAdmin()}
+        isSysAdmin={isSysAdmin(session)}
       />
     </div>
   );

@@ -14,7 +14,7 @@ from bson import ObjectId
 # Local imports
 import analytiq_data as ad
 from analytiq_data.common.form_list import list_forms_for_org
-from app.auth import get_org_user
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 
 # Configure logger
@@ -114,7 +114,7 @@ async def get_form_id_and_version(form_id: Optional[str] = None) -> tuple[str, i
 async def create_form(
     organization_id: str,
     form: FormConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Create a form"""
     logger.info(f"create_form() start: organization_id: {organization_id}, form: {form}")
@@ -170,7 +170,7 @@ async def list_forms(
     name_search: Optional[str] = Query(None, description="Search term for form names"),
     sort: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List latest form revisions within an organization, optionally filtered by tags"""
     sort_model = None
@@ -213,7 +213,7 @@ async def list_forms(
 async def get_form(
     organization_id: str,
     form_revid: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Get a form revision"""
     logger.info(f"get_form() start: organization_id: {organization_id}, form_revid: {form_revid}")
@@ -251,7 +251,7 @@ async def update_form(
     organization_id: str,
     form_id: str,
     form: FormConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Update an existing form"""
     logger.info(f"update_form() start: organization_id: {organization_id}, form_id: {form_id}")
@@ -341,7 +341,7 @@ async def update_form(
 async def delete_form(
     organization_id: str,
     form_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Delete a form"""
     logger.info(f"delete_form() start: organization_id: {organization_id}, form_id: {form_id}")
@@ -399,7 +399,7 @@ async def delete_form(
 async def list_form_versions(
     organization_id: str,
     form_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List all versions of a form by form_id"""
     logger.info(f"list_form_versions() start: organization_id: {organization_id}, form_id: {form_id}")
@@ -438,7 +438,7 @@ async def submit_form(
     organization_id: str,
     document_id: str,
     submission: FormSubmissionData,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Submit a form for a specific document - updates existing submission if found"""
     logger.info(f"submit_form() start: organization_id: {organization_id}, document_id: {document_id}, form_revid: {submission.form_revid}")
@@ -514,7 +514,7 @@ async def get_form_submission(
     organization_id: str,
     document_id: str,
     form_revid: str = Query(..., description="The form revision ID"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Get the form submission for a specific document and form combination"""
     logger.info(f"get_form_submission() start: organization_id: {organization_id}, document_id: {document_id}, form_revid: {form_revid}")
@@ -537,7 +537,7 @@ async def delete_form_submission(
     organization_id: str,
     document_id: str,
     form_revid: str = Query(..., description="The form revision ID"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Delete a form submission"""
     logger.info(f"delete_form_submission() start: organization_id: {organization_id}, document_id: {document_id}, form_revid: {form_revid}")

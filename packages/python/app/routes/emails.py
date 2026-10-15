@@ -18,6 +18,7 @@ from bcrypt import hashpw, gensalt
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.org_permissions import BUILTIN_ADMIN, build_member_entry, builtin_permission_groups_document
 from app import email_utils
 from app.auth import get_admin_user, get_current_user, is_system_admin, is_organization_admin
 from app.models import User
@@ -206,10 +207,8 @@ async def verify_email(token: str, background_tasks: BackgroundTasks):
     if not existing_org:
         org_insert_result = await db.organizations.insert_one({
             "name": updated_user.get("email"),
-            "members": [{
-                "user_id": str(updated_user["_id"]),
-                "role": "admin"
-            }],
+            "permission_groups": builtin_permission_groups_document(),
+            "members": [build_member_entry(str(updated_user["_id"]), permission_group_ids=[BUILTIN_ADMIN])],
             "type": "individual",
             "created_at": datetime.now(UTC),
             "updated_at": datetime.now(UTC)
@@ -494,12 +493,9 @@ async def accept_invitation(
                 {"_id": ObjectId(invitation["organization_id"])},
                 {
                     "$push": {
-                        "members": {
-                            "user_id": user_id,
-                            "role": "user"  # Default all invited users to regular member role
-                        }
+                        "members": build_member_entry(user_id),
                     }
-                }
+                },
             )
         
         # Mark invitation as accepted
@@ -522,7 +518,6 @@ async def accept_invitation(
         "email": invitation["email"],
         "name": data.name,
         "password": hashed_password.decode(),
-        "role": "user",  # Default all invited users to regular user role
         "email_verified": True,  # Auto-verify since it's from invitation
         "created_at": datetime.now(UTC)
     }
@@ -536,23 +531,14 @@ async def accept_invitation(
             org_id = invitation["organization_id"]
             await db.organizations.update_one(
                 {"_id": ObjectId(org_id)},
-                {
-                    "$push": {
-                        "members": {
-                            "user_id": user_id,
-                            "role": "user"  # Default all invited users to regular member role
-                        }
-                    }
-                }
+                {"$push": {"members": build_member_entry(user_id)}},
             )
         else:
             # Create default individual organization
             result = await db.organizations.insert_one({
                 "name": invitation["email"],
-                "members": [{
-                    "user_id": user_id,
-                    "role": "admin"  # User is admin of their individual org
-                }],
+                "permission_groups": builtin_permission_groups_document(),
+                "members": [build_member_entry(user_id, permission_group_ids=[BUILTIN_ADMIN])],
                 "type": "individual",
                 "created_at": datetime.now(UTC),
                 "updated_at": datetime.now(UTC)

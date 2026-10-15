@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.org_permissions import BUILTIN_ADMIN, build_member_entry, builtin_permission_groups_document
 from app.routes.payments import sync_customer
 
 # Configure logger
@@ -140,7 +141,6 @@ async def oauth_signin(request: Request):
             user_result = await db.users.insert_one({
                 "email": oauth_request.email,
                 "name": oauth_request.name,
-                "role": "user",
                 "email_verified": oauth_request.email_verified,
                 "created_at": datetime.now(UTC)
             })
@@ -166,10 +166,8 @@ async def oauth_signin(request: Request):
             org_result = await db.organizations.insert_one({
                 "name": oauth_request.email,
                 "type": "individual",
-                "members": [{
-                    "user_id": user_id,
-                    "role": "admin"
-                }],
+                "permission_groups": builtin_permission_groups_document(),
+                "members": [build_member_entry(user_id, permission_group_ids=[BUILTIN_ADMIN])],
                 "created_at": datetime.now(UTC),
                 "updated_at": datetime.now(UTC)
             })

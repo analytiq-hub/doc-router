@@ -14,7 +14,7 @@ from bson import ObjectId
 # Local imports
 import analytiq_data as ad
 from analytiq_data.common.tag_list import list_tags_for_org
-from app.auth import get_org_user
+from app.org_auth import require_org_config_read, require_org_config_write
 from app.models import User
 
 # Configure logger
@@ -44,7 +44,7 @@ class ListTagsResponse(BaseModel):
 async def create_tag(
     organization_id: str,
     tag: TagConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write),
 ):
     """Create a tag"""
     db = ad.common.get_async_db()
@@ -87,7 +87,7 @@ async def list_tags(
     name_search: str = Query(None, description="Search term for tag names"),
     sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read),
 ):
     """List tags"""
     sort_model = None
@@ -124,7 +124,7 @@ async def list_tags(
 async def delete_tag(
     organization_id: str,
     tag_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write),
 ):
     """Delete a tag"""
     db = ad.common.get_async_db()
@@ -174,7 +174,7 @@ async def update_tag(
     organization_id: str,
     tag_id: str,
     tag: TagConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write),
 ):
     """Update a tag"""
     db = ad.common.get_async_db()
@@ -211,7 +211,7 @@ async def update_tag(
 async def get_tag(
     organization_id: str,
     tag_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read),
 ):
     """Get a tag by ID"""
     db = ad.common.get_async_db()

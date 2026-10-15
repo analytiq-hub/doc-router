@@ -10,7 +10,8 @@ from bson import ObjectId
 from bson.errors import InvalidId
 
 import analytiq_data as ad
-from app.auth import get_org_admin_user, get_org_user
+from app.auth import get_org_admin_user
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute, require_org_admin_capability
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -250,7 +251,7 @@ async def list_webhook_deliveries(
     webhook_id: Optional[str] = Query(None, description="Filter by webhook endpoint id"),
     skip: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     db = ad.common.get_async_db()
     query: dict = {"organization_id": organization_id}
@@ -304,7 +305,7 @@ async def list_webhook_deliveries(
 async def get_webhook_delivery(
     organization_id: str,
     delivery_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     db = ad.common.get_async_db()
     did = _object_id_or_404(delivery_id, "delivery")
@@ -352,7 +353,7 @@ async def retry_webhook_delivery(
 )
 async def list_org_webhooks(
     organization_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     db = ad.common.get_async_db()
     cursor = db[ad.webhooks.ENDPOINTS_COLLECTION].find({"organization_id": organization_id}).sort("created_at", 1)
@@ -434,7 +435,7 @@ async def create_org_webhook(
 async def get_org_webhook(
     organization_id: str,
     webhook_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     db = ad.common.get_async_db()
     wid = _object_id_or_404(webhook_id, "webhook")

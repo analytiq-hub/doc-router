@@ -14,11 +14,10 @@ export async function GET() {
     // Debug the session object to see what's available
     console.log("[NEXTJS] Complete Session:", JSON.stringify(session, null, 2));
     
-    const isAdmin = session?.user?.role === 'admin';
-    
-    // Check if user is authenticated and is an admin
+    const isAdmin = (session?.user as { isSysadmin?: boolean } | undefined)?.isSysadmin === true;
+
     if (!session || !isAdmin) {
-      console.log("[NEXTJS] Auth check failed - Session exists:", !!session, "Role:", session?.user?.role);
+      console.log("[NEXTJS] Auth check failed - Session exists:", !!session, "Sysadmin:", isAdmin);
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 403 }

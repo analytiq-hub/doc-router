@@ -10,7 +10,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const isAdmin = session?.user?.role === 'admin';
+    const isAdmin = (session?.user as { isSysadmin?: boolean } | undefined)?.isSysadmin === true;
     
     // Check if user is authenticated and is an admin
     if (!session || !isAdmin) {

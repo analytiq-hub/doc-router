@@ -67,7 +67,6 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
         await docRouterAccountApi.createInvitation({
           email,
           organization_id: organizationId,
-          role: 'user'
         });
         toast.success('Invitation sent successfully');
       }

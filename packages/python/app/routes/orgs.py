@@ -5,12 +5,22 @@ import logging
 import re
 from datetime import datetime, UTC
 from typing import Any, List, Literal, Optional
+
+from analytiq_data.org_permissions import (
+    BUILTIN_ADMIN,
+    BUILTIN_GROUP_IDS,
+    build_member_entry,
+    builtin_permission_groups_document,
+    members_for_api,
+    members_include_org_admin,
+    prepare_members_for_storage,
+)
 from enum import Enum
 
 # Third-party imports
 from fastapi import APIRouter, Depends, HTTPException, Query
 from bson import ObjectId
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # Local imports
 import analytiq_data as ad
@@ -39,7 +49,17 @@ orgs_router = APIRouter()
 # Organization models
 class OrganizationMember(BaseModel):
     user_id: str
-    role: Literal['admin', 'user']
+    permission_group_ids: List[str]
+
+    @field_validator("permission_group_ids")
+    @classmethod
+    def validate_permission_group_ids(cls, value: List[str]) -> List[str]:
+        if not value:
+            raise ValueError("permission_group_ids must not be empty")
+        for gid in value:
+            if gid not in BUILTIN_GROUP_IDS:
+                raise ValueError(f"Unknown permission group: {gid}")
+        return value
 
 # Add this new type definition near the top with other Literal types
 OrganizationType = Literal["individual", "team", "enterprise"]
@@ -100,6 +120,22 @@ class ListOrganizationsResponse(BaseModel):
     organizations: List[Organization]
     total_count: int
     skip: int
+
+
+def _organization_api_payload(org: dict[str, Any], ocr_catalog: OrganizationOcrCatalog) -> dict[str, Any]:
+    return {
+        "id": str(org["_id"]),
+        "name": org["name"],
+        "members": members_for_api(org.get("members") or []),
+        "type": org.get("type", "individual"),
+        "default_prompt_enabled": org.get("default_prompt_enabled", True),
+        "experimental_features": org.get("experimental_features", False),
+        "flow_log_level": ad.flows.normalize_flow_log_level(org.get("flow_log_level")),
+        "ocr_config": merge_org_ocr_config(org.get("ocr_config")),
+        "ocr_catalog": ocr_catalog,
+        "created_at": org["created_at"],
+        "updated_at": org["updated_at"],
+    }
 
 # Add this to your OrganizationType documentation if you have it
 class OrganizationType(str, Enum):
@@ -163,16 +199,7 @@ async def list_organizations(
 
         ocr_catalog = await _organization_ocr_catalog()
         return ListOrganizationsResponse(organizations=[
-            Organization(**{
-                **organization,
-                "id": str(organization["_id"]),
-                "type": organization.get("type", "individual"),
-                "default_prompt_enabled": organization.get("default_prompt_enabled", True),
-                "experimental_features": organization.get("experimental_features", False),
-                "flow_log_level": ad.flows.normalize_flow_log_level(organization.get("flow_log_level")),
-                "ocr_config": merge_org_ocr_config(organization.get("ocr_config")),
-                "ocr_catalog": ocr_catalog,
-            })
+            Organization(**_organization_api_payload(organization, ocr_catalog))
         ], total_count=1, skip=0)
 
     # Handle user filter
@@ -231,16 +258,7 @@ async def list_organizations(
 
     ocr_catalog = await _organization_ocr_catalog()
     ret = ListOrganizationsResponse(organizations=[
-        Organization(**{
-            **org,
-            "id": str(org["_id"]),
-            "type": org.get("type", "individual"),
-            "default_prompt_enabled": org.get("default_prompt_enabled", True),
-            "experimental_features": org.get("experimental_features", False),
-            "flow_log_level": ad.flows.normalize_flow_log_level(org.get("flow_log_level")),
-            "ocr_config": merge_org_ocr_config(org.get("ocr_config")),
-            "ocr_catalog": ocr_catalog,
-        }) for org in organizations
+        Organization(**_organization_api_payload(org, ocr_catalog)) for org in organizations
     ], total_count=total_count, skip=skip)
     return ret
 
@@ -292,10 +310,8 @@ async def create_organization(
 
     organization_doc = {
         "name": organization.name,
-        "members": [{
-            "user_id": current_user.user_id,
-            "role": "admin"
-        }],
+        "permission_groups": builtin_permission_groups_document(),
+        "members": [build_member_entry(current_user.user_id, permission_group_ids=[BUILTIN_ADMIN])],
         "type": organization.type or "team",  # Default to team if not specified
         "default_prompt_enabled": organization.default_prompt_enabled,
         "experimental_features": organization.experimental_features,
@@ -317,12 +333,9 @@ async def create_organization(
     # Create corresponding payments customer (and Stripe if configured)
     await sync_customer(db=db, org_id=org_id)
 
-    return Organization(**{
-        **organization_doc,
-        "id": org_id,
-        "ocr_config": merge_org_ocr_config(organization_doc.get("ocr_config")),
-        "ocr_catalog": await _organization_ocr_catalog(),
-    })
+    ocr_catalog = await _organization_ocr_catalog()
+    stored = {**organization_doc, "_id": result.inserted_id}
+    return Organization(**_organization_api_payload(stored, ocr_catalog))
 
 @orgs_router.put("/v0/account/organizations/{organization_id}", response_model=Organization, tags=["account/organizations"])
 async def update_organization(
@@ -369,14 +382,19 @@ async def update_organization(
         update_data["name"] = organization_update.name
     
     if organization_update.members is not None:
-        # Ensure at least one admin remains
-        if not any(m.role == "admin" for m in organization_update.members):
+        try:
+            member_docs = prepare_members_for_storage(
+                [m.model_dump() for m in organization_update.members]
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not members_include_org_admin(member_docs, organization):
             logger.error(f"Organization must have at least one admin: {organization_update.members}")
             raise HTTPException(
                 status_code=400,
                 detail="Organization must have at least one admin"
             )
-        update_data["members"] = [m.dict() for m in organization_update.members]
+        update_data["members"] = member_docs
 
     if organization_update.default_prompt_enabled is not None:
         update_data["default_prompt_enabled"] = organization_update.default_prompt_enabled
@@ -414,19 +432,8 @@ async def update_organization(
     # Update the payments customer (and Stripe if configured)
     await sync_customer(db=db, org_id=organization_id)
 
-    return Organization(**{
-        "id": str(updated_organization["_id"]),
-        "name": updated_organization["name"],
-        "members": updated_organization["members"],
-        "type": updated_organization.get("type", "individual"),
-        "default_prompt_enabled": updated_organization.get("default_prompt_enabled", True),
-        "experimental_features": updated_organization.get("experimental_features", False),
-        "flow_log_level": ad.flows.normalize_flow_log_level(updated_organization.get("flow_log_level")),
-        "ocr_config": merge_org_ocr_config(updated_organization.get("ocr_config")),
-        "ocr_catalog": await _organization_ocr_catalog(),
-        "created_at": updated_organization["created_at"],
-        "updated_at": updated_organization["updated_at"]
-    })
+    ocr_catalog = await _organization_ocr_catalog()
+    return Organization(**_organization_api_payload(updated_organization, ocr_catalog))
 
 @orgs_router.delete("/v0/account/organizations/{organization_id}", tags=["account/organizations"])
 async def delete_organization(
@@ -494,15 +501,14 @@ async def update_organization_type(
     if (current_type in ['individual', 'team'] and update.type == 'enterprise' and current_user_id):
         # Check if current user is a system admin
         user = await db.users.find_one({"_id": ObjectId(current_user_id)})
-        if not user or user.get("role") != "admin":
+        if not await is_system_admin(current_user_id):
             raise HTTPException(
                 status_code=403,
                 detail="Only system administrators can upgrade organizations to Enterprise"
             )
 
     # Find the first admin in the current organization
-    first_admin = next((m for m in organization["members"] if m["role"] == "admin"), None)
-    if not first_admin:
+    if not members_include_org_admin(organization.get("members") or [], organization):
         raise HTTPException(status_code=400, detail="Organization must have at least one admin")
 
     update_data = {}
@@ -511,9 +517,15 @@ async def update_organization_type(
     if update.type in ["team", "enterprise"]:
         update_data["type"] = update.type
         if update.members:
-            if not any(m.role == "admin" for m in update.members):
+            try:
+                member_docs = prepare_members_for_storage(
+                    [m.model_dump() for m in update.members]
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not members_include_org_admin(member_docs, organization):
                 raise HTTPException(status_code=400, detail="Organization must have at least one admin")
-            update_data["members"] = [m.dict() for m in update.members]
+            update_data["members"] = member_docs
 
     # Validate individual organization member count
     if update.type == "individual":
@@ -523,9 +535,15 @@ async def update_organization_type(
                     status_code=400, 
                     detail="Individual organizations cannot have multiple members"
                 )
-            if not any(m.role == "admin" for m in update.members):
+            try:
+                member_docs = prepare_members_for_storage(
+                    [m.model_dump() for m in update.members]
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not members_include_org_admin(member_docs, organization):
                 raise HTTPException(status_code=400, detail="Organization must have at least one admin")
-            update_data["members"] = [m.dict() for m in update.members]
+            update_data["members"] = member_docs
 
     # Update the organization
     update_data["updated_at"] = datetime.now(UTC)

@@ -10,6 +10,7 @@ from bson import ObjectId
 import asyncio
 
 import analytiq_data as ad
+from analytiq_data.org_permissions import member_has_admin_group
 
 from app.auth import (
     get_current_user,
@@ -793,7 +794,7 @@ async def _create_payments_customer(db, org_id: str) -> Dict[str, Any]:
         user_id = None
         members = org.get("members", [])
         for member in members:
-            if member.get("role") == "admin":
+            if member_has_admin_group(member):
                 user_id = str(member.get("user_id"))
                 break
         
@@ -924,7 +925,7 @@ async def sync_payments_customer(db, org_id: str) -> Dict[str, Any]:
         user_id = None
         members = org.get("members", [])
         for member in members:
-            if member.get("role") == "admin":
+            if member_has_admin_group(member):
                 user_id = str(member.get("user_id"))
                 break
         
@@ -1028,7 +1029,7 @@ async def sync_stripe_customer(db, org_id: str) -> Dict[str, Any]:
         user_id = None
         members = org.get("members", [])
         for member in members:
-            if member.get("role") == "admin":
+            if member_has_admin_group(member):
                 user_id = str(member.get("user_id"))
                 break
         

@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useAppSession } from '@/contexts/AppSessionContext';
+import { isSysAdmin } from '@/utils/roles';
 import {
   Person as UserIcon,
   Code as DeveloperIcon,
@@ -42,7 +43,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
   children
 }) => {
   const { session } = useAppSession();
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isSysAdmin(session);
 
   const menuItems: Array<{
     title: string;

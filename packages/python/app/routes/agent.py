@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
-from app.auth import get_org_user
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -175,7 +175,7 @@ async def post_chat(
     organization_id: str,
     document_id: str,
     request: ChatRequest = Body(...),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """
     Start or continue a chat turn. If the agent returns tool calls and auto_approve is false,
@@ -308,7 +308,7 @@ async def post_chat_approve(
     organization_id: str,
     document_id: str,
     request: ApproveRequest = Body(...),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Submit approvals/rejections for pending tool calls; continues the agent turn."""
     doc = await ad.common.doc.get_doc(
@@ -359,7 +359,7 @@ async def post_chat_approve(
 async def get_chat_tools(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Get tool metadata: read-only vs read-write. Read-only tools never require approval."""
     doc = await ad.common.doc.get_doc(
@@ -381,7 +381,7 @@ async def list_threads(
     organization_id: str,
     document_id: str,
     limit: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """List chat threads for the document, most recent first."""
     doc = await ad.common.doc.get_doc(
@@ -404,7 +404,7 @@ async def create_thread(
     organization_id: str,
     document_id: str,
     body: CreateThreadBody | None = Body(None),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ):
     """Create a new chat thread for the document."""
     doc = await ad.common.doc.get_doc(
@@ -431,7 +431,7 @@ async def get_thread(
     organization_id: str,
     document_id: str,
     thread_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Get a thread with full messages and extraction."""
     doc = await ad.common.doc.get_doc(
@@ -458,7 +458,7 @@ async def delete_thread(
     organization_id: str,
     document_id: str,
     thread_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ):
     """Delete a chat thread."""
     doc = await ad.common.doc.get_doc(

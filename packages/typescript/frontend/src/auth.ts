@@ -2,6 +2,7 @@ import axios from 'axios';
 import NextAuth, { NextAuthOptions, Session } from "next-auth"
 import { MongoDBAdapter } from "@auth/mongodb-adapter"
 import mongoClient, { getDatabase } from "@/utils/mongodb"
+import { ObjectId } from "mongodb"
 import { Adapter } from "next-auth/adapters"
 import type { Account, DefaultUser } from "next-auth"
 import crypto from 'crypto';
@@ -33,6 +34,17 @@ function createRequestSignature(jsonString: string): string {
 }
 
 const customAdapter = MongoDBAdapter(mongoClient) as Adapter
+
+const SYSTEM_ROLE_SYSADMIN = "sysadmin";
+
+async function loadIsSysadmin(userId: string): Promise<boolean> {
+    const db = getDatabase();
+    const doc = await db.collection("users").findOne(
+        { _id: new ObjectId(userId) },
+        { projection: { system_role: 1 } },
+    );
+    return doc?.system_role === SYSTEM_ROLE_SYSADMIN;
+}
 
 export const authOptions: NextAuthOptions = {
     session: {
@@ -77,7 +89,7 @@ export const authOptions: NextAuthOptions = {
                         id: user._id.toString(),
                         email: user.email,
                         name: user.name,
-                        role: user.role || "user"
+                        isSysadmin: user.system_role === SYSTEM_ROLE_SYSADMIN,
                     };
                 } catch (error) {
                     console.error("Auth error:", error);
@@ -145,7 +157,7 @@ export const authOptions: NextAuthOptions = {
         async jwt({ token, account, profile, trigger, session, user }) {
             if (user) {
                 token.id = user.id;
-                token.role = user.role;
+                token.isSysadmin = user.isSysadmin ?? await loadIsSysadmin(user.id as string);
                 
                 // Only get new FastAPI token on initial sign-in
                 try {
@@ -196,8 +208,8 @@ export const authOptions: NextAuthOptions = {
         }) {
             // Cast the session to AppSession to add our custom properties
             const appSession = session as AppSession;
-            appSession.user.id = token.id;
-            appSession.user.role = token.role;
+            appSession.user.id = token.id as string;
+            appSession.user.isSysadmin = token.isSysadmin === true;
             appSession.providerAccessToken = token.providerAccessToken as string;
             appSession.apiAccessToken = token.apiAccessToken as string;
             appSession.expires = session.expires;

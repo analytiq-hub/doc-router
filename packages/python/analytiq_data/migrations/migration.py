@@ -3551,6 +3551,79 @@ class BackfillDocumentUpdatedAt(Migration):
         return True
 
 
+class OrgPermissionGroupsMigration(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Seed org permission_groups and members.permission_group_ids; set users.system_role"
+        )
+
+    async def up(self, db) -> bool:
+        from analytiq_data.org_permissions import (
+            BUILTIN_ADMIN,
+            BUILTIN_BUILDER,
+            BUILTIN_GROUP_IDS,
+            BUILTIN_OPERATOR,
+            builtin_permission_groups_document,
+            prepare_members_for_storage,
+        )
+
+        def _group_ids_from_legacy_member(member: dict) -> list[str]:
+            ids = member.get("permission_group_ids")
+            if isinstance(ids, list) and ids:
+                valid = [str(g) for g in ids if str(g) in BUILTIN_GROUP_IDS]
+                if valid:
+                    return valid
+            role = member.get("role")
+            if role == "admin":
+                return [BUILTIN_ADMIN]
+            if role == "user":
+                return [BUILTIN_BUILDER]
+            return [BUILTIN_OPERATOR]
+
+        try:
+            groups_doc = builtin_permission_groups_document()
+            org_cursor = db.organizations.find({}, projection={"members": 1, "permission_groups": 1})
+            org_updated = 0
+            async for org in org_cursor:
+                sets: dict = {}
+                if not org.get("permission_groups"):
+                    sets["permission_groups"] = groups_doc
+                members = org.get("members") or []
+                normalized = prepare_members_for_storage(
+                    [
+                        {"user_id": m["user_id"], "permission_group_ids": _group_ids_from_legacy_member(m)}
+                        for m in members
+                        if m.get("user_id")
+                    ]
+                )
+                if normalized != members:
+                    sets["members"] = normalized
+                if sets:
+                    await db.organizations.update_one({"_id": org["_id"]}, {"$set": sets})
+                    org_updated += 1
+
+            user_result = await db.users.update_many(
+                {"role": "admin", "system_role": {"$exists": False}},
+                {"$set": {"system_role": "sysadmin"}},
+            )
+            role_unset = await db.users.update_many(
+                {"role": {"$exists": True}},
+                {"$unset": {"role": ""}},
+            )
+            if org_updated or user_result.modified_count or role_unset.modified_count:
+                logger.info(
+                    f"OrgPermissionGroupsMigration: updated {org_updated} org(s), "
+                    f"set system_role on {user_result.modified_count} user(s)"
+                )
+            return True
+        except Exception as e:
+            logger.error(f"OrgPermissionGroupsMigration failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        return True
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3599,6 +3672,7 @@ MIGRATIONS = [
     FixKbLexicalSearchIndexFilterFields(),
     EnsureKbSearchIndexes(),
     BackfillDocumentUpdatedAt(),
+    OrgPermissionGroupsMigration(),
     # Add more migrations here
 ]
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { LicenseStatus } from '@docrouter/sdk';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { DocRouterAccountApi } from '@/utils/api';
+import { isSysAdmin } from '@/utils/roles';
 
 const POLL_MS = 5 * 60 * 1000;
 
@@ -73,7 +74,7 @@ const LicenseBanner: React.FC = () => {
 
   if (authStatus !== 'authenticated' || !license) return null;
 
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isSysAdmin(session);
   const copy = bannerCopy(license, isAdmin);
   if (!copy) return null;
 

@@ -16,7 +16,7 @@ export default async function AccountDevelopmentLayout({
   if (!session) {
     redirect('/');
   }
-  if (session.user?.role !== 'admin') {
+  if (!(session.user as { isSysadmin?: boolean }).isSysadmin) {
     redirect('/settings');
   }
   return <>{children}</>;

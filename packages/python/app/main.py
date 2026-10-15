@@ -40,6 +40,7 @@ from app.routes.system_settings import system_settings_router
 from app.routes.token import token_router
 from app.routes.oauth import oauth_router
 from app.routes.orgs import orgs_router
+from app.routes.org_permissions import org_permissions_router
 from app.routes.users import users_router
 from app.routes.emails import emails_router
 from app.routes.redirect import redirect_router
@@ -191,6 +192,7 @@ app.include_router(system_settings_router)
 app.include_router(license_router)
 app.include_router(oauth_router)
 app.include_router(orgs_router)
+app.include_router(org_permissions_router)
 app.include_router(users_router)
 app.include_router(emails_router)
 app.include_router(webhooks_router)

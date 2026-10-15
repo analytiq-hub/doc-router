@@ -164,7 +164,7 @@ async def test_same_name_allowed_in_different_orgs(org_and_users, test_db):
         {
             "_id": ObjectId(other_org),
             "name": "Other Org",
-            "members": [{"user_id": admin["id"], "role": "admin"}],
+            "members": [{"user_id": admin["id"], "permission_group_ids": ["admin"]}],
             "type": "team",
             "created_at": datetime.now(UTC),
             "updated_at": datetime.now(UTC),

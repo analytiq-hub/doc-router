@@ -16,7 +16,7 @@ export async function createDefaultOrganization(userId: string, email: string) {
         type: "individual",  // Mark as individual
         members: [{
             user_id: userId,
-            role: "admin"
+            permission_group_ids: ["admin"],
         }],
         created_at: new Date(),
         updated_at: new Date()

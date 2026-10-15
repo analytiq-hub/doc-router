@@ -1,6 +1,6 @@
 export interface OrganizationMember {
   user_id: string;
-  role: 'admin' | 'user';
+  permission_group_ids: string[];
 }
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';

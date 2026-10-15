@@ -17,6 +17,7 @@ from . import payments
 from . import system
 from . import aws
 from . import webhooks
+from . import org_permissions
 
 # Import last since it depends on other modules
 from . import common

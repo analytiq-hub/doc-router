@@ -44,7 +44,7 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         regular_user_id = regular_user_result["id"]
         
         # Verify the user was created with 'user' role
-        assert regular_user_result["role"] == "user"
+        assert regular_user_result["is_sysadmin"] is False
         
         # Step 2: Create another regular user to test promotion
         second_user_data = {
@@ -64,11 +64,11 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         second_user_id = second_user_result["id"]
         
         # Verify the second user was also created with 'user' role
-        assert second_user_result["role"] == "user"
+        assert second_user_result["is_sysadmin"] is False
         
         # Step 3: Verify that the current admin user CAN promote users to admin
         promote_to_admin_data = {
-            "role": "admin"
+            "is_sysadmin": True
         }
         
         promote_response = client.put(
@@ -80,7 +80,7 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         # This should succeed because we're using admin credentials
         assert promote_response.status_code == 200
         promoted_user = promote_response.json()
-        assert promoted_user["role"] == "admin"
+        assert promoted_user["is_sysadmin"] is True
         
         # Step 4: Verify the user was actually promoted in the database
         get_promoted_user_response = client.get(
@@ -91,7 +91,7 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         assert get_promoted_user_response.status_code == 200
         get_data = get_promoted_user_response.json()
         assert len(get_data["users"]) == 1
-        assert get_data["users"][0]["role"] == "admin"
+        assert get_data["users"][0]["is_sysadmin"] is True
         
         # Step 5: Test that we can demote users when we have multiple admins
         # Create a third user and promote them to admin
@@ -114,7 +114,7 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         # Promote the third user to admin
         promote_third_response = client.put(
             f"/v0/account/users/{third_user_id}",
-            json={"role": "admin"},
+            json={"is_sysadmin": True},
             headers=get_auth_headers()
         )
         
@@ -123,18 +123,18 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         # Now try to demote the second user (should succeed since we have multiple admins)
         demote_response = client.put(
             f"/v0/account/users/{second_user_id}",
-            json={"role": "user"},
+            json={"is_sysadmin": False},
             headers=get_auth_headers()
         )
         
         assert demote_response.status_code == 200
         demoted_user = demote_response.json()
-        assert demoted_user["role"] == "user"
+        assert demoted_user["is_sysadmin"] is False
         
         # Step 6: Verify we can promote users back to admin
         promote_first_back_response = client.put(
             f"/v0/account/users/{regular_user_id}",
-            json={"role": "admin"},
+            json={"is_sysadmin": True},
             headers=get_auth_headers()
         )
         
@@ -151,13 +151,13 @@ async def test_only_admin_can_promote_to_admin(test_db, mock_auth):
         all_users = list_all_users_response.json()["users"]
         
         # Count how many admins we have
-        admin_users = [u for u in all_users if u["role"] == "admin"]
+        admin_users = [u for u in all_users if u["is_sysadmin"]]
         assert len(admin_users) >= 2, f"Expected at least 2 admins, but found {len(admin_users)}"
         
         # Verify that the regular user was promoted to admin
         regular_user_in_list = next((u for u in all_users if u["id"] == regular_user_id), None)
         assert regular_user_in_list is not None
-        assert regular_user_in_list["role"] == "admin"
+        assert regular_user_in_list["is_sysadmin"] is True
         
     finally:
         pass  # mock_auth fixture handles cleanup
@@ -188,7 +188,7 @@ async def test_regular_user_cannot_promote_self_to_admin(test_db, mock_auth):
         user_id = user_result["id"]
         
         # Verify the user was created with 'user' role
-        assert user_result["role"] == "user"
+        assert user_result["is_sysadmin"] is False
         
         # Step 2: Verify the user still has 'user' role
         get_user_response = client.get(
@@ -232,57 +232,57 @@ async def test_admin_role_validation(test_db, mock_auth):
             users.append(user_result)
             
             # Verify all users start with 'user' role
-            assert user_result["role"] == "user"
+            assert user_result["is_sysadmin"] is False
         
         # Step 2: Promote first user to admin
         promote_first_response = client.put(
             f"/v0/account/users/{users[0]['id']}",
-            json={"role": "admin"},
+            json={"is_sysadmin": True},
             headers=get_auth_headers()
         )
         
         assert promote_first_response.status_code == 200
-        assert promote_first_response.json()["role"] == "admin"
+        assert promote_first_response.json()["is_sysadmin"] is True
         
         # Step 3: Promote second user to admin
         promote_second_response = client.put(
             f"/v0/account/users/{users[1]['id']}",
-            json={"role": "admin"},
+            json={"is_sysadmin": True},
             headers=get_auth_headers()
         )
         
         assert promote_second_response.status_code == 200
-        assert promote_second_response.json()["role"] == "admin"
+        assert promote_second_response.json()["is_sysadmin"] is True
         
         # Step 4: Try to demote first admin (should succeed since we have multiple admins)
         demote_first_response = client.put(
             f"/v0/account/users/{users[0]['id']}",
-            json={"role": "user"},
+            json={"is_sysadmin": False},
             headers=get_auth_headers()
         )
         
         assert demote_first_response.status_code == 200
-        assert demote_first_response.json()["role"] == "user"
+        assert demote_first_response.json()["is_sysadmin"] is False
         
         # Step 5: Verify we can promote users back to admin
         promote_back_response = client.put(
             f"/v0/account/users/{users[0]['id']}",
-            json={"role": "admin"},
+            json={"is_sysadmin": True},
             headers=get_auth_headers()
         )
         
         assert promote_back_response.status_code == 200
-        assert promote_back_response.json()["role"] == "admin"
+        assert promote_back_response.json()["is_sysadmin"] is True
         
         # Step 6: Now we can demote the second user since we have multiple admins again
         demote_second_again_response = client.put(
             f"/v0/account/users/{users[1]['id']}",
-            json={"role": "user"},
+            json={"is_sysadmin": False},
             headers=get_auth_headers()
         )
         
         assert demote_second_again_response.status_code == 200
-        assert demote_second_again_response.json()["role"] == "user"
+        assert demote_second_again_response.json()["is_sysadmin"] is False
         
         # Step 7: Verify the admin role management works correctly
         # List all users to see the current state
@@ -295,7 +295,7 @@ async def test_admin_role_validation(test_db, mock_auth):
         all_users = list_all_users_response.json()["users"]
         
         # Count how many admins we have
-        admin_users = [u for u in all_users if u["role"] == "admin"]
+        admin_users = [u for u in all_users if u["is_sysadmin"]]
         assert len(admin_users) >= 2, f"Expected at least 2 admins, but found {len(admin_users)}"
         
     finally:
@@ -365,7 +365,7 @@ async def test_user_permission_boundaries(test_db, mock_auth):
         # Step 3: Test that regular users cannot access admin-only endpoints
         # Try to promote themselves to admin (should fail)
         promote_self_data = {
-            "role": "admin"
+            "is_sysadmin": True
         }
         
         promote_self_response = client.put(
@@ -409,14 +409,14 @@ async def test_user_permission_boundaries(test_db, mock_auth):
         # Test that admin CAN promote users
         promote_user_response = client.put(
             f"/v0/account/users/{user_id}",
-            json={"role": "admin"},
+            json={"is_sysadmin": True},
             headers=admin_headers
         )
         
         # This should succeed - admins can promote users
         assert promote_user_response.status_code == 200
         promoted_user = promote_user_response.json()
-        assert promoted_user["role"] == "admin"
+        assert promoted_user["is_sysadmin"] is True
         
         # Test that admin CAN create new users
         admin_create_response = client.post(

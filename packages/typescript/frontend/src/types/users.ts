@@ -2,12 +2,11 @@ export interface UserCreate {
   email: string;
   name: string;
   password: string;
-  role?: string;
 }
 
 export interface UserUpdate {
   name?: string;
-  role?: string;
+  is_sysadmin?: boolean;
   email_verified?: boolean;
   password?: string;
   has_seen_tour?: boolean;
@@ -17,7 +16,7 @@ export interface UserResponse {
   id: string;
   email: string;
   name: string | null;
-  role: string;
+  is_sysadmin: boolean;
   email_verified: boolean | null;
   created_at: string;
   has_password: boolean;

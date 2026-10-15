@@ -16,7 +16,7 @@ export default async function AccountSettingsLayout({
   }
 
   // Redirect to settings if not admin
-  if (session.user?.role !== 'admin') {
+  if (!(session.user as { isSysadmin?: boolean }).isSysadmin) {
     redirect('/settings');
   }
 

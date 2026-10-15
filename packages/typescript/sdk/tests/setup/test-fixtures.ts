@@ -52,7 +52,7 @@ export class TestFixtures {
       _id: new ObjectId(orgId),
       name: `Test Org ${uniqueSuffix}`,
       members: [
-        { user_id: memberId, role: 'admin' }
+        { user_id: memberId, permission_group_ids: ['admin'] }
       ],
       type: 'team',
       created_at: new Date(),

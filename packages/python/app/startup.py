@@ -9,6 +9,7 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 
 import analytiq_data as ad
+from analytiq_data.org_permissions import BUILTIN_ADMIN, build_member_entry, builtin_permission_groups_document
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ async def setup_admin(analytiq_client):
             "email": admin_email,
             "password": hashed_password.decode(),
             "name": "System Administrator",
-            "role": "admin",
+            "system_role": "sysadmin",
             "email_verified": True,
             "created_at": datetime.now(UTC)
         })
@@ -75,10 +76,8 @@ async def setup_admin(analytiq_client):
             "_id": ObjectId(admin_id),
             "name": "Admin",
             "type": "individual",
-            "members": [{
-                "user_id": admin_id,
-                "role": "admin"
-            }],
+            "permission_groups": builtin_permission_groups_document(),
+            "members": [build_member_entry(admin_id, permission_group_ids=[BUILTIN_ADMIN])],
             "created_at": datetime.now(UTC),
             "updated_at": datetime.now(UTC),
             "has_seen_tour": False

@@ -19,7 +19,7 @@ from bson import ObjectId
 # Local imports
 import analytiq_data as ad
 from analytiq_data.common.doc import get_mime_type
-from app.auth import get_org_user
+from app.org_auth import require_org_documents_read, require_org_documents_write
 from app.licensing_deps import require_feature
 from app.models import User
 from app.case_http import case_error_to_http
@@ -300,7 +300,7 @@ async def _save_single_uploaded_document(
 async def upload_document(
     organization_id: str,
     documents_upload: DocumentsUpload = Body(...),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_write)
 ):
     """Upload one or more documents"""
     logger.info(f"upload_document(): {organization_id}: uploading documents: {[doc.name for doc in documents_upload.documents]}")
@@ -360,7 +360,7 @@ async def upload_document_multipart(
     create_case_if_missing: Annotated[
         bool, Form(description="Create case if case_id is unknown.")
     ] = False,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_write),
 ):
     """Upload a single document as raw multipart/form-data (no base64)."""
     file_name = name or file.filename
@@ -417,7 +417,7 @@ async def update_document(
     organization_id: str,
     document_id: str,
     update: DocumentUpdate,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_write),
 ):
     """Update a document"""
     logger.info(f"Updating document {document_id} with data: {update}")
@@ -537,7 +537,7 @@ async def list_documents(
     case_id: str | None = Query(None, description="Filter by case id"),
     sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_read),
 ):
     """List documents within an organization"""
     # Get analytiq client
@@ -629,7 +629,7 @@ async def get_document(
         True,
         description="If false, return only metadata without file content (e.g. for polling). Default true for backward compatibility.",
     ),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Get a document (original or associated PDF). Use include_content=false for metadata-only (no file download)."""
     logger.debug(f"get_document() start: document_id: {document_id}, file_type: {file_type}, include_content: {include_content}")
@@ -710,7 +710,7 @@ async def get_document_file(
     organization_id: str,
     document_id: str,
     file_type: str = Query(default="pdf", enum=["original", "pdf"]),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Return the raw binary of the document file (no base64). Use file_type=pdf for the PDF version."""
     analytiq_client = ad.common.get_analytiq_client()
@@ -746,7 +746,7 @@ async def get_document_file(
 async def delete_document(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_documents_write),
 ):
     """Delete a document"""
     analytiq_client = ad.common.get_analytiq_client()

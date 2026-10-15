@@ -332,7 +332,7 @@ async def test_update_schema_cross_tenant_denied(org_and_users, test_db):
     await test_db.organizations.insert_one({
         "_id": ObjectId(org_b_id),
         "name": "Other Org",
-        "members": [{"user_id": member["id"], "role": "user"}],
+        "members": [{"user_id": member["id"], "permission_group_ids": ["builder"]}],
         "type": "team",
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC),

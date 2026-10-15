@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field
 
 import analytiq_data as ad
 from analytiq_data.flows.agent_loop.stream import ndjson_line
-from app.auth import User, get_org_user
+from app.auth import User
+
 from app.licensing_deps import require_feature
+from app.org_auth import require_org_runs_execute
 from app.routes.flows import FlowRevisionSnapshotRequest, _get_db, _now, _resolve_flow_revid_lineage
 
 chat_router = APIRouter(dependencies=[Depends(require_feature("flows"))])
@@ -343,7 +345,7 @@ async def post_flow_chat_test(
     flow_id: str,
     body: ChatTestRequest,
     request: Request,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Run Chat Trigger against an editor snapshot (activation not required)."""
 
@@ -399,7 +401,7 @@ async def post_flow_chat(
     flow_id: str,
     body: ChatMessageRequest,
     request: Request,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     _ = current_user
     db = await _get_db()

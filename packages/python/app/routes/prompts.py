@@ -14,7 +14,7 @@ from bson import ObjectId
 # Local imports
 import analytiq_data as ad
 from analytiq_data.common.prompt_list import list_prompts_for_org
-from app.auth import get_org_user
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 
 # Configure logger
@@ -179,7 +179,7 @@ async def validate_and_resolve_schema(prompt: PromptConfig) -> Optional[dict]:
 async def create_prompt(
     organization_id: str,
     prompt: PromptConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Create a prompt"""
     logger.info(f"create_prompt() start: organization_id: {organization_id}, prompt: {prompt}")
@@ -296,7 +296,7 @@ async def list_prompts(
     name_search: str = Query(None, description="Search term for prompt names"),
     sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List prompts within an organization"""
     sort_model = None
@@ -379,7 +379,7 @@ async def list_prompts(
 async def get_prompt(
     organization_id: str,
     prompt_revid: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Get a prompt"""
     logger.info(f"get_prompt() start: organization_id: {organization_id}, prompt_revid: {prompt_revid}")
@@ -408,7 +408,7 @@ async def update_prompt(
     organization_id: str,
     prompt_id: str,
     prompt: PromptConfig,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Update a prompt"""
     logger.info(f"update_prompt() start: organization_id: {organization_id}, prompt_id: {prompt_id}")
@@ -521,7 +521,7 @@ async def update_prompt(
 async def delete_prompt(
     organization_id: str,
     prompt_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Delete a prompt"""
     logger.info(f"delete_prompt() start: organization_id: {organization_id}, prompt_id: {prompt_id}")
@@ -559,7 +559,7 @@ async def delete_prompt(
 async def list_prompt_versions(
     organization_id: str,
     prompt_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List all versions of a prompt by prompt_id"""
     logger.info(f"list_prompt_versions() start: organization_id: {organization_id}, prompt_id: {prompt_id}")

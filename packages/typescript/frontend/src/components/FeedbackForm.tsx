@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAppSession } from '@/contexts/AppSessionContext';
+import { isSysAdmin } from '@/utils/roles';
 import { Feedback as FeedbackIcon, AdminPanelSettings as AdminIcon } from '@mui/icons-material';
 import Link from 'next/link';
 
@@ -18,7 +19,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
   const [errorMessage, setErrorMessage] = useState('');
   
   // Check if the user is an admin
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isSysAdmin(session);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

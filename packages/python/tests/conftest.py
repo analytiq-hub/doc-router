@@ -113,7 +113,7 @@ async def _seed_default_org_and_user(db) -> None:
         "_id": ObjectId(TEST_USER_ID),
         "email": "test@example.com",
         "name": "Test User",
-        "role": "admin",
+        "system_role": "sysadmin",
         "email_verified": True,
         "has_password": True,
         "created_at": datetime.now(UTC),
@@ -123,7 +123,7 @@ async def _seed_default_org_and_user(db) -> None:
         "name": "Test Organization",
         "members": [{
             "user_id": TEST_USER_ID,
-            "role": "admin",
+            "permission_group_ids": ["admin"],
         }],
         "type": "team",
         "created_at": datetime.now(UTC),
@@ -179,7 +179,6 @@ async def org_and_users(test_db):
             "_id": ObjectId(admin_id),
             "email": "org-admin@example.com",
             "name": "Org Admin",
-            "role": "admin",
             "email_verified": True,
             "has_password": True,
             "created_at": datetime.now(UTC)
@@ -188,7 +187,6 @@ async def org_and_users(test_db):
             "_id": ObjectId(member_id),
             "email": "org-member@example.com",
             "name": "Org Member",
-            "role": "user",
             "email_verified": True,
             "has_password": True,
             "created_at": datetime.now(UTC)
@@ -197,7 +195,6 @@ async def org_and_users(test_db):
             "_id": ObjectId(outsider_id),
             "email": "org-outsider@example.com",
             "name": "Not In Org",
-            "role": "user",
             "email_verified": True,
             "has_password": True,
             "created_at": datetime.now(UTC)
@@ -210,8 +207,8 @@ async def org_and_users(test_db):
         "_id": ObjectId(org_id),
         "name": "Test Org For Auth",
         "members": [
-            {"user_id": admin_id, "role": "admin"},
-            {"user_id": member_id, "role": "user"}
+            {"user_id": admin_id, "permission_group_ids": ["admin"]},
+            {"user_id": member_id, "permission_group_ids": ["builder"]},
         ],
         "type": "team",
         "created_at": datetime.now(UTC),

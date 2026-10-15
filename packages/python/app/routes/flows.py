@@ -24,8 +24,8 @@ from analytiq_data.docrouter_flows.document_flow_sidebar import (
 )
 from analytiq_data.docrouter_flows.bulk_analyze import bulk_analyze_flow_executions
 
-from app.auth import get_org_user
 from app.licensing_deps import require_feature
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute, require_org_admin_capability
 from app.models import User
 
 
@@ -899,7 +899,7 @@ async def _org_experimental_features_enabled(db, organization_id: str) -> bool:
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows/node-types")
-async def list_node_types(organization_id: str, current_user: User = Depends(get_org_user)):
+async def list_node_types(organization_id: str, current_user: User = Depends(require_org_config_read)):
     # Node types are global; org is for auth scoping and experimental gating.
     db = await _get_db()
     show_exp = await _org_experimental_features_enabled(db, organization_id)
@@ -918,7 +918,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
 async def preview_flow_expression(
     organization_id: str,
     req: PreviewFlowExpressionRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     # Auth only (org scoped); evaluator is sandboxed in analytiq_data.
     if len(req.run_data) > 120:
@@ -954,7 +954,7 @@ async def preview_flow_expression(
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows", response_model=CreateFlowResponse)
-async def create_flow(organization_id: str, req: CreateFlowRequest, current_user: User = Depends(get_org_user)):
+async def create_flow(organization_id: str, req: CreateFlowRequest, current_user: User = Depends(require_org_config_write)):
     db = await _get_db()
     created_at = _now()
     res = await db.flows.insert_one(
@@ -1036,7 +1036,7 @@ async def list_flows(
         False,
         description="If true, include flow headers that have no saved revision (draft-only).",
     ),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     _ = current_user
     db = await _get_db()
@@ -1105,7 +1105,7 @@ async def get_flow_document_result(
     document_id: str,
     flow_id: str | None = Query(None, description="Stable flow id"),
     flow_revid: str | None = Query(None, description="Flow revision id (resolves flow_id when omitted)"),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Retrieve the captured flow result for a document (mirrors ``GET .../llm/result/{document_id}``)."""
     _ = current_user
@@ -1176,7 +1176,7 @@ class BulkAnalyzeFlowsResponse(BaseModel):
 async def bulk_analyze_flows(
     organization_id: str,
     request: BulkAnalyzeFlowsRequest = Body(...),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Analyze which document-flow pairs need re-run for bulk Run Flows."""
     _ = current_user
@@ -1221,7 +1221,7 @@ async def rerun_flow_for_document_route(
     flow_id: str,
     document_id: str,
     body: RerunFlowForDocumentRequest = Body(default_factory=RerunFlowForDocumentRequest),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Re-run an active document-event flow for a document (mirrors prompt reload on the Extraction tab)."""
     _ = current_user
@@ -1244,7 +1244,7 @@ async def rerun_flow_for_document_route(
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}")
-async def get_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
+async def get_flow(organization_id: str, flow_id: str, current_user: User = Depends(require_org_config_read)):
     db = await _get_db()
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
@@ -1258,7 +1258,7 @@ async def get_flow(organization_id: str, flow_id: str, current_user: User = Depe
 
 @flows_router.patch("/v0/orgs/{organization_id}/flows/{flow_id}")
 async def patch_flow_metadata(
-    organization_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(get_org_user)
+    organization_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(require_org_config_write)
 ):
     db = await _get_db()
     has_field_updates = (
@@ -1300,7 +1300,7 @@ async def patch_flow_metadata(
 
 
 @flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}")
-async def delete_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
+async def delete_flow(organization_id: str, flow_id: str, current_user: User = Depends(require_org_config_write)):
     """Delete a flow and all associated revisions, executions, blobs, and trigger registrations."""
 
     _ = current_user
@@ -1329,7 +1329,7 @@ async def list_revisions(
     flow_id: str,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     db = await _get_db()
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
@@ -1354,7 +1354,7 @@ async def list_revisions(
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/revisions/{flow_revid}")
-async def get_revision(organization_id: str, flow_id: str, flow_revid: str, current_user: User = Depends(get_org_user)):
+async def get_revision(organization_id: str, flow_id: str, flow_revid: str, current_user: User = Depends(require_org_config_read)):
     db = await _get_db()
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
@@ -1379,7 +1379,7 @@ async def upload_pinned_binary(
     item_index: int = Form(..., ge=0),
     property: str = Form(..., min_length=1),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ):
     """
     Upload one pinned binary attachment for a revision pin_data payload.
@@ -1469,7 +1469,7 @@ async def get_revision_pin_blob(
             "`download`: attachment."
         ),
     ),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Return bytes for a pinned binary (`flow_pins`) or org document file (`files:`) scoped to this revision."""
 
@@ -1509,7 +1509,7 @@ async def get_revision_pin_blob(
 
 
 @flows_router.put("/v0/orgs/{organization_id}/flows/{flow_id}", response_model=SaveFlowResponse)
-async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest, current_user: User = Depends(get_org_user)):
+async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest, current_user: User = Depends(require_org_config_write)):
     db = await _get_db()
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
@@ -1700,7 +1700,7 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/activate")
-async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowRequest = Body(default={}), current_user: User = Depends(get_org_user)):
+async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowRequest = Body(default={}), current_user: User = Depends(require_org_config_write)):
     db = await _get_db()
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
@@ -1774,7 +1774,7 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/deactivate")
-async def deactivate_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
+async def deactivate_flow(organization_id: str, flow_id: str, current_user: User = Depends(require_org_config_write)):
     db = await _get_db()
     res = await db.flows.update_one(
         {"_id": ObjectId(flow_id), "organization_id": organization_id},
@@ -1797,7 +1797,7 @@ async def listen_webhook_test(
     organization_id: str,
     flow_id: str,
     req: ListenWebhookTestRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """
     Store a short-lived draft snapshot for `/webhook-test/{leaf}`.
@@ -1840,7 +1840,7 @@ async def stop_listen_webhook_test(
     organization_id: str,
     flow_id: str,
     req: StopWebhookTestRequest | None = Body(default=None),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """
     Tear down editor test-mode listening so `/webhook-test/{leaf}` yields 404 again.
@@ -1899,7 +1899,7 @@ async def trigger_test_schedule(
     organization_id: str,
     flow_id: str,
     req: ScheduleTriggerTestRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ):
     """
     Run the schedule trigger once against the editor snapshot (no activation required).
@@ -1970,7 +1970,7 @@ async def trigger_test_poll(
     organization_id: str,
     flow_id: str,
     req: PollTriggerTestRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ):
     """
     Run a poll trigger once against the editor snapshot (no activation required).
@@ -2042,7 +2042,7 @@ async def trigger_test_poll(
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run")
-async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, current_user: User = Depends(get_org_user)):
+async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, current_user: User = Depends(require_org_runs_execute)):
     db = await _get_db()
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
@@ -2184,7 +2184,7 @@ async def list_executions(
     mode: str | None = Query(None, description="Filter by execution mode"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """List flow executions for the organization; optionally narrow by flow and filters."""
 
@@ -2247,7 +2247,7 @@ async def list_executions(
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}", response_model=FlowExecution)
-async def get_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
+async def get_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(require_org_config_read)):
     db = await _get_db()
     d = await db.flow_executions.find_one({"_id": ObjectId(exec_id), "flow_id": flow_id, "organization_id": organization_id})
     if not d:
@@ -2294,7 +2294,7 @@ async def get_execution_blob(
             "`download`: attachment."
         ),
     ),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Return bytes for a binary referenced in this execution's run data."""
 
@@ -2342,7 +2342,7 @@ async def get_execution_blob(
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/stop")
-async def stop_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
+async def stop_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(require_org_runs_execute)):
     db = await _get_db()
     res = await db.flow_executions.update_one(
         {"_id": ObjectId(exec_id), "flow_id": flow_id, "organization_id": organization_id},
@@ -2358,7 +2358,7 @@ async def resume_execution(
     organization_id: str,
     flow_id: str,
     exec_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Enqueue a new run that continues from persisted node checkpoints."""
     _ = current_user
@@ -2390,7 +2390,7 @@ async def resume_execution(
 
 
 @flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}")
-async def delete_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
+async def delete_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(require_org_runs_execute)):
     """Delete a finished execution and its flow_blobs storage."""
     _ = current_user
     try:

@@ -13,7 +13,7 @@ export default async function AdminFeedbackPage() {
   const session = await getServerSession(authOptions);
   
   // Check if user is admin
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = (session?.user as { isSysadmin?: boolean } | undefined)?.isSysadmin === true;
   
   // Add more visible logging
   console.log('==== ADMIN FEEDBACK PAGE ====');

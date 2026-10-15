@@ -38,7 +38,6 @@ describe('DocRouterAccount New APIs Unit Tests', () => {
         const invitationData = {
           email: 'test@example.com',
           organization_id: 'org-123',
-          role: 'user'
         };
 
         const expectedResponse = {

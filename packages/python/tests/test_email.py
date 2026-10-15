@@ -39,7 +39,6 @@ async def test_email_verification(test_db, mock_auth, mock_send_email):
         invitation_data = {
             "email": "verify@example.com",
             "organization_id": TEST_ORG_ID,
-            "role": "user"
         }
         
         create_invitation_response = client.post(
@@ -120,7 +119,6 @@ async def test_invitation_lifecycle(test_db, mock_auth, mock_send_email):
         invitation_data = {
             "email": "invited@example.com",
             "organization_id": TEST_ORG_ID,
-            "role": "user"  # Add role field to fix the KeyError
         }
         
         create_response = client.post(
@@ -256,7 +254,7 @@ async def test_org_admin_can_invite_to_own_organization(
 
     await test_db.users.update_one(
         {"_id": ObjectId(org_admin["id"])},
-        {"$set": {"role": "user"}},
+        {"$unset": {"system_role": ""}},
     )
 
     from app.main import app
@@ -288,7 +286,7 @@ async def test_org_admin_cannot_invite_to_other_organization(
 
     await test_db.users.update_one(
         {"_id": ObjectId(org_admin["id"])},
-        {"$set": {"role": "user"}},
+        {"$unset": {"system_role": ""}},
     )
 
     from app.main import app
@@ -319,7 +317,7 @@ async def test_org_invitation_rejects_existing_member(
 
     await test_db.users.update_one(
         {"_id": ObjectId(org_admin["id"])},
-        {"$set": {"role": "user"}},
+        {"$unset": {"system_role": ""}},
     )
 
     from app.main import app

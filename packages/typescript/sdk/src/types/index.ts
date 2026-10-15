@@ -59,7 +59,7 @@ export interface ListAccessTokensResponse {
 // Organization types
 export interface OrganizationMember {
   user_id: string;
-  role: 'admin' | 'user';
+  permission_group_ids: string[];
 }
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';
@@ -742,7 +742,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  role: string;
+  is_sysadmin: boolean;
   email_verified: boolean | null;
   created_at: string;
   updated_at: string;
@@ -760,7 +760,7 @@ export interface UserUpdate {
   name?: string;
   email?: string;
   password?: string;
-  role?: string;
+  is_sysadmin?: boolean;
   email_verified?: boolean;
   has_seen_tour?: boolean;
 }
@@ -1181,7 +1181,6 @@ export interface InvitationResponse {
 export interface CreateInvitationRequest {
   email: string;
   organization_id?: string;
-  role: string;
 }
 
 export interface ListInvitationsParams {

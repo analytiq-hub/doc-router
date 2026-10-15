@@ -6,6 +6,7 @@ import { DocRouterAccountApi } from '@/utils/api';
 import { User, UserUpdate } from '@docrouter/sdk';
 import { signOut } from 'next-auth/react';
 import { useAppSession } from '@/contexts/AppSessionContext';
+import { isSysAdmin } from '@/utils/roles';
 import { toast } from 'react-toastify';
 
 interface UserEditProps {
@@ -140,7 +141,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
   const { session } = useAppSession();
   const [user, setUser] = useState<User | null>(null);
   const [name, setName] = useState('');
-  const [role, setRole] = useState<string>('user');
+  const [isSysadmin, setIsSysadmin] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -149,7 +150,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
 
   const [originalValues, setOriginalValues] = useState({
     name: '',
-    role: 'user',
+    isSysadmin: false,
     emailVerified: false
   });
 
@@ -157,7 +158,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
 
   const hasChanges = () => {
     return name !== originalValues.name ||
-           role !== originalValues.role ||
+           isSysadmin !== originalValues.isSysadmin ||
            emailVerified !== originalValues.emailVerified;
   };
 
@@ -167,11 +168,11 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
         const userData = await docRouterAccountApi.getUser(userId);
         setUser(userData);
         setName(userData.name || '');
-        setRole(userData.role);
+        setIsSysadmin(userData.is_sysadmin);
         setEmailVerified(userData.email_verified || false);
         setOriginalValues({
           name: userData.name || '',
-          role: userData.role,
+          isSysadmin: userData.is_sysadmin,
           emailVerified: userData.email_verified || false
         });
       } catch (error) {
@@ -201,7 +202,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
     try {
       const update: UserUpdate = {
         name: name || undefined,
-        role,
+        is_sysadmin: isSysadmin,
         email_verified: emailVerified
       };
 
@@ -211,8 +212,8 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
       // Update original values after successful save
       setOriginalValues({
         name: name || '',
-        role,
-        emailVerified
+        isSysadmin,
+        emailVerified,
       });
     } catch (error) {
       setError('Failed to update user');
@@ -253,7 +254,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
     return <div>Loading...</div>;
   }
 
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isSysAdmin(session);
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -325,13 +326,13 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={role === 'admin'}
-                  onChange={(e) => setRole(e.target.checked ? 'admin' : 'user')}
+                  checked={isSysadmin}
+                  onChange={(e) => setIsSysadmin(e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
-              <span className="text-sm font-medium text-gray-700">Admin Role</span>
+              <span className="text-sm font-medium text-gray-700">Platform sysadmin</span>
             </div>
 
             <div className="flex items-center justify-between">

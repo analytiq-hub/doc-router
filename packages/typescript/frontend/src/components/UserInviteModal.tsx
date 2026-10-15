@@ -74,8 +74,7 @@ const UserInviteModal: React.FC<UserInviteModalProps> = ({
       // Send invitation with optional organization
       await docRouterAccountApi.createInvitation({
         email,
-        organization_id: selectedOrg?.id, // Now just one optional org
-        role: 'user'
+        organization_id: selectedOrg?.id,
       });
       
       toast.success('Invitation sent successfully');

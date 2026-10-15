@@ -161,15 +161,15 @@ const UserManager: React.FC = () => {
         </button>
       )
     },
-    { 
-      field: 'role', 
-      headerName: 'Role', 
+    {
+      field: 'is_sysadmin',
+      headerName: 'Sysadmin',
       width: 120,
       renderCell: (params) => (
-        <span className={params.value === 'admin' ? 'text-blue-600' : ''}>
-          {params.value}
+        <span className={params.value ? 'text-blue-600' : ''}>
+          {params.value ? 'Yes' : 'No'}
         </span>
-      )
+      ),
     },
     {
       field: 'email_verified',

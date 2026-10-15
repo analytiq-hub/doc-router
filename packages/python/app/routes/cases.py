@@ -11,9 +11,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
-from app.auth import get_org_user, is_organization_admin
+from app.auth import is_organization_admin
+
 from app.case_http import case_error_to_http
 from app.licensing_deps import require_feature
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -139,7 +141,7 @@ async def list_cases_route(
     updated_before: str | None = Query(None, description="ISO datetime; cases updated at or before"),
     sort: str | None = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)"),
     filters: str | None = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)"),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     tag_id_list = [t.strip() for t in tag_ids.split(",") if t.strip()] if tag_ids else None
@@ -179,7 +181,7 @@ async def list_cases_route(
 async def create_case_route(
     organization_id: str,
     body: CaseCreate,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_write),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     try:
@@ -207,7 +209,7 @@ async def create_case_route(
 async def get_case_route(
     organization_id: str,
     case_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     try:
@@ -228,7 +230,7 @@ async def update_case_route(
     organization_id: str,
     case_id: str,
     body: CaseUpdate,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_write),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     try:
@@ -266,7 +268,7 @@ async def delete_case_route(
             "true, including empty cases; poll GET until 404 or refresh the list."
         ),
     ),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_write),
 ):
     """
     Delete a case.
@@ -310,7 +312,7 @@ async def assign_documents_route(
     organization_id: str,
     case_id: str,
     body: AssignDocumentsRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_write),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     try:
@@ -335,7 +337,7 @@ async def remove_document_from_case_route(
     organization_id: str,
     case_id: str,
     document_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_write),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     doc = await ad.common.get_doc(analytiq_client, document_id, organization_id)
@@ -357,7 +359,7 @@ async def start_case_llm_run_route(
     organization_id: str,
     case_id: str,
     body: CaseRunRequest,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Queue a case-scoped LLM run for the latest revision of ``prompt_id``."""
     analytiq_client = ad.common.get_analytiq_client()
@@ -382,7 +384,7 @@ async def get_case_llm_results_route(
     organization_id: str,
     case_id: str,
     prompt_id: str = Query(..., description="Stable prompt id"),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_documents_read),
 ):
     analytiq_client = ad.common.get_analytiq_client()
     try:

@@ -27,7 +27,7 @@ from analytiq_data.kb_search_indexes import (
     kb_lexical_search_index_definition,
     kb_vector_search_index_definition,
 )
-from app.auth import get_org_user
+from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
 from app.models import User
 from app.routes.agent import CreateThreadBody, CreateThreadResponse, ThreadDetail, ThreadSummary
 from analytiq_data.payments.exceptions import SPUCreditException
@@ -582,7 +582,7 @@ async def create_knowledge_base(
     organization_id: str,
     background_tasks: BackgroundTasks,
     config: KnowledgeBaseConfig = Body(...),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Create a new knowledge base (returns immediately with status indexing; poll GET until active or error)."""
     logger.info(f"Creating KB for org {organization_id}: {config.name}")
@@ -668,7 +668,7 @@ async def list_knowledge_bases(
     name_search: Optional[str] = Query(None),
     sort: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
     filters: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List knowledge bases for an organization"""
     sort_model = None
@@ -751,7 +751,7 @@ async def list_knowledge_bases(
 async def get_knowledge_base(
     organization_id: str,
     kb_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Get a knowledge base by ID"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -809,7 +809,7 @@ async def update_knowledge_base(
     organization_id: str,
     kb_id: str,
     update: KnowledgeBaseUpdate = Body(...),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Update a knowledge base (only mutable fields)"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -951,7 +951,7 @@ async def update_knowledge_base(
 async def delete_knowledge_base(
     organization_id: str,
     kb_id: str,
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_write)
 ):
     """Delete a knowledge base and all associated data"""
     logger.info(f"Deleting KB {kb_id} for org {organization_id}")
@@ -998,7 +998,7 @@ async def list_kb_documents(
     kb_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List documents in a knowledge base"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -1051,7 +1051,7 @@ async def list_kb_document_chunks(
     document_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """List chunks for a specific document in a knowledge base"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -1128,7 +1128,7 @@ async def search_knowledge_base(
     organization_id: str,
     kb_id: str,
     search_request: KBSearchRequest = Body(...),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Search a knowledge base using vector search"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -1179,7 +1179,7 @@ async def chat_knowledge_base(
     organization_id: str,
     kb_id: str,
     request: KBChatRequest = Body(...),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_runs_execute)
 ):
     """Chat with a knowledge base using LLM with tool calling support"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -1211,7 +1211,7 @@ async def list_kb_chat_threads(
     organization_id: str,
     kb_id: str,
     limit: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """List chat threads for this knowledge base, most recent first."""
     db = ad.common.get_async_db(ad.common.get_analytiq_client())
@@ -1236,7 +1236,7 @@ async def create_kb_chat_thread(
     organization_id: str,
     kb_id: str,
     body: CreateThreadBody | None = Body(None),
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_runs_execute),
 ):
     """Create a new KB chat thread."""
     db = ad.common.get_async_db(ad.common.get_analytiq_client())
@@ -1262,7 +1262,7 @@ async def get_kb_chat_thread(
     organization_id: str,
     kb_id: str,
     thread_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_read),
 ):
     """Get a KB chat thread with full messages."""
     db = ad.common.get_async_db(ad.common.get_analytiq_client())
@@ -1288,7 +1288,7 @@ async def delete_kb_chat_thread(
     organization_id: str,
     kb_id: str,
     thread_id: str,
-    current_user: User = Depends(get_org_user),
+    current_user: User = Depends(require_org_config_write),
 ):
     """Delete a KB chat thread."""
     db = ad.common.get_async_db(ad.common.get_analytiq_client())
@@ -1312,7 +1312,7 @@ async def reconcile_knowledge_base_endpoint(
     organization_id: str,
     kb_id: str,
     dry_run: bool = Query(False, description="If true, only report issues without fixing them"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Reconcile a knowledge base (fix drift between tags and indexes)"""
     analytiq_client = ad.common.get_analytiq_client()
@@ -1356,7 +1356,7 @@ async def reconcile_knowledge_base_endpoint(
 async def reconcile_all_knowledge_bases_endpoint(
     organization_id: str,
     dry_run: bool = Query(False, description="If true, only report issues without fixing them"),
-    current_user: User = Depends(get_org_user)
+    current_user: User = Depends(require_org_config_read)
 ):
     """Reconcile all knowledge bases for an organization"""
     analytiq_client = ad.common.get_analytiq_client()

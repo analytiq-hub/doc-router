@@ -6,6 +6,8 @@ import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import { AppSession } from '@/types/AppSession'
 import { usePathname } from 'next/navigation'
+import { isSysAdmin } from '@/utils/roles'
+import { userHasOrgAdminGroup } from '@/utils/orgPermissionGroups'
 
 interface OrganizationContextType {
   organizations: Organization[]
@@ -68,14 +70,14 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id, limit: 50 });
 
         let filtered: Organization[] = response.organizations;
-        const isSysAdmin = appSession.user.role === 'admin';
+        const sysAdmin = isSysAdmin(appSession);
         const isSettingsPage = pathname.startsWith('/settings/organizations');
         if (isSettingsPage) {
-          if (isSysAdmin) {
+          if (sysAdmin) {
             filtered = response.organizations;
           } else {
-            filtered = response.organizations.filter(org =>
-              org.members.some(m => m.user_id === appSession.user.id && m.role === 'admin')
+            filtered = response.organizations.filter((org) =>
+              userHasOrgAdminGroup(org, appSession.user.id),
             );
           }
         }
@@ -169,15 +171,15 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Re-apply filtering logic
       let filtered: Organization[] = response.organizations;
-      const isSysAdmin = appSession.user.role === 'admin';
+      const sysAdmin = isSysAdmin(appSession);
       const isSettingsPage = pathname.startsWith('/settings/organizations');
 
       if (isSettingsPage) {
-        if (isSysAdmin) {
+        if (sysAdmin) {
           filtered = response.organizations;
         } else {
-          filtered = response.organizations.filter(org =>
-            org.members.some(m => m.user_id === appSession.user.id && m.role === 'admin')
+          filtered = response.organizations.filter((org) =>
+            userHasOrgAdminGroup(org, appSession.user.id),
           );
         }
       }

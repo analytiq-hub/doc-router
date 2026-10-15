@@ -207,48 +207,27 @@ async def get_admin_user(
 
     return user
 
-async def is_system_admin(user_id: str):
-    """
-    Check if a user is an admin
+SYSTEM_ROLE_SYSADMIN = "sysadmin"
 
-    Args:
-        user_id: The ID of the user to check
 
-    Returns:
-        True if the user is an admin, False otherwise
-    """
+def user_document_is_sysadmin(user: Optional[dict]) -> bool:
+    return bool(user and user.get("system_role") == SYSTEM_ROLE_SYSADMIN)
+
+
+async def is_system_admin(user_id: str) -> bool:
+    """True when the user has platform sysadmin (not org Admin permission group)."""
     db = ad.common.get_async_db()
-    db_user = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not db_user or db_user.get("role") != "admin":
-        return False
-    return True
+    db_user = await db.users.find_one({"_id": ObjectId(user_id)}, projection={"system_role": 1})
+    return user_document_is_sysadmin(db_user)
 
-async def is_organization_admin(org_id: str, user_id: str):
-    """
-    Check if a user is an org admin
+async def is_organization_admin(org_id: str, user_id: str) -> bool:
+    from analytiq_data.org_permissions import CAPABILITY_ORG_ADMIN, user_has_org_capability
 
-    Args:
-        org_id: The ID of the organization to check
-        user_id: The ID of the user to check
-
-    Returns:
-        True if the user is an org admin, False otherwise
-    """
     db = ad.common.get_async_db()
-    # Match in the query and project only _id so we do not load the full members array
-    # (large orgs were slowing every org-scoped endpoint, e.g. GET document PDF).
-    org = await db.organizations.find_one(
-        {
-            "_id": ObjectId(org_id),
-            "members": {"$elemMatch": {"user_id": user_id, "role": "admin"}},
-        },
-        projection={"_id": 1},
-    )
-    if not org:
-        logger.info(f"User is not an org admin (or org missing): org_id={org_id} user_id={user_id}")
-        return False
-
-    return True
+    if await user_has_org_capability(db, org_id, user_id, CAPABILITY_ORG_ADMIN):
+        return True
+    logger.info(f"User is not an org admin (or org missing): org_id={org_id} user_id={user_id}")
+    return False
 
 async def is_organization_member(org_id: str, user_id: str):
     """
@@ -264,24 +243,6 @@ async def is_organization_member(org_id: str, user_id: str):
         return False
 
     return True
-
-async def get_org_user(
-    organization_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    is_member = await is_organization_member(organization_id, current_user.user_id)
-    if not is_member:
-        raise HTTPException(status_code=403, detail="You are not a member of this organization")
-    return current_user
-
-async def get_org_admin_user(
-    organization_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    is_admin = await is_organization_admin(organization_id, current_user.user_id)
-    if is_admin:
-        return current_user
-    raise HTTPException(status_code=403, detail="You are not an admin of this organization")
 
 async def get_admin_or_org_user(
     organization_id: str,
@@ -320,3 +281,6 @@ async def get_org_id_from_token(token: str) -> Optional[str]:
         raise HTTPException(status_code=401, detail="API token expired")
 
     return stored_token.get("organization_id")
+
+
+from app.org_auth import get_org_user, require_org_admin_capability as get_org_admin_user
