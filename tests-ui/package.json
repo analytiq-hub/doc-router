@@ -4,10 +4,10 @@
   "private": true,
   "description": "Puppeteer + Jest UI tests for Doc Router",
   "scripts": {
-    "test:ui": "jest --config jest.config.js",
-    "test:ui:watch": "jest --config jest.config.js --watch",
-    "test:ui:coverage": "jest --config jest.config.js --coverage",
-    "test:ui:debug": "HEADLESS=false SLOW_MO=100 jest --config jest.config.js --runInBand"
+    "test:ui": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js",
+    "test:ui:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --watch",
+    "test:ui:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --coverage",
+    "test:ui:debug": "HEADLESS=false SLOW_MO=100 NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --runInBand"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

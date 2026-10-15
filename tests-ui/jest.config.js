@@ -1,3 +1,7 @@
+// Puppeteer 24+ is ESM-only. Jest can require() it only when Node's VM
+// module API is enabled, which still needs --experimental-vm-modules
+// (set on the npm scripts). On Node 24.9+ that API exists, but it is not
+// exposed unless the flag is on, so Jest otherwise fails with ERR_REQUIRE_ESM.
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
