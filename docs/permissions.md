@@ -187,6 +187,8 @@ If custom permission groups need finer HS-style control, add capabilities **with
 
 Entra is the **first** enterprise IdP target; **Okta** and **Google Workspace** follow the **same pattern** (per-org OIDC/SAML + group mapping → built-in group ids). Phase 3b is **authentication + membership sync**, not a change to the resolver or capability catalog.
 
+**Phase 3 does not block on SSO:** ship groups + resolver while login stays **NextAuth** (Google/GitHub/credentials); set **`permission_group_ids`** via migration, invites, and org admin. Phase 3b syncs those fields from Entra on login; IdP integration should live on the **backend** (social SSO is frontend-only today).
+
 ### Per-org SSO config
 
 - Entra **tenant id**, OIDC (SAML if required), allowed **email domains**, join policy (invite-only vs domain).
