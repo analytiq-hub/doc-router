@@ -23,10 +23,13 @@ import {
 } from './flowWorkspaceMenu';
 import { useFlowApi } from './useFlowApi';
 import type { FlowListItem } from '@docrouter/sdk';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
 const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
   const api = useFlowApi(organizationId);
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
 
   const [rows, setRows] = useState<FlowListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -57,6 +60,10 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   }, [load]);
 
   const handleEdit = (item: FlowListItem) => {
+    router.push(`/orgs/${organizationId}/flows/${item.flow.flow_id}`);
+  };
+
+  const handleView = (item: FlowListItem) => {
     router.push(`/orgs/${organizationId}/flows/${item.flow.flow_id}`);
   };
 
@@ -174,6 +181,7 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                   </td>
                   <td className={`${td} text-right`}>
                     <div className="inline-flex items-center justify-end gap-0.5">
+                      {canConfigWrite && (
                       <button
                         type="button"
                         title="Edit"
@@ -183,6 +191,7 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                       >
                         <PencilSquareIcon className="h-5 w-5" />
                       </button>
+                      )}
                       <button
                         type="button"
                         title="Run"
@@ -202,9 +211,10 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                               <button
                                 type="button"
                                 className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                                onClick={() => handleEdit(item)}
+                                onClick={() => (canConfigWrite ? handleEdit(item) : handleView(item))}
                               >
-                                <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden /> Edit
+                                <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden />{' '}
+                                {canConfigWrite ? 'Edit' : 'View'}
                               </button>
                             )}
                           </MenuItem>
@@ -219,49 +229,53 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                               </button>
                             )}
                           </MenuItem>
-                          <MenuItem>
-                            {({ focus }) => (
-                              <button
-                                type="button"
-                                className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                                onClick={() => void handleToggleActive(item)}
-                              >
-                                {item.flow.active ? (
-                                  <>
-                                    <BoltSlashIcon className="h-4 w-4 shrink-0" aria-hidden /> Deactivate
-                                  </>
-                                ) : (
-                                  <>
-                                    <BoltIcon className="h-4 w-4 shrink-0" aria-hidden /> Activate
-                                  </>
+                          {canConfigWrite && (
+                            <>
+                              <MenuItem>
+                                {({ focus }) => (
+                                  <button
+                                    type="button"
+                                    className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                                    onClick={() => void handleToggleActive(item)}
+                                  >
+                                    {item.flow.active ? (
+                                      <>
+                                        <BoltSlashIcon className="h-4 w-4 shrink-0" aria-hidden /> Deactivate
+                                      </>
+                                    ) : (
+                                      <>
+                                        <BoltIcon className="h-4 w-4 shrink-0" aria-hidden /> Activate
+                                      </>
+                                    )}
+                                  </button>
                                 )}
-                              </button>
-                            )}
-                          </MenuItem>
-                          <MenuItem disabled={cloningFlowId === item.flow.flow_id}>
-                            {({ focus, disabled }) => (
-                              <button
-                                type="button"
-                                disabled={disabled}
-                                className={`${flowWorkspaceDropdownItemClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
-                                onClick={() => void handleClone(item)}
-                              >
-                                <Square2StackIcon className="h-4 w-4 shrink-0" aria-hidden /> Clone
-                              </button>
-                            )}
-                          </MenuItem>
-                          <MenuSeparator className={flowWorkspaceDropdownDividerClass} />
-                          <MenuItem>
-                            {({ focus }) => (
-                              <button
-                                type="button"
-                                className={`${flowWorkspaceDropdownItemDestructiveClass} w-full ${focus ? 'bg-red-50' : ''}`}
-                                onClick={() => void handleDelete(item)}
-                              >
-                                <TrashIcon className="h-4 w-4 shrink-0" aria-hidden /> Delete
-                              </button>
-                            )}
-                          </MenuItem>
+                              </MenuItem>
+                              <MenuItem disabled={cloningFlowId === item.flow.flow_id}>
+                                {({ focus, disabled }) => (
+                                  <button
+                                    type="button"
+                                    disabled={disabled}
+                                    className={`${flowWorkspaceDropdownItemClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
+                                    onClick={() => void handleClone(item)}
+                                  >
+                                    <Square2StackIcon className="h-4 w-4 shrink-0" aria-hidden /> Clone
+                                  </button>
+                                )}
+                              </MenuItem>
+                              <MenuSeparator className={flowWorkspaceDropdownDividerClass} />
+                              <MenuItem>
+                                {({ focus }) => (
+                                  <button
+                                    type="button"
+                                    className={`${flowWorkspaceDropdownItemDestructiveClass} w-full ${focus ? 'bg-red-50' : ''}`}
+                                    onClick={() => void handleDelete(item)}
+                                  >
+                                    <TrashIcon className="h-4 w-4 shrink-0" aria-hidden /> Delete
+                                  </button>
+                                )}
+                              </MenuItem>
+                            </>
+                          )}
                         </MenuItems>
                       </Menu>
                     </div>

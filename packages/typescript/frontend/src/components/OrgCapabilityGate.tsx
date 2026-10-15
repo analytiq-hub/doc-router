@@ -1,12 +1,13 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { useOrganizationCapabilities } from '@/contexts/OrganizationContext';
-import { hasOrgCapability, OrgCapability } from '@/utils/orgCapabilities';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { OrgCapability } from '@/utils/orgCapabilities';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isSysAdmin } from '@/utils/roles';
 
 type OrgCapabilityGateProps = {
+  organizationId: string;
   capability: OrgCapability;
   children: ReactNode;
   /** When true, platform sysadmins see content without the capability (settings/support only). */
@@ -15,13 +16,14 @@ type OrgCapabilityGateProps = {
 };
 
 export function OrgCapabilityGate({
+  organizationId,
   capability,
   children,
   allowSysadmin = false,
   fallback = null,
 }: OrgCapabilityGateProps) {
   const { session } = useAppSession();
-  const { capabilities, loading } = useOrganizationCapabilities();
+  const { hasCapability, loading } = useOrgCapability(organizationId, capability);
 
   if (loading) {
     return null;
@@ -29,7 +31,7 @@ export function OrgCapabilityGate({
   if (allowSysadmin && isSysAdmin(session)) {
     return <>{children}</>;
   }
-  if (hasOrgCapability(capabilities, capability)) {
+  if (hasCapability) {
     return <>{children}</>;
   }
   return <>{fallback}</>;

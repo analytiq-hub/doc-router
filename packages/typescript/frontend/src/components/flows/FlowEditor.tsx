@@ -352,6 +352,8 @@ const FlowEditor: React.FC<{
   }) => void | Promise<void>;
   /** Org API for flow credential pickers in the node modal. */
   flowOrgApi?: DocRouterOrgApi | null;
+  /** config.read without config.write — view graph, run tests, no structural edits. */
+  viewOnly?: boolean;
 }> = ({
   nodeTypes,
   nodes,
@@ -380,6 +382,7 @@ const FlowEditor: React.FC<{
   onOpenConfigNodeIdChange,
   onExecuteStep,
   flowOrgApi = null,
+  viewOnly = false,
 }) => {
   const flowNameById = useOrgFlowNameMap(flowOrgApi);
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
@@ -1256,6 +1259,9 @@ const FlowEditor: React.FC<{
               edges={canvasEdges}
               nodeTypes={RF_CANVAS_NODE_TYPES}
               edgeTypes={RF_CANVAS_EDGE_TYPES}
+              nodesDraggable={!viewOnly}
+              nodesConnectable={!viewOnly}
+              elementsSelectable
               onNodesChange={handleRfNodesChange}
               onEdgesChange={(changes: EdgeChange[]) => {
                 prepareEdgeChanges(changes);
@@ -1405,14 +1411,16 @@ const FlowEditor: React.FC<{
         edges={edges}
         runData={runData}
         pinData={pinData}
-        onPinDataChange={onPinDataChange}
+        onPinDataChange={viewOnly ? undefined : onPinDataChange}
+        readOnly={viewOnly}
         onSelectNode={(nodeId) => {
           onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === nodeId })));
           setConfigModalNodeId(nodeId);
           onOpenConfigNodeIdChange?.(nodeId);
         }}
         onChange={(patch) => {
-          if (configModalNodeId) onPatchNodeById(configModalNodeId, patch);
+          if (viewOnly || !configModalNodeId) return;
+          onPatchNodeById(configModalNodeId, patch);
         }}
         onExecuteStep={onExecuteStep ? onExecuteStepClick : undefined}
         executeStepBusy={executeStepBusy}

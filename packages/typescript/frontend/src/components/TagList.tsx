@@ -16,12 +16,15 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TagInfoModal from '@/components/TagInfoModal';
 import { formatLocalDate } from '@/utils/date';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
 
 const jsonStringifyForQuery = (value: unknown): string =>
   JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
 
 const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [message, setMessage] = useState('');
@@ -93,8 +96,17 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   };
 
   const handleEdit = (tag: Tag) => {
+    if (!canConfigWrite) {
+      return;
+    }
     router.push(`/orgs/${organizationId}/tags/${tag.id}`);
     handleMenuClose();
+  };
+
+  const openTagProperties = (tag: Tag) => {
+    setAnchorEl(null);
+    setSelectedTag(tag);
+    setIsInfoModalOpen(true);
   };
 
   /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
@@ -110,8 +122,14 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
 
         return (
           <div
-            className="flex items-center h-full w-full cursor-pointer"
-            onClick={() => handleEdit(params.row)}
+            className={`flex items-center h-full w-full ${canConfigWrite ? 'cursor-pointer' : 'cursor-default'}`}
+            onClick={() => {
+              if (canConfigWrite) {
+                handleEdit(params.row);
+              } else {
+                openTagProperties(params.row);
+              }
+            }}
           >
             <div
               className={`px-2 py-1 leading-none rounded shadow-sm truncate ${textColor}`}
@@ -172,15 +190,15 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
-      headerAlign: 'center',
-      align: 'center',
+      headerAlign: 'center' as const,
+      align: 'center' as const,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
-      renderCell: (params) => (
+      renderCell: (params: GridRenderCellParams) => (
         <div className="flex gap-2 items-center h-full">
           <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row)}
+            onClick={(e) => handleMenuOpen(e, params.row as Tag)}
             className="text-gray-600 hover:bg-gray-50"
           >
             <MoreVertIcon />
@@ -188,7 +206,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         </div>
       ),
     },
-  ], [router, organizationId]);
+  ], [router, organizationId, canConfigWrite]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
@@ -197,11 +215,18 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
           <p className="text-sm">
             Tags determine which prompts are run on which documents.
-            If no tags are available,{' '}
-            <Link href={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-blue-600 font-medium hover:underline">
-              click here
-            </Link>{' '}
-            or use the tab above to create a new tag.
+            {canConfigWrite ? (
+              <>
+                {' '}
+                If no tags are available,{' '}
+                <Link href={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-blue-600 font-medium hover:underline">
+                  click here
+                </Link>{' '}
+                or use the tab above to create a new tag.
+              </>
+            ) : (
+              <> {CONFIG_WRITE_VIEW_ONLY_HINT}</>
+            )}
           </p>
         </div>
         <h2 className="text-xl font-bold mb-4 hidden md:block">Tags</h2>
@@ -278,36 +303,37 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         </div>
 
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+          {canConfigWrite && (
+            <MenuItem
+              onClick={() => {
+                if (selectedTag) handleEdit(selectedTag);
+              }}
+              className="flex items-center gap-2"
+            >
+              <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+              <span>Edit</span>
+            </MenuItem>
+          )}
           <MenuItem
             onClick={() => {
-              if (selectedTag) handleEdit(selectedTag);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-            <span>Edit</span>
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              if (selectedTag) {
-                setAnchorEl(null);
-                setIsInfoModalOpen(true);
-              }
+              if (selectedTag) openTagProperties(selectedTag);
             }}
             className="flex items-center gap-2"
           >
             <BadgeIcon fontSize="small" className="text-blue-600" />
             <span>Properties</span>
           </MenuItem>
-          <MenuItem
-            onClick={() => {
-              if (selectedTag) handleDelete(selectedTag.id);
-            }}
-            className="flex items-center gap-2"
-          >
-            <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-            <span>Delete</span>
-          </MenuItem>
+          {canConfigWrite && (
+            <MenuItem
+              onClick={() => {
+                if (selectedTag) handleDelete(selectedTag.id);
+              }}
+              className="flex items-center gap-2"
+            >
+              <DeleteOutlineIcon fontSize="small" className="text-red-600" />
+              <span>Delete</span>
+            </MenuItem>
+          )}
         </Menu>
 
         {selectedTag && (

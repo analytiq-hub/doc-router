@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Tag, Prompt, Schema } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
-import { DataGrid, GridColDef, GridFilterModel, GridSortModel } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem, Autocomplete, Tooltip, Box } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -18,6 +18,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import PromptNameModal from './PromptNameModal';
 import PromptInfoModal from './PromptInfoModal';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
 
 // Define default model constant
 const DEFAULT_LLM_MODEL = 'gemini-2.0-flash';
@@ -27,6 +29,7 @@ const jsonStringifyForQuery = (value: unknown): string =>
 
 const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [message, setMessage] = useState('');
@@ -116,8 +119,15 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
 
   // Update the edit handler
   const handleEdit = (prompt: Prompt) => {
+    if (!canConfigWrite) return;
     router.push(`/orgs/${organizationId}/prompts/${prompt.prompt_revid}`);
     handleMenuClose();
+  };
+
+  const openPromptProperties = (prompt: Prompt) => {
+    setAnchorEl(null);
+    setSelectedPrompt(prompt);
+    setIsInfoModalOpen(true);
   };
 
   // Add rename handler
@@ -288,9 +298,15 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
-        <div 
-          className="text-blue-600 cursor-pointer hover:underline flex items-center h-full w-full min-w-0"
-          onClick={() => handleEdit(params.row)}
+        <div
+          className={`text-blue-600 flex items-center h-full w-full min-w-0 ${canConfigWrite ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
+          onClick={() => {
+            if (canConfigWrite) {
+              handleEdit(params.row);
+            } else {
+              openPromptProperties(params.row);
+            }
+          }}
         >
           <span className="truncate" title={params.row.name}>{params.row.name}</span>
         </div>
@@ -408,15 +424,15 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       field: 'actions',
       headerName: 'Actions',
       width: 100,
-      headerAlign: 'left',
-      align: 'left',
+      headerAlign: 'left' as const,
+      align: 'left' as const,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
-      renderCell: (params) => (
+      renderCell: (params: GridRenderCellParams) => (
         <div className="flex gap-2 items-center h-full">
           <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row)}
+            onClick={(e) => handleMenuOpen(e, params.row as Prompt)}
             className="text-gray-600 hover:bg-gray-50"
           >
             <MoreVertIcon />
@@ -424,7 +440,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         </div>
       ),
     },
-  ], [router, organizationId]);
+  ], [router, organizationId, canConfigWrite]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
@@ -433,7 +449,17 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
         <p className="text-sm">
           Prompts define extraction instructions for your documents. They can be linked to schemas to ensure structured output format. 
-          If none are available, <Link href={`/orgs/${organizationId}/prompts?tab=prompt-create`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to create a new prompt.
+          {canConfigWrite ? (
+            <>
+              If none are available,{' '}
+              <Link href={`/orgs/${organizationId}/prompts?tab=prompt-create`} className="text-blue-600 font-medium hover:underline">
+                click here
+              </Link>{' '}
+              or use the tab above to create a new prompt.
+            </>
+          ) : (
+            CONFIG_WRITE_VIEW_ONLY_HINT
+          )}
         </p>
       </div>
       <h2 className="text-xl font-bold mb-4">Prompts</h2>
@@ -565,53 +591,50 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         />
       
         
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          <MenuItem 
+        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+          {canConfigWrite && (
+            <MenuItem
+              onClick={() => {
+                if (selectedPrompt) handleEdit(selectedPrompt);
+              }}
+              className="flex items-center gap-2"
+            >
+              <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+              <span>Edit</span>
+            </MenuItem>
+          )}
+          <MenuItem
             onClick={() => {
-              if (selectedPrompt) handleEdit(selectedPrompt);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-            <span>Edit</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedPrompt) {
-                setAnchorEl(null); // Close menu manually
-                setIsInfoModalOpen(true);
-                // Don't clear selectedPrompt since we're opening the info modal
-              }
+              if (selectedPrompt) openPromptProperties(selectedPrompt);
             }}
             className="flex items-center gap-2"
           >
             <BadgeIcon fontSize="small" className="text-blue-600" />
             <span>Properties</span>
           </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedPrompt) handleRenamePrompt(selectedPrompt);
-            }}
-            className="flex items-center gap-2"
-          >
-            <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
-            <span>Rename</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedPrompt) handleClonePrompt(selectedPrompt);
-            }}
-            className="flex items-center gap-2"
-          >
-            <ContentCopyIcon fontSize="small" className="text-purple-600" />
-            <span>Clone</span>
-          </MenuItem>
-          <MenuItem 
+          {canConfigWrite && (
+            <>
+              <MenuItem
+                onClick={() => {
+                  if (selectedPrompt) handleRenamePrompt(selectedPrompt);
+                }}
+                className="flex items-center gap-2"
+              >
+                <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
+                <span>Rename</span>
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  if (selectedPrompt) handleClonePrompt(selectedPrompt);
+                }}
+                className="flex items-center gap-2"
+              >
+                <ContentCopyIcon fontSize="small" className="text-purple-600" />
+                <span>Clone</span>
+              </MenuItem>
+            </>
+          )}
+          <MenuItem
             onClick={() => {
               if (selectedPrompt) handleDownload(selectedPrompt);
             }}
@@ -620,15 +643,17 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             <DownloadIcon fontSize="small" className="text-green-600" />
             <span>Download</span>
           </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedPrompt) handleDelete(selectedPrompt.prompt_id);
-            }}
-            className="flex items-center gap-2"
-          >
-            <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-            <span>Delete</span>
-          </MenuItem>
+          {canConfigWrite && (
+            <MenuItem
+              onClick={() => {
+                if (selectedPrompt) handleDelete(selectedPrompt.prompt_id);
+              }}
+              className="flex items-center gap-2"
+            >
+              <DeleteOutlineIcon fontSize="small" className="text-red-600" />
+              <span>Delete</span>
+            </MenuItem>
+          )}
         </Menu>
         
         {/* Rename/Clone Modal */}

@@ -1,12 +1,14 @@
 'use client'
 
-import { use } from 'react';
+import { use, useEffect } from 'react';
 import KnowledgeBaseList from '@/components/KnowledgeBaseList';
 import KnowledgeBaseCreate from '@/components/KnowledgeBaseCreate';
 import KnowledgeBaseSearch from '@/components/KnowledgeBaseSearch';
 import KnowledgeBaseDocuments from '@/components/KnowledgeBaseDocuments';
 import KnowledgeBaseChat from '@/components/KnowledgeBaseChat';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
 export default function KnowledgeBasesPage({ params }: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = use(params);
@@ -14,8 +16,29 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
   const router = useRouter();
   const tab = searchParams.get('tab') || 'knowledge-bases';
   const kbId = searchParams.get('kbId');
+  const listPath = `/orgs/${organizationId}/knowledge-bases?tab=knowledge-bases`;
+  const { hasCapability: canConfigWrite, loading: capabilitiesLoading } = useOrgCapability(
+    organizationId,
+    CAP_CONFIG_WRITE,
+  );
+
+  useEffect(() => {
+    if (capabilitiesLoading) return;
+    if (!canConfigWrite && tab === 'kb-create') {
+      router.replace(listPath);
+      return;
+    }
+    if (!canConfigWrite && tab === 'edit' && kbId) {
+      router.replace(
+        `/orgs/${organizationId}/knowledge-bases?tab=search&kbId=${kbId}`,
+      );
+    }
+  }, [capabilitiesLoading, canConfigWrite, tab, kbId, organizationId, router, listPath]);
 
   const handleTabChange = (newValue: string, kbIdParam?: string) => {
+    if (!canConfigWrite && (newValue === 'kb-create' || newValue === 'edit')) {
+      return;
+    }
     const params = new URLSearchParams();
     params.set('tab', newValue);
     if (kbIdParam) {
@@ -25,7 +48,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
   };
 
   const handleBack = () => {
-    router.push(`/orgs/${organizationId}/knowledge-bases?tab=knowledge-bases`);
+    router.push(listPath);
   };
 
   return (
@@ -33,6 +56,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
       {kbId && (
         <div className="max-w-6xl mx-auto mb-4">
           <button
+            type="button"
             onClick={handleBack}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
           >
@@ -45,6 +69,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
           {!kbId && (
             <>
               <button
+                type="button"
                 onClick={() => handleTabChange('knowledge-bases')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'knowledge-bases'
@@ -54,31 +79,38 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
               >
                 Knowledge Bases
               </button>
-              <button
-                onClick={() => handleTabChange('kb-create')}
-                className={`pb-4 px-1 relative font-semibold text-base ${
-                  tab === 'kb-create'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Create Knowledge Base
-              </button>
+              {!capabilitiesLoading && canConfigWrite && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('kb-create')}
+                  className={`pb-4 px-1 relative font-semibold text-base ${
+                    tab === 'kb-create'
+                      ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Create Knowledge Base
+                </button>
+              )}
             </>
           )}
           {kbId && (
             <>
+              {!capabilitiesLoading && canConfigWrite && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('edit', kbId)}
+                  className={`pb-4 px-1 relative font-semibold text-base ${
+                    tab === 'edit'
+                      ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Edit
+                </button>
+              )}
               <button
-                onClick={() => handleTabChange('edit', kbId)}
-                className={`pb-4 px-1 relative font-semibold text-base ${
-                  tab === 'edit'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Edit
-              </button>
-              <button
+                type="button"
                 onClick={() => handleTabChange('search', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'search'
@@ -89,6 +121,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
                 Search
               </button>
               <button
+                type="button"
                 onClick={() => handleTabChange('documents', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'documents'
@@ -99,6 +132,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
                 Documents
               </button>
               <button
+                type="button"
                 onClick={() => handleTabChange('chat', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'chat'
@@ -118,10 +152,12 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
           {tab === 'knowledge-bases' && <KnowledgeBaseList organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'kb-create'}>
-          {tab === 'kb-create' && <KnowledgeBaseCreate organizationId={organizationId} />}
+          {tab === 'kb-create' && canConfigWrite && <KnowledgeBaseCreate organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'edit'}>
-          {tab === 'edit' && kbId && <KnowledgeBaseCreate organizationId={organizationId} kbId={kbId} />}
+          {tab === 'edit' && kbId && canConfigWrite && (
+            <KnowledgeBaseCreate organizationId={organizationId} kbId={kbId} />
+          )}
         </div>
         <div role="tabpanel" hidden={tab !== 'search'}>
           {tab === 'search' && kbId && <KnowledgeBaseSearch organizationId={organizationId} kbId={kbId} />}

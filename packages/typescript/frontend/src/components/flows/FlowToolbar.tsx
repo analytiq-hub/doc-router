@@ -65,6 +65,8 @@ const FlowToolbar: React.FC<{
   onOpenToolSettings?: () => void;
   /** When set, shows a Chat test button (flows with Chat Trigger). */
   onOpenChatTest?: () => void;
+  /** View published definition without save/activate/name edits (operators with config.read only). */
+  readOnly?: boolean;
 }> = ({
   name,
   onNameChange,
@@ -82,10 +84,11 @@ const FlowToolbar: React.FC<{
   onOpenSettings,
   onOpenToolSettings,
   onOpenChatTest,
+  readOnly = false,
 }) => {
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
-  const showNameField = nameHover || nameFocus;
+  const showNameField = !readOnly && (nameHover || nameFocus);
   const measure = useInlineNameWidthPx(name, 'Flow name');
   const activateDisabled =
     isDirty || activationPending || Boolean(graphSaveBlockedReason) || Boolean(activateBlockedReason);
@@ -137,48 +140,55 @@ const FlowToolbar: React.FC<{
             Test chat
           </button>
         ) : null}
-        <button
-          type="button"
-          className={flowToolbarBtnClass}
-          onClick={onSave}
-          disabled={saveDisabled}
-          title={graphSaveBlockedReason ?? undefined}
-        >
-          {isSaving ? 'Saving…' : 'Save'}
-        </button>
-        {!active ? (
-          <button
-            type="button"
-            className={flowToolbarBtnClass}
-            onClick={onActivate}
-            disabled={activateDisabled}
-            title={
-              activateBlockedReason ??
-              (graphSaveBlockedReason ? graphSaveBlockedReason : isDirty ? 'Save before activating' : undefined)
-            }
-          >
-            {activationPending ? 'Activating…' : 'Activate'}
-          </button>
-        ) : (
-          <FlowPublishedIndicator revisionIdHint={activeFlowRevid} />
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              className={flowToolbarBtnClass}
+              onClick={onSave}
+              disabled={saveDisabled}
+              title={graphSaveBlockedReason ?? undefined}
+            >
+              {isSaving ? 'Saving…' : 'Save'}
+            </button>
+            {!active ? (
+              <button
+                type="button"
+                className={flowToolbarBtnClass}
+                onClick={onActivate}
+                disabled={activateDisabled}
+                title={
+                  activateBlockedReason ??
+                  (graphSaveBlockedReason ? graphSaveBlockedReason : isDirty ? 'Save before activating' : undefined)
+                }
+              >
+                {activationPending ? 'Activating…' : 'Activate'}
+              </button>
+            ) : (
+              <FlowPublishedIndicator revisionIdHint={activeFlowRevid} />
+            )}
+          </>
         )}
+        {readOnly && active ? <FlowPublishedIndicator revisionIdHint={activeFlowRevid} /> : null}
         <Menu as="div" className="relative inline-flex">
           <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
             <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
           </MenuButton>
           <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
-            <MenuItem>
-              {({ focus }) => (
-                <button
-                  type="button"
-                  className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                  onClick={() => onOpenSettings()}
-                >
-                  Settings
-                </button>
-              )}
-            </MenuItem>
-            {onOpenToolSettings ? (
+            {!readOnly && (
+              <MenuItem>
+                {({ focus }) => (
+                  <button
+                    type="button"
+                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                    onClick={() => onOpenSettings()}
+                  >
+                    Settings
+                  </button>
+                )}
+              </MenuItem>
+            )}
+            {!readOnly && onOpenToolSettings ? (
               <MenuItem>
                 {({ focus }) => (
                   <button
@@ -202,33 +212,34 @@ const FlowToolbar: React.FC<{
                 </button>
               )}
             </MenuItem>
-            {!active ? (
-              <MenuItem disabled={activateDisabled}>
-                {({ disabled, focus }) => (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
-                    onClick={() => void onActivate()}
-                  >
-                    Activate
-                  </button>
-                )}
-              </MenuItem>
-            ) : (
-              <MenuItem disabled={deactivateDisabled}>
-                {({ disabled, focus }) => (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
-                    onClick={() => void onDeactivate()}
-                  >
-                    Deactivate
-                  </button>
-                )}
-              </MenuItem>
-            )}
+            {!readOnly &&
+              (!active ? (
+                <MenuItem disabled={activateDisabled}>
+                  {({ disabled, focus }) => (
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
+                      onClick={() => void onActivate()}
+                    >
+                      Activate
+                    </button>
+                  )}
+                </MenuItem>
+              ) : (
+                <MenuItem disabled={deactivateDisabled}>
+                  {({ disabled, focus }) => (
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
+                      onClick={() => void onDeactivate()}
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                </MenuItem>
+              ))}
           </MenuItems>
         </Menu>
       </div>

@@ -28,6 +28,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { isColorLight } from '@/utils/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 import { formatLocalDate } from '@/utils/date';
 import { caseDisplayName } from '@/utils/caseDisplayName';
 import { parseAndEncodeMetadataSearch } from '@/utils/documentListQuery';
@@ -78,6 +80,10 @@ function caseDateTimeColumn(field: 'created_at' | 'updated_at', headerName: stri
 
 const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
+  const { hasCapability: canWriteDocuments, loading: permissionsLoading } = useOrgCapability(
+    organizationId,
+    CAP_DOCUMENTS_WRITE,
+  );
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [cases, setCases] = useState<Case[]>([]);
   const [message, setMessage] = useState('');
@@ -264,20 +270,28 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       },
       caseDateTimeColumn('created_at', 'Created'),
       caseDateTimeColumn('updated_at', 'Updated'),
-      {
-        field: 'actions',
-        headerName: '',
-        width: 56,
-        sortable: false,
-        filterable: false,
-        renderCell: (params: GridRenderCellParams<Case>) => (
-          <IconButton size="small" onClick={(e) => handleMenuOpen(e, params.row)}>
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-        ),
-      },
+      ...(canWriteDocuments
+        ? [
+            {
+              field: 'actions',
+              headerName: '',
+              width: 56,
+              sortable: false,
+              filterable: false,
+              renderCell: (params: GridRenderCellParams<Case>) => (
+                <IconButton
+                  size="small"
+                  disabled={permissionsLoading}
+                  onClick={(e) => handleMenuOpen(e, params.row)}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+              ),
+            },
+          ]
+        : []),
     ],
-    [organizationId, availableTags]
+    [organizationId, availableTags, canWriteDocuments, permissionsLoading]
   );
 
   return (
@@ -367,25 +381,29 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           disableRowSelectionOnClick
         />
       </div>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        <MenuItem
-          onClick={() => {
-            if (selectedCase) {
-              router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(selectedCase.case_id)}/edit`);
-            }
-            handleMenuClose();
-          }}
-        >
-          <EditOutlinedIcon fontSize="small" className="mr-2" /> Edit
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (selectedCase) void handleDelete(selectedCase);
-          }}
-        >
-          <DeleteOutlineIcon fontSize="small" className="mr-2 text-red-600" /> Delete case
-        </MenuItem>
-      </Menu>
+      {canWriteDocuments && (
+        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+          <MenuItem
+            onClick={() => {
+              if (selectedCase) {
+                router.push(
+                  `/orgs/${organizationId}/cases/${encodeURIComponent(selectedCase.case_id)}/edit`,
+                );
+              }
+              handleMenuClose();
+            }}
+          >
+            <EditOutlinedIcon fontSize="small" className="mr-2" /> Edit
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (selectedCase) void handleDelete(selectedCase);
+            }}
+          >
+            <DeleteOutlineIcon fontSize="small" className="mr-2 text-red-600" /> Delete case
+          </MenuItem>
+        </Menu>
+      )}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
+import React, { createContext, useContext, useState, useLayoutEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { AppSession } from '@/types/AppSession'
 import { setGlobalSession } from '@/utils/api'
@@ -29,7 +29,7 @@ export const AppSessionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const lastUpdateRef = useRef<number>(0)
   
   // Only update cached session if it actually changed or after 1 minute
-  useEffect(() => {
+  useLayoutEffect(() => {
     const now = Date.now()
     const hasChanged = JSON.stringify(session) !== JSON.stringify(cachedSession) || status !== cachedStatus
     const isStale = now - lastUpdateRef.current > 60000 // 1 minute
@@ -47,7 +47,7 @@ export const AppSessionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setApiAccessToken(null)
       }
       
-      // Sync with global session for API access
+      // Sync before child effects so API clients use the current session token
       setGlobalSession(appSession)
     }
   }, [session, status, cachedSession, cachedStatus])

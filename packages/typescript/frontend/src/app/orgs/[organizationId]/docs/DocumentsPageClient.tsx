@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect } from 'react';
 import DocumentList from '@/components/DocumentList';
 import DocumentUpload from '@/components/DocumentUpload';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useOrganizationCapabilities } from '@/contexts/OrganizationContext';
-import { CAP_DOCUMENTS_WRITE, hasOrgCapability } from '@/utils/orgCapabilities';
+import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
+import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 
 interface DocumentsPageClientProps {
   organizationId: string;
@@ -16,16 +15,16 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
   const router = useRouter();
   const tab = searchParams.get('tab') || 'documents';
   const caseIdFromQuery = searchParams.get('case_id') ?? undefined;
-  const { capabilities, loading: capabilitiesLoading } = useOrganizationCapabilities();
-  const canUpload = hasOrgCapability(capabilities, CAP_DOCUMENTS_WRITE);
-
-  useEffect(() => {
-    if (!capabilitiesLoading && tab === 'upload' && !canUpload) {
-      const query = new URLSearchParams({ tab: 'documents' });
-      if (caseIdFromQuery) query.set('case_id', caseIdFromQuery);
-      router.replace(`/orgs/${organizationId}/docs?${query.toString()}`);
-    }
-  }, [capabilitiesLoading, tab, canUpload, caseIdFromQuery, organizationId, router]);
+  const listPath = (() => {
+    const query = new URLSearchParams({ tab: 'documents' });
+    if (caseIdFromQuery) query.set('case_id', caseIdFromQuery);
+    return `/orgs/${organizationId}/docs?${query.toString()}`;
+  })();
+  const { hasCapability: canUpload, loading: capabilitiesLoading } = useOrgCapability(
+    organizationId,
+    CAP_DOCUMENTS_WRITE,
+  );
+  useOrgCapabilityTabGuard(organizationId, tab, 'upload', listPath, CAP_DOCUMENTS_WRITE);
 
   const handleTabChange = (newValue: string) => {
     const query = new URLSearchParams({ tab: newValue });

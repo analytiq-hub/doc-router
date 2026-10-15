@@ -4,15 +4,26 @@ import { use } from 'react';
 import TagList from '@/components/TagList';
 import TagCreate from '@/components/TagCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
 export default function TagsPage({ params }: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'tags';
+  const listPath = `/orgs/${organizationId}/tags`;
+  const { hasCapability: canConfigWrite, loading: capabilitiesLoading } = useOrgCapability(
+    organizationId,
+    CAP_CONFIG_WRITE,
+  );
+  useOrgCapabilityTabGuard(organizationId, tab, 'tag-create', listPath, CAP_CONFIG_WRITE);
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${organizationId}/tags?tab=${newValue}`);
+    if (newValue === 'tag-create' && !canConfigWrite) {
+      return;
+    }
+    router.push(`${listPath}?tab=${newValue}`);
   };
 
   return (
@@ -29,17 +40,19 @@ export default function TagsPage({ params }: { params: Promise<{ organizationId:
           >
             Tags
           </button>
-          <button
-            onClick={() => handleTabChange('tag-create')}
-            className={`pb-4 px-1 relative font-semibold text-base ${
-              tab === 'tag-create'
-                ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            data-tour="tag-create"
-          >
-            Create Tag
-          </button>
+          {!capabilitiesLoading && canConfigWrite && (
+            <button
+              onClick={() => handleTabChange('tag-create')}
+              className={`pb-4 px-1 relative font-semibold text-base ${
+                tab === 'tag-create'
+                  ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              data-tour="tag-create"
+            >
+              Create Tag
+            </button>
+          )}
         </div>
       </div>
 
@@ -48,7 +61,7 @@ export default function TagsPage({ params }: { params: Promise<{ organizationId:
           {tab === 'tags' && <TagList organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'tag-create'}>
-          {tab === 'tag-create' && <TagCreate organizationId={organizationId} />}
+          {tab === 'tag-create' && canConfigWrite && <TagCreate organizationId={organizationId} />}
         </div>
       </div>
     </div>

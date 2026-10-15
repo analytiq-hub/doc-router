@@ -7,6 +7,10 @@ export const CAP_CONFIG_READ = 'config.read';
 export const CAP_CONFIG_WRITE = 'config.write';
 export const CAP_ORG_ADMIN = 'org.admin';
 
+/** Shown on config library list pages when the user has config.read but not config.write. */
+export const CONFIG_WRITE_VIEW_ONLY_HINT =
+  'View-only access: contact an org Builder or Admin to create or edit.';
+
 export type OrgCapability =
   | typeof CAP_DOCUMENTS_READ
   | typeof CAP_DOCUMENTS_WRITE

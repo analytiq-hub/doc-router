@@ -12,6 +12,8 @@ import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
 import { caseDisplayName } from '@/utils/caseDisplayName';
 import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 
 type CaseDetailViewProps = {
   organizationId: string;
@@ -20,6 +22,10 @@ type CaseDetailViewProps = {
 
 const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId }) => {
   const decodedCaseId = decodeURIComponent(caseId);
+  const { hasCapability: canWriteDocuments } = useOrgCapability(
+    organizationId,
+    CAP_DOCUMENTS_WRITE,
+  );
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
 
   const [caseRow, setCaseRow] = useState<Case | null>(null);
@@ -90,14 +96,16 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
             {caseRow.document_count} document(s) · Updated {formatLocalDate(caseRow.updated_at)}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link
-            href={`/orgs/${organizationId}/cases/${encodeURIComponent(decodedCaseId)}/edit`}
-            className="px-3 py-2 border rounded text-sm hover:bg-gray-50"
-          >
-            Edit case
-          </Link>
-        </div>
+        {canWriteDocuments && (
+          <div className="flex gap-2">
+            <Link
+              href={`/orgs/${organizationId}/cases/${encodeURIComponent(decodedCaseId)}/edit`}
+              className="px-3 py-2 border rounded text-sm hover:bg-gray-50"
+            >
+              Edit case
+            </Link>
+          </div>
+        )}
       </div>
 
       {(caseRow.tag_ids?.length ?? 0) > 0 && (

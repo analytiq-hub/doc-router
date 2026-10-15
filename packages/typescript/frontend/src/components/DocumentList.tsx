@@ -25,12 +25,8 @@ import { DocumentBulkUpdate } from './DocumentBulkUpdate';
 import { DocRouterOrgApi } from '@/utils/api';
 import DocumentInfoModal from './DocumentInfoModal';
 import { buildListDocumentsQuery } from '@/utils/documentListQuery';
-import { useOrganizationCapabilities } from '@/contexts/OrganizationContext';
-import {
-  CAP_DOCUMENTS_WRITE,
-  CAP_RUNS_EXECUTE,
-  hasOrgCapability,
-} from '@/utils/orgCapabilities';
+import { useOrgPermissions } from '@/hooks/useOrgPermissions';
+import { CAP_DOCUMENTS_WRITE, CAP_RUNS_EXECUTE } from '@/utils/orgCapabilities';
 
 const jsonStringifyForQuery = (value: unknown): string =>
   JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
@@ -50,9 +46,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
   initialCaseIdFilter,
 }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const { capabilities } = useOrganizationCapabilities();
-  const canWriteDocuments = hasOrgCapability(capabilities, CAP_DOCUMENTS_WRITE);
-  const canExecuteRuns = hasOrgCapability(capabilities, CAP_RUNS_EXECUTE);
+  const { hasCapability } = useOrgPermissions(organizationId);
+  const canWriteDocuments = hasCapability(CAP_DOCUMENTS_WRITE);
+  const canExecuteRuns = hasCapability(CAP_RUNS_EXECUTE);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [totalRows, setTotalRows] = useState<number>(0);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });

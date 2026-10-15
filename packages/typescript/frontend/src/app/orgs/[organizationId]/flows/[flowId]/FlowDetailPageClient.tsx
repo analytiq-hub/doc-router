@@ -38,6 +38,8 @@ import {
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import { normalizeFlowSettingsForSave } from '@/components/flows/flowTimezone';
 import { getApiErrorMsg } from '@/utils/api';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
@@ -132,6 +134,11 @@ export default function FlowDetailPageClient({
   const proposedNameQuery = searchParams.get('proposedName');
   const isDraftRoute = flowId === NEW_FLOW_URL_SEGMENT;
   const editorFlowId = isDraftRoute ? '' : flowId;
+  const { hasCapability: canConfigWrite, loading: capabilitiesLoading } = useOrgCapability(
+    organizationId,
+    CAP_CONFIG_WRITE,
+  );
+  const flowEditorReadOnly = !canConfigWrite;
   const [flowName, setFlowName] = useState<string>('Flow');
   const [flowActive, setFlowActive] = useState<boolean>(false);
   const [activeFlowRevid, setActiveFlowRevid] = useState<string | null>(null);
@@ -196,6 +203,13 @@ export default function FlowDetailPageClient({
     if (!isDraftRoute || view !== 'executions') return;
     router.replace(`/orgs/${organizationId}/flows/${NEW_FLOW_URL_SEGMENT}`);
   }, [isDraftRoute, organizationId, router, view]);
+
+  useEffect(() => {
+    if (capabilitiesLoading) return;
+    if (!canConfigWrite && isDraftRoute) {
+      router.replace(`/orgs/${organizationId}/flows`);
+    }
+  }, [capabilitiesLoading, canConfigWrite, isDraftRoute, organizationId, router]);
 
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
@@ -988,6 +1002,7 @@ export default function FlowDetailPageClient({
                   onOpenChatTest={
                     !isDraftRoute && chatTriggerNode ? () => setChatPanelOpen(true) : undefined
                   }
+                  readOnly={flowEditorReadOnly}
                 />
                 <FlowWorkspaceTabStraddle>
                   <FlowCanvasViewTabs
@@ -1026,6 +1041,7 @@ export default function FlowDetailPageClient({
                         nodeTypes={nodeTypes}
                         nodes={rfNodes as Node<FlowRfNodeData>[]}
                         edges={rfEdges}
+                        viewOnly={flowEditorReadOnly}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onExecute={isDraftRoute ? undefined : () => void onRun()}

@@ -23,8 +23,8 @@ import TagSelector from './TagSelector';
 import { CaseAssignmentFields } from './CaseAssignmentFields';
 import { toast } from 'react-toastify';
 import { toastActionError } from '@/utils/toastActionError';
-import { useOrganizationCapabilities } from '@/contexts/OrganizationContext';
-import { CAP_DOCUMENTS_WRITE, hasOrgCapability } from '@/utils/orgCapabilities';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 
 interface DocumentUploadProps {
   organizationId: string;
@@ -39,8 +39,10 @@ interface PendingUploadFile {
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, defaultCaseId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const { capabilities, loading: capabilitiesLoading } = useOrganizationCapabilities();
-  const canUpload = hasOrgCapability(capabilities, CAP_DOCUMENTS_WRITE);
+  const { hasCapability: canUpload, loading: capabilitiesLoading } = useOrgCapability(
+    organizationId,
+    CAP_DOCUMENTS_WRITE,
+  );
   const [files, setFiles] = useState<PendingUploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);

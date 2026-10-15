@@ -21,6 +21,8 @@ import FormNameModal from '@/components/FormNameModal';
 import FormInfoModal from '@/components/FormInfoModal';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
 
 const jsonStringifyForQuery = (value: unknown): string =>
   JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
@@ -29,6 +31,7 @@ const GRID_NON_SORT_FILTER_FIELDS = new Set(['form_version', 'actions']);
 
 const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [forms, setForms] = useState<Form[]>([]);
   const [message, setMessage] = useState('');
@@ -90,8 +93,15 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
 
   // Update the edit handler
   const handleEdit = (form: Form) => {
+    if (!canConfigWrite) return;
     router.push(`/orgs/${organizationId}/forms/${form.form_revid}`);
     handleMenuClose();
+  };
+
+  const openFormProperties = (form: Form) => {
+    setAnchorEl(null);
+    setSelectedForm(form);
+    setIsInfoModalOpen(true);
   };
 
   // Add a function to handle form name change
@@ -214,9 +224,15 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
-        <div 
-          className="text-blue-600 cursor-pointer hover:underline"
-          onClick={() => handleEdit(params.row)}
+        <div
+          className={`text-blue-600 ${canConfigWrite ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
+          onClick={() => {
+            if (canConfigWrite) {
+              handleEdit(params.row);
+            } else {
+              openFormProperties(params.row);
+            }
+          }}
         >
           {params.row.name}
         </div>
@@ -343,15 +359,15 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
-      headerAlign: 'center',
-      align: 'center',
+      headerAlign: 'center' as const,
+      align: 'center' as const,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
-      renderCell: (params) => (
+      renderCell: (params: GridRenderCellParams) => (
         <div>
           <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row)}
+            onClick={(e) => handleMenuOpen(e, params.row as Form)}
             disabled={isLoading}
             className="text-gray-600 hover:bg-gray-50"
           >
@@ -360,15 +376,26 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         </div>
       ),
     },
-  ], [router, organizationId]);
+  ], [router, organizationId, canConfigWrite, isLoading]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <div className="p-4 mx-auto">
       <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
         <p className="text-sm">
-          Forms are used to check data extracted from documents. Below is a list of your existing forms. 
-          If none are available, <Link href={`/orgs/${organizationId}/forms?tab=form-create`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to create a new form.
+          Forms are used to check data extracted from documents. Below is a list of your existing forms.
+          {canConfigWrite ? (
+            <>
+              {' '}
+              If none are available,{' '}
+              <Link href={`/orgs/${organizationId}/forms?tab=form-create`} className="text-blue-600 font-medium hover:underline">
+                click here
+              </Link>{' '}
+              or use the tab above to create a new form.
+            </>
+          ) : (
+            <> {CONFIG_WRITE_VIEW_ONLY_HINT}</>
+          )}
         </p>
       </div>
       <h2 className="text-xl font-bold mb-4 hidden md:block">Forms</h2>
@@ -445,53 +472,50 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         />
       </div>
       
-      {/* Actions Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem 
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+        {canConfigWrite && (
+          <MenuItem
+            onClick={() => {
+              if (selectedForm) handleEdit(selectedForm);
+            }}
+            className="flex items-center gap-2"
+          >
+            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+            <span>Edit</span>
+          </MenuItem>
+        )}
+        <MenuItem
           onClick={() => {
-            if (selectedForm) handleEdit(selectedForm);
-          }}
-          className="flex items-center gap-2"
-        >
-          <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-          <span>Edit</span>
-        </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedForm) {
-              setAnchorEl(null); // Close menu manually
-              setIsInfoModalOpen(true);
-              // Don't clear selectedForm since we're opening the info modal
-            }
+            if (selectedForm) openFormProperties(selectedForm);
           }}
           className="flex items-center gap-2"
         >
           <BadgeIcon fontSize="small" className="text-blue-600" />
           <span>Properties</span>
         </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedForm) handleNameForm(selectedForm);
-          }}
-          className="flex items-center gap-2"
-        >
-          <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
-          <span>Rename</span>
-        </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedForm) handleCloneOperation(selectedForm);
-          }}
-          className="flex items-center gap-2"
-        >
-          <ContentCopyIcon fontSize="small" className="text-purple-600" />
-          <span>Clone</span>
-        </MenuItem>
-        <MenuItem 
+        {canConfigWrite && (
+          <>
+            <MenuItem
+              onClick={() => {
+                if (selectedForm) handleNameForm(selectedForm);
+              }}
+              className="flex items-center gap-2"
+            >
+              <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
+              <span>Rename</span>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                if (selectedForm) handleCloneOperation(selectedForm);
+              }}
+              className="flex items-center gap-2"
+            >
+              <ContentCopyIcon fontSize="small" className="text-purple-600" />
+              <span>Clone</span>
+            </MenuItem>
+          </>
+        )}
+        <MenuItem
           onClick={() => {
             if (selectedForm) handleDownload(selectedForm);
           }}
@@ -500,15 +524,17 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           <DownloadIcon fontSize="small" className="text-green-600" />
           <span>Download</span>
         </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedForm) handleDelete(selectedForm.form_id);
-          }}
-          className="flex items-center gap-2"
-        >
-          <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-          <span>Delete</span>
-        </MenuItem>
+        {canConfigWrite && (
+          <MenuItem
+            onClick={() => {
+              if (selectedForm) handleDelete(selectedForm.form_id);
+            }}
+            className="flex items-center gap-2"
+          >
+            <DeleteOutlineIcon fontSize="small" className="text-red-600" />
+            <span>Delete</span>
+          </MenuItem>
+        )}
       </Menu>
       
       {/* Rename/Clone Modal */}

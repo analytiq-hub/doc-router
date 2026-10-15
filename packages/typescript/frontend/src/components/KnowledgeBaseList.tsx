@@ -22,6 +22,8 @@ import Link from 'next/link';
 import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
 
 const jsonStringifyForQuery = (value: unknown): string =>
   JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
@@ -34,6 +36,7 @@ const KB_POLL_MS_SLOW = 30_000;
 
 const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [message, setMessage] = useState('');
@@ -165,6 +168,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   };
 
   const handleEdit = (kb: KnowledgeBase) => {
+    if (!canConfigWrite) return;
     router.push(`/orgs/${organizationId}/knowledge-bases?tab=edit&kbId=${kb.kb_id}`);
     handleMenuClose();
   };
@@ -218,9 +222,15 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       headerName: 'Name',
       flex: 1,
       renderCell: (params) => (
-        <div 
+        <div
           className="flex items-center h-full w-full cursor-pointer"
-          onClick={() => handleEdit(params.row)}
+          onClick={() => {
+            if (canConfigWrite) {
+              handleEdit(params.row);
+            } else {
+              handleSearch(params.row);
+            }
+          }}
         >
           <span className="font-medium text-blue-600 hover:text-blue-800 hover:underline">{params.row.name}</span>
         </div>
@@ -407,7 +417,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         </div>
       ),
     },
-  ], [availableTags, organizationId, router]);
+  ], [availableTags, organizationId, router, canConfigWrite]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
@@ -417,7 +427,17 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           <p className="text-sm">
             Knowledge Bases enable semantic search across your documents using vector embeddings.
             Documents are automatically indexed into knowledge bases based on their tags.
-            If none are available, <Link href={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to create a new knowledge base.
+            {canConfigWrite ? (
+              <>
+                If none are available,{' '}
+                <Link href={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-blue-600 font-medium hover:underline">
+                  click here
+                </Link>{' '}
+                or use the tab above to create a new knowledge base.
+              </>
+            ) : (
+              CONFIG_WRITE_VIEW_ONLY_HINT
+            )}
           </p>
         </div>
         <h2 className="text-xl font-bold mb-4">Knowledge Bases</h2>
@@ -510,15 +530,17 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          <MenuItem 
-            onClick={() => {
-              if (selectedKB) handleEdit(selectedKB);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-            <span>Edit</span>
-          </MenuItem>
+          {canConfigWrite && (
+            <MenuItem
+              onClick={() => {
+                if (selectedKB) handleEdit(selectedKB);
+              }}
+              className="flex items-center gap-2"
+            >
+              <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+              <span>Edit</span>
+            </MenuItem>
+          )}
           <MenuItem 
             onClick={() => {
               if (selectedKB) handleViewDocuments(selectedKB);
@@ -558,15 +580,17 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             <SyncIcon fontSize="small" className="text-blue-600" />
             <span>Reconcile</span>
           </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedKB) handleDelete(selectedKB.kb_id);
-            }}
-            className="flex items-center gap-2"
-          >
-            <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-            <span>Delete</span>
-          </MenuItem>
+          {canConfigWrite && (
+            <MenuItem
+              onClick={() => {
+                if (selectedKB) handleDelete(selectedKB.kb_id);
+              }}
+              className="flex items-center gap-2"
+            >
+              <DeleteOutlineIcon fontSize="small" className="text-red-600" />
+              <span>Delete</span>
+            </MenuItem>
+          )}
         </Menu>
         
         {/* Info Modal */}

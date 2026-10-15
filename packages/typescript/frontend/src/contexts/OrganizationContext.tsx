@@ -1,7 +1,8 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { DocRouterAccountApi, apiClient } from '@/utils/api';
+import { DocRouterAccountApi } from '@/utils/api';
+import { fetchOrgPermissionsMe } from '@/utils/orgPermissionsMe';
 import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import { AppSession } from '@/types/AppSession'
@@ -58,7 +59,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [persona, setPersona] = useState<string | null>(null)
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false)
   const pathname = usePathname()
-  const { session, status } = useAppSession()
+  const { session, status, apiAccessToken } = useAppSession()
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
   const fetchInFlightRef = useRef(false)
 
@@ -199,19 +200,26 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         orgId = settingsMatch[1]
       }
     }
-    if (!appSession?.user?.id || !orgId) {
+    if (!orgId) {
       setCapabilities([])
       setPermissionGroupIds([])
       setPersona(null)
+      setCapabilitiesLoading(false)
       return
     }
+    if (!appSession?.user?.id || !apiAccessToken) {
+      setCapabilities([])
+      setPermissionGroupIds([])
+      setPersona(null)
+      setCapabilitiesLoading(true)
+      return
+    }
+    setCapabilities([])
+    setPermissionGroupIds([])
+    setPersona(null)
     setCapabilitiesLoading(true)
     try {
-      const { data } = await apiClient.get<{
-        capabilities: string[]
-        permission_group_ids: string[]
-        persona: string | null
-      }>(`/v0/orgs/${orgId}/permissions/me`)
+      const data = await fetchOrgPermissionsMe(orgId, apiAccessToken)
       setCapabilities(data.capabilities ?? [])
       setPermissionGroupIds(data.permission_group_ids ?? [])
       setPersona(data.persona ?? null)
@@ -223,7 +231,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } finally {
       setCapabilitiesLoading(false)
     }
-  }, [currentOrganization?.id, session, pathname])
+  }, [currentOrganization?.id, session, pathname, apiAccessToken])
 
   useEffect(() => {
     void refreshCapabilities()

@@ -57,6 +57,48 @@ def test_effective_capabilities_union():
 
 
 @pytest.mark.asyncio
+async def test_operator_permissions_me_no_config_write(org_and_users, test_db):
+    from bson import ObjectId
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    member_id = org_and_users["member"]["id"]
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_OPERATOR]}},
+    )
+    resp = client.get(
+        f"/v0/orgs/{org_id}/permissions/me",
+        headers=get_token_headers(org_and_users["member"]["token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert CAPABILITY_CONFIG_WRITE not in data["capabilities"]
+    assert data["persona"] == BUILTIN_OPERATOR
+
+
+@pytest.mark.asyncio
+async def test_viewer_permissions_me_no_config_write(org_and_users, test_db):
+    from bson import ObjectId
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    member_id = org_and_users["member"]["id"]
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_VIEWER]}},
+    )
+    resp = client.get(
+        f"/v0/orgs/{org_id}/permissions/me",
+        headers=get_token_headers(org_and_users["member"]["token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert CAPABILITY_CONFIG_WRITE not in data["capabilities"]
+    assert data["persona"] == BUILTIN_VIEWER
+
+
+@pytest.mark.asyncio
 async def test_permissions_me_endpoint(org_and_users):
     from tests.conftest_utils import client, get_token_headers
 

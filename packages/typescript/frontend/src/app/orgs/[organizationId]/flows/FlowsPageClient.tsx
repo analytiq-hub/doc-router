@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
@@ -15,6 +15,8 @@ import {
 } from '@/components/flows/flowDefaultNames';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import { getApiErrorMsg } from '@/utils/api';
+import { useOrgCapability } from '@/hooks/useOrgPermissions';
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
 export type FlowsTab = 'flows' | 'credentials' | 'executions';
 
@@ -32,6 +34,10 @@ export default function FlowsPageClient({
 }) {
   const router = useRouter();
   const api = useFlowApi(organizationId);
+  const { hasCapability: canConfigWrite, loading: capabilitiesLoading } = useOrgCapability(
+    organizationId,
+    CAP_CONFIG_WRITE,
+  );
   const splitRef = useRef<HTMLDivElement>(null);
   const [splitWidthPx, setSplitWidthPx] = useState<number | null>(null);
   const [createFlowBusy, setCreateFlowBusy] = useState(false);
@@ -101,6 +107,20 @@ export default function FlowsPageClient({
   const dismissNewFlow = useCallback(() => {
     stripQueryKeys(['newFlow']);
   }, [stripQueryKeys]);
+
+  useEffect(() => {
+    if (capabilitiesLoading) return;
+    if (!canConfigWrite && newFlow) {
+      dismissNewFlow();
+    }
+  }, [capabilitiesLoading, canConfigWrite, newFlow, dismissNewFlow]);
+
+  useEffect(() => {
+    if (capabilitiesLoading) return;
+    if (!canConfigWrite && autoCreateCredential) {
+      onCredentialBootstrapHandled();
+    }
+  }, [capabilitiesLoading, canConfigWrite, autoCreateCredential, onCredentialBootstrapHandled]);
 
   const handleCreateFlowNavigate = useCallback(async () => {
     if (createFlowBusy) return;
@@ -180,6 +200,7 @@ export default function FlowsPageClient({
 
         <div className="flex shrink-0 flex-col items-end gap-1 pb-2 sm:flex-row sm:items-center sm:pb-4">
           {createFlowError ? <div className="text-sm text-red-600">{createFlowError}</div> : null}
+          {!capabilitiesLoading && canConfigWrite && (
           <div ref={splitRef} className="inline-flex rounded-md shadow-sm">
             <button
               type="button"
@@ -248,6 +269,7 @@ export default function FlowsPageClient({
               </MenuItems>
             </Menu>
           </div>
+          )}
         </div>
       </div>
 
@@ -255,7 +277,7 @@ export default function FlowsPageClient({
         <div role="tabpanel" hidden={tab !== 'flows'}>
           {tab === 'flows' && (
             <>
-              {newFlow && (
+              {newFlow && canConfigWrite && (
                 <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
                   <div className="mb-3 flex justify-end">
                     <button
