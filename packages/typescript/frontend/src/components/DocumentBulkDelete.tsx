@@ -1,6 +1,7 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import { DocRouterOrgApi } from '@/utils/api'
+import { DocRouterOrgApi } from '@/utils/api';
 import { toast } from 'react-hot-toast'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 import { Document, Tag } from '@docrouter/sdk';
@@ -146,7 +147,7 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
 
     } catch (error) {
       console.error('Bulk delete error:', error);
-      toast.error('Failed to perform bulk delete');
+      toastActionError('Failed to perform bulk delete', error);
     } finally {
       setIsDeleting(false);
       setDeletedCount(0);

@@ -1,9 +1,9 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, BoltIcon, PlusIcon, MinusIcon, DocumentArrowDownIcon, TrashIcon, CpuChipIcon, DocumentTextIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { Document, Tag } from '@docrouter/sdk';
-import { DocRouterOrgApi } from '@/utils/api';
-
+import { DocRouterOrgApi } from '@/utils/api'
 // Operation data types
 type TagsOperationData = Tag[];
 type MetadataOperationData = Record<string, string>;
@@ -315,7 +315,7 @@ export function DocumentBulkUpdate({
       console.warn('Unknown operation:', operation);
     } catch (error) {
       console.error('Bulk update error:', error);
-      toast.error('Failed to perform bulk update');
+      toastActionError('Failed to perform bulk update', error);
     }
   };
 

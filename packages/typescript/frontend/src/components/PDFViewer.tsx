@@ -1,6 +1,7 @@
 // components/PDFViewer.js
 "use client"
 
+import { toastActionError } from '@/utils/toastActionError';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { pdfjs, Document, Page } from 'react-pdf';
@@ -730,7 +731,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       toast.info('OCR requeued');
     } catch (err) {
       console.error('Error rerunning OCR:', err);
-      toast.error('Failed to rerun OCR');
+      toastActionError('Failed to rerun OCR', err);
     }
   }, [handleMenuClose, docRouterOrgApi, id]);
 
@@ -746,7 +747,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           toast.info('OCR data not yet available');
         } else {
           console.error('Error loading OCR blocks:', err);
-          toast.error('Failed to load OCR bounding boxes');
+          toastActionError('Failed to load OCR bounding boxes', err);
         }
         // Leave null so user can retry by toggling off and on
       }
@@ -779,7 +780,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           return false; // keep polling
         }
         console.error('Error loading OCR blocks:', err);
-        toast.error('Failed to load OCR bounding boxes');
+        toastActionError('Failed to load OCR bounding boxes', err);
         return true; // stop polling on other errors
       }
     };
@@ -874,9 +875,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         );
       } else {
         console.error('OCR export download failed:', err);
-        toast.error(
-          err instanceof Error ? err.message : 'Failed to download OCR export',
-        );
+        toastActionError('Failed to download OCR export', err);
       }
     }
   }, [
@@ -906,7 +905,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         toast.info('OCR data not yet available');
       } else {
         console.error('Error downloading OCR JSON:', err);
-        toast.error('Failed to download OCR JSON');
+        toastActionError('Failed to download OCR JSON', err);
       }
     }
     handleMenuClose();
@@ -1024,7 +1023,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       .then((meta) => setOcrMetadataType(meta.ocr_type ?? null))
       .catch(() => setOcrMetadataType(null));
   }, [ocrPanelKind, id, docRouterOrgApi]);
-
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {

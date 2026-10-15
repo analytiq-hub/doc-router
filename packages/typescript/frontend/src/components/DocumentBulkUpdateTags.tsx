@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { Tag } from '@docrouter/sdk';
 import TagSelector from './TagSelector';
@@ -39,7 +40,6 @@ export const DocumentBulkUpdateTags = forwardRef<DocumentBulkUpdateTagsRef, Docu
     setSelectedTagIds(tagIds)
     onDataChange(tagIds)
   }
-
 
   // Parse and URL-encode metadata search to handle special characters
   const parseAndEncodeMetadataSearch = (searchStr: string): string | null => {
@@ -151,7 +151,7 @@ export const DocumentBulkUpdateTags = forwardRef<DocumentBulkUpdateTagsRef, Docu
       }
     } catch (error) {
       console.error('Bulk tags update error:', error);
-      toast.error('Failed to perform bulk tag update');
+      toastActionError('Failed to perform bulk tag update', error);
     }
   };
 

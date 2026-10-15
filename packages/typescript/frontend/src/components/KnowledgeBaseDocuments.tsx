@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBaseDocument, KBChunk } from '@docrouter/sdk';
@@ -43,8 +44,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
       setDocuments(response.documents);
       setTotal(response.total_count);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading documents';
-      toast.error('Error: ' + errorMsg);
+      toastActionError('Failed to load documents', error);
     } finally {
       setIsLoading(false);
     }
@@ -100,8 +100,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
         setDisplayChunk(response.chunks[0] ?? null);
       } catch (error) {
         if (!cancelled) {
-          const errorMsg = getApiErrorMsg(error) || 'Error loading chunks';
-          toast.error('Error: ' + errorMsg);
+          toastActionError('Failed to load chunks', error);
           setDisplayChunk(null);
         }
       } finally {

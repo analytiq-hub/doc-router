@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DocRouterAccountApi } from '@/utils/api';
@@ -37,7 +38,7 @@ const handleExistingUserAccept = async (
     router.push('/dashboard');
   } catch (error) {
     console.error('Error accepting invitation:', error);
-    toast.error('Failed to accept invitation');
+    toastActionError('Failed to accept invitation', error);
   }
 };
 
@@ -156,7 +157,7 @@ const UserAcceptInvitation: React.FC<UserAcceptInvitationProps> = ({ token }) =>
     } catch (error) {
       console.error('Error accepting invitation:', error);
       setError(error instanceof Error ? error.message : 'Failed to accept invitation');
-      toast.error('Failed to accept invitation');
+      toastActionError('Failed to accept invitation', error);
     } finally {
       setIsSubmitting(false);
     }

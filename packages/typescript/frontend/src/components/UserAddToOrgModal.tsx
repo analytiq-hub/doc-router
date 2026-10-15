@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { DocRouterAccountApi } from '@/utils/api';
@@ -74,7 +75,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
       setEmail('');
     } catch (error) {
       console.error('Failed to add user: ' + error);
-      toast.error('Failed to add user');
+      toastActionError('Failed to add user', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -85,7 +86,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
       await onAdd(user.id, user);
       onClose();
     } catch (error) {
-      toast.error('Failed to add user: ' + error);
+      toastActionError('Failed to add user', error);
     }
   };
 

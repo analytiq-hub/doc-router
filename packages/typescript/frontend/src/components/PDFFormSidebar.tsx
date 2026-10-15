@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { 
   ArrowPathIcon,
@@ -61,7 +62,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
       onHasForms?.(documentHasMatchingForms(totalCount, forms));
     } catch (error) {
       console.error('Error fetching data:', error);
-      toast.error(`Error loading document data: ${getApiErrorMsg(error)}`);
+      toastActionError('Failed to load document data', error);
       setDocumentTags([]);
       setAvailableForms([]);
       onHasForms?.(false);
@@ -331,8 +332,6 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
     }
   }, [id, llmResults, llmResultsLoading, llmResultsFailed, docRouterOrgApi]);
 
-
-
   // Check if a form needs LLM data and if it's ready to render
   const isFormReadyToRender = useCallback((form: Form): boolean => {
     console.log(`Checking if form ${form.name} is ready to render`);
@@ -435,7 +434,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
 
     } catch (error) {
       console.error('Error submitting form:', error);
-      toast.error(`Error submitting form: ${getApiErrorMsg(error)}`);
+      toastActionError('Failed to submit form', error);
     } finally {
       setSubmittingForms(prev => {
         const newSet = new Set(prev);
@@ -465,7 +464,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
 
     } catch (error) {
       console.error('Error deleting submission:', error);
-      toast.error(`Error deleting submission: ${getApiErrorMsg(error)}`);
+      toastActionError('Failed to delete submission', error);
     } finally {
       setDeletingSubmissions(prev => {
         const newSet = new Set(prev);

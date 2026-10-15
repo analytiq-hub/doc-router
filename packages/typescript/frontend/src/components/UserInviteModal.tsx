@@ -1,12 +1,12 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { DocRouterAccountApi } from '@/utils/api';
 import { Organization } from '@docrouter/sdk';
 import { toast } from 'react-toastify';
 import debounce from 'lodash/debounce';
-import { isAxiosError } from 'axios';
 
 interface UserInviteModalProps {
   open: boolean;
@@ -45,7 +45,7 @@ const UserInviteModal: React.FC<UserInviteModalProps> = ({
       })
       .catch(error => {
         console.error('Failed to search organizations:', error);
-        toast.error('Failed to search organizations');
+        toastActionError('Failed to search organizations', error);
       })
       .finally(() => {
         setIsSearching(false);
@@ -85,11 +85,7 @@ const UserInviteModal: React.FC<UserInviteModalProps> = ({
       setSearchQuery('');
     } catch (error) {
       console.error('Invitation error:', error);
-      if (isAxiosError(error)) {
-        toast.error(error.response?.data?.detail || 'Failed to send invitation');
-      } else {
-        toast.error('An unexpected error occurred');
-      }
+      toastActionError('Failed to send invitation', error);
     } finally {
       setIsSubmitting(false);
     }

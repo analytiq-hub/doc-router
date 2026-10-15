@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { UsageRangeRequest, UsageRangeResponse, UsageDataPoint } from '@/types/payments';
@@ -100,7 +101,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
         setRangeData(response);
       } catch (error) {
         console.error('Error fetching usage range:', error);
-        toast.error('Failed to load usage range data');
+        toastActionError('Failed to load usage range data', error);
       } finally {
         setLoading(false);
       }
@@ -266,7 +267,6 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
       </div>
     );
   }
-
 
   const maxValue = Math.max(...processedData.map(dp => dp.spus));
   

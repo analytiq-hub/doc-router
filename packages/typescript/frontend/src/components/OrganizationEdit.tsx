@@ -1,12 +1,12 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { LLMChatModel, OcrMode, OrgOcrConfig } from '@docrouter/sdk'
 import type { FlowLogLevel } from '@/types/organizations'
 import { OrganizationMember, OrganizationType } from '@/types/index'
-import { DocRouterAccountApi } from '@/utils/api'
-import { isAxiosError } from 'axios'
+import { DocRouterAccountApi } from '@/utils/api';
 import { User } from '@docrouter/sdk'
 import { 
   DataGrid, 
@@ -308,11 +308,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         setOriginalOcrConfig(cloneOcrConfig(ocrConfig))
       }
     } catch (err) {
-      if (isAxiosError(err)) {
-        toast.error(err.response?.data?.detail || 'Failed to update organization');
-      } else {
-        toast.error('An unexpected error occurred');
-      }
+      toastActionError('Failed to update organization', err);
     }
   };
 

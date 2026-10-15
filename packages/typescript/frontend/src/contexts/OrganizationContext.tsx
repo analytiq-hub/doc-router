@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { DocRouterAccountApi } from '@/utils/api'
+import { DocRouterAccountApi } from '@/utils/api';
 import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import { AppSession } from '@/types/AppSession'

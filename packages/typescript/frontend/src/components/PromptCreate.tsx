@@ -1,5 +1,6 @@
 'use client';
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi } from '@/utils/api';
 import type {
@@ -108,7 +109,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           }));
         }
       } catch (error) {
-        toast.error(`Error fetching schema details: ${getApiErrorMsg(error)}`);
+        toastActionError('Failed to fetch schema details', error);
       }
     } else {
       setSelectedSchemaDetails(null);
@@ -158,7 +159,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             setSelectedSchemaDetails(null);
           }
         } catch (error) {
-          toast.error(`Error loading prompt for editing: ${getApiErrorMsg(error)}`);
+          toastActionError('Failed to load prompt for editing', error);
         } finally {
           setIsLoading(false);
         }
@@ -191,7 +192,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               schema_version: schema.schema_version
             }));
           } catch (error) {
-            toast.error(`Error fetching schema details: ${getApiErrorMsg(error)}`);
+            toastActionError('Failed to fetch schema details', error);
           }
         }
       }
@@ -260,8 +261,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       router.push(`/orgs/${organizationId}/prompts`);
       
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error saving prompt';
-      toast.error(errorMsg);
+      toastActionError('Failed to save prompt', error);
     } finally {
       setIsLoading(false);
     }
@@ -272,8 +272,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       const response = await docRouterOrgApi.listSchemas({ limit: 100 });
       setSchemas(response.schemas);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading schemas';
-      toast.error(errorMsg);
+      toastActionError('Failed to load schemas', error);
     }
   }, [docRouterOrgApi]);
 
@@ -282,8 +281,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       const response = await docRouterOrgApi.listTags({ limit: 100 });
       setAvailableTags(response.tags);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
-      toast.error(errorMsg);
+      toastActionError('Failed to load tags', error);
     }
   }, [docRouterOrgApi]);
 
@@ -295,8 +293,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       });
       setLLMModels(response.chat_models);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading LLM models';
-      toast.error(errorMsg);
+      toastActionError('Failed to load LLM models', error);
     }
   }, [docRouterAccountApi]);
 
@@ -309,8 +306,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       );
       setAvailableKnowledgeBases(activeKBs);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading knowledge bases';
-      toast.error(errorMsg);
+      toastActionError('Failed to load knowledge bases', error);
     }
   }, [docRouterOrgApi]);
 
@@ -417,7 +413,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     // Update URL to reflect the selected version
                     router.push(`/orgs/${organizationId}/prompts/${promptRevId}`);
                   } catch (error) {
-                    toast.error(`Error loading prompt version: ${getApiErrorMsg(error)}`);
+                    toastActionError('Failed to load prompt version', error);
                   } finally {
                     setIsLoading(false);
                   }
@@ -507,7 +503,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     }
                     router.push(`/orgs/${organizationId}/prompts/${latestVersion.prompt_revid}`);
                   } catch (error) {
-                    toast.error(`Error loading latest version: ${getApiErrorMsg(error)}`);
+                    toastActionError('Failed to load latest version', error);
                   } finally {
                     setIsLoading(false);
                   }

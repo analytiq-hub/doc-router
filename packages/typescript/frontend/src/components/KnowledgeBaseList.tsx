@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBase, Tag } from '@docrouter/sdk';
@@ -73,7 +74,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       const errorMsg = getApiErrorMsg(error) || 'Error loading knowledge bases';
       if (!silent) {
         setMessage('Error: ' + errorMsg);
-        toast.error('Error loading knowledge bases');
+        toastActionError('Failed to load knowledge bases', error);
       } else {
         console.error('Knowledge base list refresh failed:', errorMsg);
       }
@@ -157,7 +158,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error deleting knowledge base';
       setMessage('Error: ' + errorMsg);
-      toast.error('Failed to delete knowledge base');
+      toastActionError('Failed to delete knowledge base', error);
     } finally {
       setIsLoading(false);
     }
@@ -192,7 +193,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       // Reload KBs to get updated last_reconciled_at
       loadKnowledgeBases();
     } catch (error) {
-      toast.error(`Reconciliation failed: ${getApiErrorMsg(error)}`);
+      toastActionError('Reconciliation failed', error);
     }
   };
 

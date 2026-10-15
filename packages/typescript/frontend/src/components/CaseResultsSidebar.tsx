@@ -1,5 +1,6 @@
 'use client';
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -103,7 +104,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
         }
         setMatchingPrompts(promptsMatchingCaseTags(all, caseTagIds));
       } catch (error) {
-        toast.error(getApiErrorMsg(error) || 'Failed to load prompts');
+        toastActionError('Failed to load prompts', error);
       } finally {
         setLoadingPromptsList(false);
       }
@@ -181,7 +182,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
         if (await fetchCaseResult(prompt, baselineRunId)) break;
       }
     } catch (error) {
-      toast.error(getApiErrorMsg(error) || 'Failed to start run');
+      toastActionError('Failed to start run', error);
     } finally {
       setRunningPrompts((prev) => {
         const next = new Set(prev);

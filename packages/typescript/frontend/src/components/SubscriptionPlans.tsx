@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { toast } from 'react-toastify';
@@ -90,7 +91,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
           setStripeEnabled(false);
           console.info('Stripe endpoints not available - billing disabled');
         } else {
-          toast.error(`Failed to load subscription plans: ${error}`);
+          toastActionError('Failed to load subscription plans', error);
         }
       } finally {
         setLoading(false);
@@ -145,7 +146,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
         
       } catch (error) {
         console.error('Error updating organization plan:', error);
-        toast.error(`Failed to update organization plan: ${error}`);
+        toastActionError('Failed to update organization plan', error);
         setSelectedPlan(currentPlan || 'individual');
       } finally {
         setLoading(false);
@@ -183,7 +184,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
         return;
       } catch (error) {
         console.error('Error reactivating subscription:', error);
-        toast.error(`Failed to reactivate subscription: ${error}`);
+        toastActionError('Failed to reactivate subscription', error);
         return;
       } finally {
         setLoading(false);
@@ -205,7 +206,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
       
     } catch (error) {
       console.error('Error changing plan:', error);
-      toast.error(`Failed to create checkout session: ${error}`);
+      toastActionError('Failed to create checkout session', error);
       setSelectedPlan(currentPlan || 'individual');
     } finally {
       setLoading(false);
@@ -238,7 +239,6 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
       </div>
     );
   }
-
 
   return (
     <div className="w-full">

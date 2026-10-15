@@ -1,7 +1,8 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { useState, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo } from 'react'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Tag } from '@docrouter/sdk';
-import { DocRouterOrgApi } from '@/utils/api'
+import { DocRouterOrgApi } from '@/utils/api';
 import { toast } from 'react-hot-toast'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 
@@ -266,7 +267,7 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
       }
     } catch (error) {
       console.error('Bulk metadata update error:', error);
-      toast.error('Failed to perform bulk metadata update');
+      toastActionError('Failed to perform bulk metadata update', error);
     }
   };
 

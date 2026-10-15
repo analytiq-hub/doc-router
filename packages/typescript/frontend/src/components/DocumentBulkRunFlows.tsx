@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import {
   forwardRef,
   useImperativeHandle,
@@ -321,7 +322,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
           return;
         }
         console.error('Error analyzing flow executions:', error);
-        toast.error('Failed to analyze required flow executions');
+        toastActionError('Failed to analyze required flow executions', error);
       } finally {
         if (isMountedRef.current && generation === analyzeGenerationRef.current) {
           setIsAnalyzing(false);
@@ -541,7 +542,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
         notifyComplete();
       } catch (error) {
         console.error('Error during bulk flow execution:', error);
-        toast.error('Failed to complete bulk flow execution');
+        toastActionError('Failed to complete bulk flow execution', error);
       } finally {
         setIsExecuting(false);
         setIsCancelling(false);

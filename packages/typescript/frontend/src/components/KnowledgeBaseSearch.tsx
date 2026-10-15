@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KBSearchResult, Tag } from '@docrouter/sdk';
@@ -109,8 +110,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
       setResults(response.results);
       setTotalCount(response.total_count);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error searching knowledge base';
-      toast.error('Error: ' + errorMsg);
+      toastActionError('Failed to search knowledge base', error);
       setResults([]);
       setTotalCount(0);
     } finally {

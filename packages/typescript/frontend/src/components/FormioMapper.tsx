@@ -1,5 +1,6 @@
 'use client';
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Prompt } from '@docrouter/sdk';
@@ -195,7 +196,7 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
       setSchemaFields(allSchemaFields);
     } catch (error) {
       console.error('Error loading prompts and schemas:', error);
-      toast.error(`Error loading data: ${getApiErrorMsg(error)}`);
+      toastActionError('Failed to load data', error);
     } finally {
       setLoading(false);
     }

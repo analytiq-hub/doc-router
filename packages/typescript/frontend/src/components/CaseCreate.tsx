@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Tag } from '@docrouter/sdk';
@@ -26,7 +27,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
     void fetchAllOrgTags(docRouterOrgApi)
       .then(setAvailableTags)
       .catch((error) => {
-        toast.error(getApiErrorMsg(error) || 'Failed to load tags');
+        toastActionError('Failed to load tags', error);
       });
   }, [docRouterOrgApi]);
 
@@ -47,7 +48,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
           }))
         );
       } catch (error) {
-        toast.error(getApiErrorMsg(error) || 'Error loading case');
+        toastActionError('Failed to load case', error);
       } finally {
         setIsLoading(false);
       }
@@ -94,7 +95,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
         router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(created.case_id)}`);
       }
     } catch (error) {
-      toast.error(getApiErrorMsg(error) || 'Error saving case');
+      toastActionError('Failed to save case', error);
     } finally {
       setIsLoading(false);
     }

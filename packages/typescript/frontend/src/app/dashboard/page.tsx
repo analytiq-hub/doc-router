@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppSession } from '@/contexts/AppSessionContext';
@@ -33,7 +34,7 @@ export default function DashboardRedirect() {
           }
         } catch (error) {
           console.error('Error fetching organizations:', error);
-          toast.error('Failed to fetch organizations');
+          toastActionError('Failed to fetch organizations', error);
           router.push('/settings/organizations');
         }
       } else if (status === 'unauthenticated') {

@@ -285,7 +285,10 @@ export function getApiErrorMsg(error: unknown): string {
   return 'An unexpected error occurred. Please try again.';
 }
 
-
+/** Plain-text combined message (e.g. inline labels). Prefer {@link toastActionError} for toasts. */
+export function formatActionError(action: string, error: unknown): string {
+  return `${action}: ${getApiErrorMsg(error)}`;
+}
 
 // Helper function to get session token for direct fetch calls (for FormIO)
 export const getSessionToken = async (): Promise<string | null> => {

@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DataGrid, GridColDef, GridRenderCellParams, GridFilterModel, GridSortModel } from '@mui/x-data-grid';
 import { Box, IconButton, TextField, InputAdornment, Autocomplete, Menu, MenuItem, Tooltip } from '@mui/material';
@@ -161,7 +162,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       handleMenuClose();
     } catch (error) {
       console.error('Error rerunning OCR:', error);
-      toast.error('Failed to rerun OCR');
+      toastActionError('Failed to rerun OCR', error);
     }
   };
 
@@ -172,7 +173,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       handleMenuClose();
     } catch (error) {
       console.error('Error deleting file:', error);
-      toast.error('Failed to delete document');
+      toastActionError('Failed to delete document', error);
     }
   };
 
@@ -226,7 +227,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       handleMenuClose();
     } catch (error) {
       console.error('Error downloading file:', error);
-      toast.error('Failed to download document');
+      toastActionError('Failed to download document', error);
     }
   };
 
@@ -256,7 +257,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       console.log('Document list refreshed');
     } catch (error) {
       console.error('Error updating document:', error);
-      toast.error('Failed to update document');
+      toastActionError('Failed to update document', error);
     }
   };
 
@@ -273,11 +274,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
       await fetchFiles();
     } catch (error) {
       console.error('Error renaming document:', error);
-      toast.error('Failed to rename document');
+      toastActionError('Failed to rename document', error);
       throw error; // Rethrow to handle in the component
     }
   };
-
 
   useEffect(() => {
     const checkScreenSize = () => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient, getApiErrorMsg } from '@/utils/api';
 import { toast } from 'react-toastify';
@@ -253,7 +254,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         setLoading(true);
         await loadConfig();
       } catch (e) {
-        toast.error(getApiErrorMsg(e));
+        toastActionError('Failed to load webhook configuration', e);
       } finally {
         setLoading(false);
       }
@@ -270,7 +271,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       try {
         await loadDeliveries();
       } catch (e) {
-        toast.error(getApiErrorMsg(e));
+        toastActionError('Failed to load webhook deliveries', e);
       }
     })();
   }, [loading, page, pageSize, selectedEndpointId, loadDeliveries]);
@@ -374,7 +375,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       await loadEndpoints();
       await loadDeliveries();
     } catch (e) {
-      toast.error(getApiErrorMsg(e));
+      toastActionError('Failed to save webhook endpoint', e);
     } finally {
       setSaving(false);
     }
@@ -397,7 +398,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
           : 'Secret updated'
       );
     } catch (e) {
-      toast.error(getApiErrorMsg(e));
+      toastActionError('Failed to regenerate webhook secret', e);
     } finally {
       setSaving(false);
     }
@@ -416,7 +417,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       toast.success(`Test enqueued (delivery ${res.data.delivery_id})`);
       await loadDeliveries();
     } catch (e) {
-      toast.error(getApiErrorMsg(e));
+      toastActionError('Failed to test webhook', e);
     } finally {
       setTesting(false);
     }
@@ -443,7 +444,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       await loadEndpoints();
       await loadDeliveries();
     } catch (e) {
-      toast.error(getApiErrorMsg(e));
+      toastActionError('Failed to delete webhook endpoint', e);
     }
   };
 
@@ -453,7 +454,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     try {
       await loadDeliveryDetails(deliveryId);
     } catch (e) {
-      toast.error(getApiErrorMsg(e));
+      toastActionError('Failed to load delivery details', e);
     }
   };
 
@@ -471,7 +472,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         await loadDeliveryDetails(deliveryId);
       }
     } catch (e) {
-      toast.error(getApiErrorMsg(e));
+      toastActionError('Failed to retry webhook delivery', e);
     }
   };
 

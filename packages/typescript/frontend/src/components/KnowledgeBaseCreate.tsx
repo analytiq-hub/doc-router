@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
 import {
@@ -109,7 +110,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           });
           setIsEditing(true);
         } catch (error) {
-          toast.error(`Error loading knowledge base: ${getApiErrorMsg(error)}`);
+          toastActionError('Failed to load knowledge base', error);
         } finally {
           setIsLoading(false);
         }
@@ -176,8 +177,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
 
       router.push(`/orgs/${organizationId}/knowledge-bases`);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error saving knowledge base';
-      toast.error('Error: ' + errorMsg);
+      toastActionError('Failed to save knowledge base', error);
     } finally {
       setIsLoading(false);
     }

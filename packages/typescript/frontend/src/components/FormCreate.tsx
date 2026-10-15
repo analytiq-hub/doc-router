@@ -1,5 +1,6 @@
 'use client';
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Form } from '@docrouter/sdk';
@@ -85,7 +86,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
           });
           setSelectedTagIds(form.tag_ids || []);
         } catch (error) {
-          toast.error(`Error loading form for editing: ${getApiErrorMsg(error)}`);
+          toastActionError('Failed to load form for editing', error);
         } finally {
           setIsLoading(false);
         }
@@ -99,8 +100,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
       const response = await docRouterOrgApi.listTags({});
       setAvailableTags(response.tags);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
-      toast.error('Error: ' + errorMsg);
+      toastActionError('Failed to load tags', error);
     }
   }, [docRouterOrgApi]);
 
@@ -175,8 +175,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
       router.push(`/orgs/${organizationId}/forms`);
       
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error saving form';
-      toast.error('Error: ' + errorMsg);
+      toastActionError('Failed to save form', error);
     } finally {
       setIsLoading(false);
     }
@@ -217,7 +216,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                     // Update URL to reflect the selected version
                     router.push(`/orgs/${organizationId}/forms/${formRevId}`);
                   } catch (error) {
-                    toast.error(`Error loading form version: ${getApiErrorMsg(error)}`);
+                    toastActionError('Failed to load form version', error);
                   } finally {
                     setIsLoading(false);
                   }
@@ -287,7 +286,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                     setSelectedTagIds(form.tag_ids || []);
                     router.push(`/orgs/${organizationId}/forms/${latestVersion.form_revid}`);
                   } catch (error) {
-                    toast.error(`Error loading latest version: ${getApiErrorMsg(error)}`);
+                    toastActionError('Failed to load latest version', error);
                   } finally {
                     setIsLoading(false);
                   }

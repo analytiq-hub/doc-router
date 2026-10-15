@@ -1,10 +1,11 @@
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo } from "react";
 import { KnowledgeBase } from "@docrouter/sdk";
 import BadgeIcon from "@mui/icons-material/Badge";
 import SyncIcon from "@mui/icons-material/Sync";
 import { Chip, Button } from "@mui/material";
 import { toast } from "react-toastify";
-import { DocRouterOrgApi, getApiErrorMsg } from "@/utils/api";
+import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import DraggablePanel from "@/components/DraggablePanel";
 import { formatLocalDate } from "@/utils/date";
 
@@ -46,7 +47,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
         onReconcile();
       }
     } catch (error) {
-      toast.error(`Reconciliation failed: ${getApiErrorMsg(error)}`);
+      toastActionError('Reconciliation failed', error);
     } finally {
       setIsReconciling(false);
     }

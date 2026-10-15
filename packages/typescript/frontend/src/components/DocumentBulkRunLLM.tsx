@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { forwardRef, useImperativeHandle, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Prompt, BulkAnalyzeLLMResponse } from '@docrouter/sdk';
 import { Tag } from '@docrouter/sdk';
@@ -280,7 +281,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
           return;
         }
         console.error('Error analyzing executions:', error);
-        toast.error('Failed to analyze required executions');
+        toastActionError('Failed to analyze required executions', error);
       } finally {
         if (
           isMountedRef.current &&
@@ -487,7 +488,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
 
       } catch (error) {
         console.error('Error during bulk LLM execution:', error);
-        toast.error('Failed to complete bulk LLM execution');
+        toastActionError('Failed to complete bulk LLM execution', error);
       } finally {
         setIsExecuting(false);
         // Reset cancelling state when execution is fully done

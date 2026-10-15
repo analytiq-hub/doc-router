@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { toast } from 'react-hot-toast';
@@ -82,7 +83,7 @@ export const DocumentBulkUpdateCase = forwardRef<DocumentBulkUpdateCaseRef, Docu
       try {
         documentIds = await collectDocumentIds();
       } catch (error) {
-        toast.error(`Failed to list documents: ${getApiErrorMsg(error)}`);
+        toastActionError('Failed to list documents', error);
         return;
       }
 

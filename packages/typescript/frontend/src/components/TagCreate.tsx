@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Tag } from '@docrouter/sdk';
@@ -42,7 +43,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
           });
         } catch (error) {
           // setMessage(`Error loading tag: ${getApiErrorMsg(error)}`);
-          toast.error(`Error loading tag: ${getApiErrorMsg(error)}`);
+          toastActionError('Failed to load tag', error);
         } finally {
           setIsLoading(false);
         }
@@ -77,8 +78,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
       // Redirect to tags list page
       router.push(`/orgs/${organizationId}/tags`);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error saving tag';
-      toast.error('Error: ' + errorMsg);
+      toastActionError('Failed to save tag', error);
     } finally {
       setIsLoading(false);
     }

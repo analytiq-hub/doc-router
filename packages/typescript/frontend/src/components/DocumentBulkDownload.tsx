@@ -1,5 +1,6 @@
+import { toastActionError } from '@/utils/toastActionError';
 import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
-import { DocRouterOrgApi } from '@/utils/api'
+import { DocRouterOrgApi } from '@/utils/api';
 import { Document, Tag } from '@docrouter/sdk';
 import { toast } from 'react-hot-toast'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
@@ -166,7 +167,7 @@ export const DocumentBulkDownload = forwardRef<DocumentBulkDownloadRef, Document
 
     } catch (error) {
       console.error('Bulk download error:', error);
-      toast.error('Failed to perform bulk download');
+      toastActionError('Failed to perform bulk download', error);
     } finally {
       setIsDownloading(false);
       setDownloadedCount(0);

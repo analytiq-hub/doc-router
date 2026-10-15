@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Schema, SchemaResponseFormat, SchemaProperty } from '@docrouter/sdk';
@@ -6,7 +7,6 @@ import { SchemaField } from '@/types/ui';
 // Type alias for schema creation/update (without id and timestamps)
 type SchemaConfig = Omit<Schema, 'schema_revid' | 'schema_id' | 'schema_version' | 'created_at' | 'created_by'>;
 import { getApiErrorMsg } from '@/utils/api';
-
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import Editor from "@monaco-editor/react";
 import InfoTooltip from '@/components/InfoTooltip';
@@ -358,7 +358,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
           });
           setFields(jsonSchemaToFields(schema.response_format));
         } catch (error) {
-          toast.error(`Error loading schema: ${getApiErrorMsg(error)}`);
+          toastActionError('Failed to load schema', error);
         } finally {
           setIsLoading(false);
         }
@@ -906,7 +906,6 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
     }
   };
 
-
   const saveSchema = async (schema: SchemaConfig) => {
     try {
       setIsLoading(true);
@@ -919,8 +918,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
 
       router.push(`/orgs/${organizationId}/schemas`);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error saving schema';
-      toast.error(errorMsg);
+      toastActionError('Failed to save schema', error);
     } finally {
       setIsLoading(false);
     }
@@ -1269,7 +1267,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                     // Update URL to reflect the selected version
                     router.push(`/orgs/${organizationId}/schemas/${schemaRevId}`);
                   } catch (error) {
-                    toast.error(`Error loading schema version: ${getApiErrorMsg(error)}`);
+                    toastActionError('Failed to load schema version', error);
                   } finally {
                     setIsLoading(false);
                   }
@@ -1335,7 +1333,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                     setFields(jsonSchemaToFields(schema.response_format));
                     router.push(`/orgs/${organizationId}/schemas/${latestVersion.schema_revid}`);
                   } catch (error) {
-                    toast.error(`Error loading latest version: ${getApiErrorMsg(error)}`);
+                    toastActionError('Failed to load latest version', error);
                   } finally {
                     setIsLoading(false);
                   }

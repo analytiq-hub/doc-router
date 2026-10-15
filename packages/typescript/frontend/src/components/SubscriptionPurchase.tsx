@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { toast } from 'react-toastify';
@@ -80,13 +81,11 @@ const SubscriptionPurchase: React.FC<SubscriptionPurchaseProps> = ({
       if (response.checkout_url) {
         window.location.href = response.checkout_url;
       } else {
-        toast.error('Failed to start checkout - no URL received');
+        toast.error('Failed to start checkout: no URL received');
       }
     } catch (err: unknown) {
       console.error('Purchase error:', err);
-      let message = 'Failed to start checkout.';
-      if (err instanceof Error) message = err.message;
-      toast.error(message);
+      toastActionError('Failed to start checkout', err);
     } finally {
       setPurchaseLoading(false);
     }
@@ -109,7 +108,7 @@ const SubscriptionPurchase: React.FC<SubscriptionPurchaseProps> = ({
       }
     } catch (error) {
       console.error('Error adding credits:', error);
-      toast.error(`Failed to add credits: ${error}`);
+      toastActionError('Failed to add credits', error);
     } finally {
       setAdminLoading(false);
     }

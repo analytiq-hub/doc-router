@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Tag, Form } from '@docrouter/sdk';
@@ -126,7 +127,7 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       await loadForms();
     } catch (error) {
       console.error(`Error ${isCloning ? 'cloning' : 'renaming'} form:`, error);
-      toast.error(`Failed to ${isCloning ? 'clone' : 'rename'} form`);
+      toastActionError(`Failed to ${isCloning ? 'clone' : 'rename'} form`, error);
       throw error;
     }
   };
@@ -140,7 +141,7 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error deleting form';
       setMessage('Error: ' + errorMsg);
-      toast.error('Failed to delete form');
+      toastActionError('Failed to delete form', error);
     } finally {
       setIsLoading(false);
       handleMenuClose();

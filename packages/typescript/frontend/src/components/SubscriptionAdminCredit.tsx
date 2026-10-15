@@ -1,5 +1,6 @@
 'use client'
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { toast } from 'react-toastify';
@@ -34,7 +35,7 @@ const SubscriptionAdminCredit: React.FC<SubscriptionAdminCreditProps> = ({
       }
     } catch (error) {
       console.error('Error adding credits:', error);
-      toast.error(`Failed to add credits: ${error}`);
+      toastActionError('Failed to add credits', error);
     } finally {
       setLoading(false);
     }

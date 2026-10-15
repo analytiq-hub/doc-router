@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
@@ -95,7 +96,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   useEffect(() => {
     void fetchAllOrgTags(docRouterOrgApi)
       .then(setAvailableTags)
-      .catch((error) => toast.error(getApiErrorMsg(error) || 'Failed to load tags'));
+      .catch((error) => toastActionError('Failed to load tags', error));
   }, [docRouterOrgApi]);
 
   const loadCases = useCallback(async () => {
@@ -147,7 +148,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       handleMenuClose();
       await loadCases();
     } catch (error) {
-      toast.error(getApiErrorMsg(error) || 'Error deleting case');
+      toastActionError('Failed to delete case', error);
     } finally {
       setIsLoading(false);
     }

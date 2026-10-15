@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
@@ -39,7 +40,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
       if ((error as { status?: number }).status !== 404) {
         const message = getApiErrorMsg(error);
         setLoadError(message);
-        toast.error(`Failed to load case: ${message}`);
+        toastActionError('Failed to load case', error);
       }
     } finally {
       setLoading(false);
@@ -50,7 +51,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
     void loadCase();
     void fetchAllOrgTags(docRouterOrgApi)
       .then(setTags)
-      .catch((error) => toast.error(getApiErrorMsg(error) || 'Failed to load tags'));
+      .catch((error) => toastActionError('Failed to load tags', error));
   }, [loadCase, docRouterOrgApi]);
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);

@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Schema, SchemaResponseFormat, SchemaProperty } from '@docrouter/sdk';
@@ -78,7 +79,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error deleting schema';
       setMessage('Error: ' + errorMsg);
-      toast.error('Failed to delete schema');
+      toastActionError('Failed to delete schema', error);
     } finally {
       setIsLoading(false);
       handleMenuClose();
@@ -128,7 +129,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       await loadSchemas();
     } catch (error) {
       console.error(`Error ${isCloning ? 'cloning' : 'renaming'} schema:`, error);
-      toast.error(`Failed to ${isCloning ? 'clone' : 'rename'} schema`);
+      toastActionError(`Failed to ${isCloning ? 'clone' : 'rename'} schema`, error);
       throw error;
     }
   };

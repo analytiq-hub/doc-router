@@ -1,3 +1,4 @@
+import { toastActionError } from '@/utils/toastActionError';
 import {
   forwardRef,
   useImperativeHandle,
@@ -323,7 +324,7 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
           return;
         }
         console.error('Error analyzing OCR executions:', error);
-        toast.error('Failed to analyze required OCR executions');
+        toastActionError('Failed to analyze required OCR executions', error);
       } finally {
         if (isMountedRef.current && generation === analyzeGenerationRef.current) {
           setIsAnalyzing(false);
@@ -457,7 +458,7 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
         notifyComplete();
       } catch (error) {
         console.error('Error during bulk OCR execution:', error);
-        toast.error('Failed to complete bulk OCR execution');
+        toastActionError('Failed to complete bulk OCR execution', error);
       } finally {
         if (isMountedRef.current) {
           setIsExecuting(false);

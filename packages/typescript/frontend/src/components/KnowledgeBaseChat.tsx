@@ -1,5 +1,6 @@
 "use client";
 
+import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
 import { KBChatRequest, LLMMessage, KBChatStreamChunk, KBChatStreamError, Tag } from '@docrouter/sdk';
@@ -22,7 +23,6 @@ interface KnowledgeBaseChatProps {
   organizationId: string;
   kbId: string;
 }
-
 
 interface ToolCallInfo {
   id: string;
@@ -131,8 +131,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
           setSelectedModel(names[0]);
         }
       } catch (error) {
-        const errorMsg = getApiErrorMsg(error) || 'Error loading models';
-        toast.error('Error: ' + errorMsg);
+        toastActionError('Failed to load models', error);
       }
     };
     loadModels();
@@ -181,7 +180,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       } catch (err) {
         const msg = getApiErrorMsg(err) ?? 'Failed to load conversation';
         setError(msg);
-        toast.error(msg);
+        toastActionError('Failed to load conversation', err);
       } finally {
         setThreadsLoading(false);
       }
@@ -368,7 +367,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       } else {
         const errorMsg = getApiErrorMsg(error) || 'An error occurred';
         setError(errorMsg);
-        toast.error('Error: ' + errorMsg);
+        toastActionError('Failed to send chat message', error);
       }
       setIsStreaming(false);
     } finally {
@@ -392,7 +391,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         handleNewChat();
       }
     } catch (err) {
-      toast.error(getApiErrorMsg(err) ?? 'Failed to delete conversation');
+      toastActionError('Failed to delete conversation', err);
     }
   };
 
