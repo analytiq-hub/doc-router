@@ -29,6 +29,7 @@ from app.auth import (
     is_organization_admin,
     is_system_admin,
     user_document_is_sysadmin,
+    users_share_organization,
 )
 from app.models import User
 from app.routes.payments import sync_customer, delete_payments_customer
@@ -132,18 +133,19 @@ async def list_users(
         is_self = current_user.user_id == user_id
         
         if not (is_sys_admin or is_self):
-            # Check if user is an org admin for any org the target user is in
-            user_orgs = await db.organizations.find({
-                "members.user_id": user_id
-            }).to_list(None)
-            
-            is_org_admin = False
-            for org in user_orgs:
-                if await is_organization_admin(str(org["_id"]), current_user.user_id):
-                    is_org_admin = True
-                    break
-            
-            if not is_org_admin:
+            can_view = await users_share_organization(current_user.user_id, user_id)
+            if not can_view:
+                # Org admins may view profiles of members in orgs they administer
+                user_orgs = await db.organizations.find({
+                    "members.user_id": user_id
+                }).to_list(None)
+
+                for org in user_orgs:
+                    if await is_organization_admin(str(org["_id"]), current_user.user_id):
+                        can_view = True
+                        break
+
+            if not can_view:
                 raise HTTPException(
                     status_code=403,
                     detail="Not authorized to view this user"

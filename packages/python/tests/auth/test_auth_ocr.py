@@ -1,4 +1,7 @@
 import pytest
+from bson import ObjectId
+
+from analytiq_data.org_permissions import BUILTIN_VIEWER
 from tests.conftest_utils import client, get_token_headers
 
 @pytest.mark.asyncio
@@ -61,13 +64,31 @@ async def test_ocr_permissions(org_and_users, test_db):
     resp = client.get(url_metadata, headers=get_token_headers(outsider["token"]))
     assert resp.status_code in (401, 403), f"Outsider should NOT be able to access OCR metadata, got {resp.status_code}: {resp.text}"
 
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member["id"]},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_VIEWER]}},
+    )
+    resp = client.get(url_blocks, headers=get_token_headers(member["token"]))
+    assert resp.status_code in (200, 404), f"Viewer should be able to access OCR blocks, got {resp.status_code}: {resp.text}"
+
     # --- OCR RUN ---
     url_run = f"/v0/orgs/{org_id}/ocr/run/{doc_id}"
     resp = client.post(url_run, headers=get_token_headers(admin["token"]))
     assert resp.status_code == 200, f"Admin should be able to run OCR, got {resp.status_code}: {resp.text}"
 
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member["id"]},
+        {"$set": {"members.$.permission_group_ids": ["builder"]}},
+    )
     resp = client.post(url_run, headers=get_token_headers(member["token"]))
     assert resp.status_code == 200, f"Member should be able to run OCR, got {resp.status_code}: {resp.text}"
+
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member["id"]},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_VIEWER]}},
+    )
+    resp = client.post(url_run, headers=get_token_headers(member["token"]))
+    assert resp.status_code == 403, f"Viewer should NOT be able to run OCR, got {resp.status_code}: {resp.text}"
 
     resp = client.post(url_run, headers=get_token_headers(outsider["token"]))
     assert resp.status_code in (401, 403), f"Outsider should NOT be able to run OCR, got {resp.status_code}: {resp.text}"

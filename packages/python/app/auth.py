@@ -244,6 +244,18 @@ async def is_organization_member(org_id: str, user_id: str):
 
     return True
 
+
+async def users_share_organization(user_id_a: str, user_id_b: str) -> bool:
+    """True when both users belong to at least one organization."""
+    if user_id_a == user_id_b:
+        return True
+    db = ad.common.get_async_db()
+    shared = await db.organizations.find_one(
+        {"members.user_id": {"$all": [user_id_a, user_id_b]}},
+        projection={"_id": 1},
+    )
+    return shared is not None
+
 async def get_admin_or_org_user(
     organization_id: str,
     current_user: User = Depends(get_current_user)

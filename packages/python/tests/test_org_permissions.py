@@ -74,6 +74,34 @@ async def test_permissions_me_endpoint(org_and_users):
 
 
 @pytest.mark.asyncio
+async def test_org_member_can_get_co_member_user(org_and_users, test_db):
+    from bson import ObjectId
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    admin_id = org_and_users["admin"]["id"]
+    member_id = org_and_users["member"]["id"]
+
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_VIEWER]}},
+    )
+
+    resp = client.get(
+        f"/v0/account/users?user_id={admin_id}",
+        headers=get_token_headers(org_and_users["member"]["account_token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["users"][0]["id"] == admin_id
+
+    resp = client.get(
+        f"/v0/account/users?user_id={admin_id}",
+        headers=get_token_headers(org_and_users["outsider"]["account_token"]),
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.asyncio
 async def test_viewer_cannot_create_tag(org_and_users, test_db):
     from tests.conftest_utils import client, get_token_headers
 

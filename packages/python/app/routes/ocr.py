@@ -156,7 +156,7 @@ async def download_ocr_json(
         "plain",
         description="Response format: 'plain' (default, raw JSON) or 'gzip' (gzip-compressed JSON)",
     ),
-    current_user: User = Depends(require_org_runs_execute),
+    current_user: User = Depends(require_org_documents_read),
 ):
     """
     Download stored OCR JSON as persisted (decoded UTF-8 JSON from GridFS).
@@ -209,7 +209,7 @@ async def download_ocr_text(
     organization_id: str,
     document_id: str,
     page_num: Optional[int] = Query(None, description="Specific page number to retrieve"),
-    current_user: User = Depends(require_org_runs_execute)
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Download OCR text for a document"""
     logger.debug(f"download_ocr_text() start: document_id: {document_id}, page_num: {page_num}")
@@ -242,7 +242,7 @@ async def download_ocr_text(
 async def get_ocr_metadata(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(require_org_runs_execute)
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Get OCR metadata for a document"""
     logger.debug(f"get_ocr_metadata() start: document_id: {document_id}")
@@ -285,7 +285,7 @@ def _ocr_export_http_errors(exc: Exception) -> HTTPException:
 async def get_ocr_export_markdown(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(require_org_runs_execute),
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Return OCR linearized as Markdown (textractor), computed from stored OCR JSON."""
     logger.info(
@@ -323,7 +323,7 @@ async def get_ocr_export_markdown(
 async def get_ocr_export_html(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(require_org_runs_execute),
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Return OCR linearized as HTML (textractor), computed from stored OCR JSON."""
     logger.debug(f"get_ocr_export_html() document_id={document_id} org={organization_id}")
@@ -363,7 +363,7 @@ async def get_ocr_export_tables_xlsx(
         None,
         description="0-based table index; omit to export all tables (one sheet per table)",
     ),
-    current_user: User = Depends(require_org_runs_execute),
+    current_user: User = Depends(require_org_documents_read),
 ):
     """Export detected table(s) to Excel (.xlsx) via textractor, from stored OCR JSON."""
     logger.debug(
