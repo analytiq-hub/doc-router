@@ -25,6 +25,25 @@ export function permissionGroupLabel(id: string): string {
   return BUILTIN_PERMISSION_GROUPS.find((g) => g.id === id)?.label ?? id;
 }
 
+const PERMISSION_GROUP_DISPLAY_ORDER: BuiltinPermissionGroupId[] = [
+  BUILTIN_ADMIN,
+  BUILTIN_BUILDER,
+  BUILTIN_OPERATOR,
+  BUILTIN_VIEWER,
+];
+
+/** Stable order for displaying multiple groups (highest tier first). */
+export function sortPermissionGroupIds(ids: string[]): string[] {
+  const set = new Set(ids);
+  const ordered = PERMISSION_GROUP_DISPLAY_ORDER.filter((id) => set.has(id));
+  for (const id of ids) {
+    if (!ordered.includes(id)) {
+      ordered.push(id);
+    }
+  }
+  return ordered;
+}
+
 export function memberHasAdminGroup(permissionGroupIds: string[] | undefined): boolean {
   return (permissionGroupIds ?? []).includes(BUILTIN_ADMIN);
 }

@@ -13,14 +13,12 @@ import {
   GridColDef, 
   GridRenderCellParams 
 } from '@mui/x-data-grid'
-import { IconButton, Alert } from '@mui/material'
+import { IconButton, Alert, Checkbox, ListItemText, Menu, MenuItem } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
 import { toast } from 'react-toastify'
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import { useOrganizationData } from '@/hooks/useOrganizationData'
 import { isSysAdmin, isOrgAdmin } from '@/utils/roles'
 import {
@@ -31,6 +29,7 @@ import {
   normalizeOrgMember,
   permissionGroupLabel,
   primaryPermissionGroupId,
+  sortPermissionGroupIds,
   type BuiltinPermissionGroupId,
 } from '@/utils/orgPermissionGroups'
 
@@ -125,7 +124,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const { session } = useAppSession();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedMember, setSelectedMember] = useState<{ id: string; permissionGroupId: BuiltinPermissionGroupId } | null>(null);
+  const [selectedMember, setSelectedMember] = useState<{
+    id: string;
+    permissionGroupIds: string[];
+  } | null>(null);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
 
   const [ocrLlmChatModels, setOcrLlmChatModels] = useState<LLMChatModel[]>([])
@@ -314,18 +316,39 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     }
   };
 
-  const handlePermissionGroupChange = (userId: string, groupId: BuiltinPermissionGroupId) => {
+  const handleTogglePermissionGroup = (userId: string, groupId: BuiltinPermissionGroupId) => {
     setMembers((prevMembers) => {
-      const updatedMembers = prevMembers.map((member) =>
-        member.user_id === userId
-          ? { user_id: member.user_id, permission_group_ids: [groupId] }
-          : member
+      const member = prevMembers.find((m) => m.user_id === userId);
+      if (!member) {
+        return prevMembers;
+      }
+
+      const current = sortPermissionGroupIds(member.permission_group_ids);
+      const hasGroup = current.includes(groupId);
+      let nextIds: string[];
+
+      if (hasGroup) {
+        if (current.length === 1) {
+          toast.error('Each member must belong to at least one group');
+          return prevMembers;
+        }
+        nextIds = current.filter((id) => id !== groupId);
+      } else {
+        nextIds = sortPermissionGroupIds([...current, groupId]);
+      }
+
+      const updatedMembers = prevMembers.map((m) =>
+        m.user_id === userId ? { user_id: m.user_id, permission_group_ids: nextIds } : m
       );
 
       if (!validateAdminPresence(updatedMembers)) {
         toast.error('Organization must have at least one Admin member');
         return prevMembers;
       }
+
+      setSelectedMember((prev) =>
+        prev && prev.id === userId ? { ...prev, permissionGroupIds: nextIds } : prev
+      );
 
       return updatedMembers;
     });
@@ -386,22 +409,25 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const getGridRows = () => {
     return filteredMembers.map(member => {
       const user = allUsers.find(u => u.id === member.user_id)
+      const permissionGroupIds = sortPermissionGroupIds(member.permission_group_ids);
       return {
         id: member.user_id,
         name: user?.name || 'Unknown User',
         email: user?.email || '',
-        permissionGroupId: primaryPermissionGroupId(member.permission_group_ids) ?? BUILTIN_OPERATOR,
-      }
+        permissionGroupIds,
+        primaryPermissionGroupId:
+          primaryPermissionGroupId(permissionGroupIds) ?? BUILTIN_OPERATOR,
+      };
     })
   }
 
   const handleMenuOpen = (
     event: React.MouseEvent<HTMLElement>,
     memberId: string,
-    permissionGroupId: BuiltinPermissionGroupId
+    permissionGroupIds: string[]
   ) => {
     setAnchorEl(event.currentTarget);
-    setSelectedMember({ id: memberId, permissionGroupId });
+    setSelectedMember({ id: memberId, permissionGroupIds });
   };
 
   const handleMenuClose = () => {
@@ -427,14 +453,38 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       )
     },
     {
-      field: 'permissionGroupId',
-      headerName: 'Permission group',
-      width: 160,
-      renderCell: (params: GridRenderCellParams) => (
-        <span className={params.value === BUILTIN_ADMIN ? 'text-blue-600 font-medium' : ''}>
-          {permissionGroupLabel(String(params.value))}
-        </span>
-      ),
+      field: 'permissionGroupIds',
+      headerName: 'Groups',
+      flex: 0.6,
+      minWidth: 200,
+      sortable: false,
+      renderCell: (params: GridRenderCellParams) => {
+        const ids = (params.value as string[]) ?? [];
+        const primaryId = params.row.primaryPermissionGroupId as string;
+        const stacked = ids.length > 1;
+        return (
+          <div
+            className={`flex h-full w-full gap-1 ${
+              stacked
+                ? 'flex-wrap content-center items-center py-0.5'
+                : 'items-center'
+            }`}
+          >
+            {ids.map((id) => (
+              <span
+                key={id}
+                className={`inline-flex shrink-0 items-center px-2 py-1 text-sm leading-none rounded shadow-sm ${
+                  id === primaryId
+                    ? 'bg-blue-100 font-medium text-blue-800'
+                    : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                {permissionGroupLabel(id)}
+              </span>
+            ))}
+          </div>
+        );
+      },
     },
     {
       field: 'actions',
@@ -443,7 +493,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       renderCell: (params: GridRenderCellParams) => (
         <div>
           <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row.id, params.row.permissionGroupId)}
+            onClick={(e) => handleMenuOpen(e, params.row.id, params.row.permissionGroupIds)}
             className="text-gray-600 hover:bg-gray-50"
           >
             <MoreVertIcon />
@@ -976,8 +1026,18 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   '& .MuiDataGrid-cell': {
                     height: '60px',
                     alignItems: 'center',
-                    padding: '0 16px'
-                  }
+                    padding: '0 16px',
+                  },
+                  '& .MuiDataGrid-cell[data-field="permissionGroupIds"]': {
+                    display: 'flex',
+                    alignItems: 'center',
+                  },
+                  '& .MuiDataGrid-cell[data-field="permissionGroupIds"] .MuiDataGrid-cellContent': {
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: '100%',
+                    width: '100%',
+                  },
                 }}
               />
               {/* Actions Menu for member row */}
@@ -985,21 +1045,31 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 anchorEl={anchorEl}
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
+                slotProps={{
+                  paper: {
+                    sx: { maxWidth: 320 },
+                  },
+                }}
               >
-                {BUILTIN_PERMISSION_GROUPS.map((group) => (
-                  <MenuItem
-                    key={group.id}
-                    selected={selectedMember?.permissionGroupId === group.id}
-                    onClick={() => {
-                      if (selectedMember) {
-                        handlePermissionGroupChange(selectedMember.id, group.id);
-                      }
-                      handleMenuClose();
-                    }}
-                  >
-                    {group.label}
-                  </MenuItem>
-                ))}
+                {BUILTIN_PERMISSION_GROUPS.map((group) => {
+                  const checked = selectedMember?.permissionGroupIds.includes(group.id) ?? false;
+                  return (
+                    <MenuItem
+                      key={group.id}
+                      dense
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (selectedMember) {
+                          handleTogglePermissionGroup(selectedMember.id, group.id);
+                        }
+                      }}
+                    >
+                      <Checkbox checked={checked} size="small" sx={{ py: 0, mr: 0.5 }} />
+                      <ListItemText primary={group.label} />
+                    </MenuItem>
+                  );
+                })}
                 <MenuItem
                   onClick={() => {
                     if (selectedMember) handleRemoveMember(selectedMember.id);
