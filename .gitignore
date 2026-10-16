@@ -186,5 +186,9 @@ tools/*.jsonl
 deploy/kubernetes/base/configmap.yaml
 deploy/kubernetes/base/secrets.yaml
 
+# Deployment-specific branding assets (APP_FAVICON etc.); keep only the placeholder
+branding/*
+!branding/.gitkeep
+
 # Copied from APP_FAVICON via scripts/sync-branding.sh
 packages/typescript/frontend/public/branded-favicon.ico
