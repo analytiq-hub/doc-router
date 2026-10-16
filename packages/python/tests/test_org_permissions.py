@@ -2,12 +2,17 @@ import pytest
 from bson import ObjectId
 
 from analytiq_data.org_permissions import (
+    ALL_CAPABILITIES,
     BUILTIN_ADMIN,
     BUILTIN_BUILDER,
     BUILTIN_OPERATOR,
     BUILTIN_VIEWER,
+    CAPABILITY_CONFIG_READ,
     CAPABILITY_CONFIG_WRITE,
+    CAPABILITY_DOCUMENTS_READ,
+    CAPABILITY_DOCUMENTS_WRITE,
     CAPABILITY_ORG_ADMIN,
+    CAPABILITY_RUNS_EXECUTE,
     build_member_entry,
     effective_capabilities_for_member,
     member_has_capability,
@@ -56,6 +61,45 @@ def test_effective_capabilities_union():
     assert "runs.execute" in caps
 
 
+def test_viewer_effective_capabilities_exact():
+    org = {"permission_groups": builtin_permission_groups_document()}
+    member = build_member_entry("u1", permission_group_ids=[BUILTIN_VIEWER])
+    caps = set(effective_capabilities_for_member(org, member))
+    assert caps == {CAPABILITY_DOCUMENTS_READ, CAPABILITY_CONFIG_READ}
+
+
+def test_operator_effective_capabilities_exact():
+    org = {"permission_groups": builtin_permission_groups_document()}
+    member = build_member_entry("u1", permission_group_ids=[BUILTIN_OPERATOR])
+    caps = set(effective_capabilities_for_member(org, member))
+    assert caps == {
+        CAPABILITY_DOCUMENTS_READ,
+        CAPABILITY_CONFIG_READ,
+        CAPABILITY_DOCUMENTS_WRITE,
+        CAPABILITY_RUNS_EXECUTE,
+    }
+
+
+def test_builder_effective_capabilities_exact():
+    org = {"permission_groups": builtin_permission_groups_document()}
+    member = build_member_entry("u1", permission_group_ids=[BUILTIN_BUILDER])
+    caps = set(effective_capabilities_for_member(org, member))
+    assert caps == {
+        CAPABILITY_DOCUMENTS_READ,
+        CAPABILITY_CONFIG_READ,
+        CAPABILITY_DOCUMENTS_WRITE,
+        CAPABILITY_RUNS_EXECUTE,
+        CAPABILITY_CONFIG_WRITE,
+    }
+
+
+def test_admin_effective_capabilities_all():
+    org = {"permission_groups": builtin_permission_groups_document()}
+    member = build_member_entry("u1", permission_group_ids=[BUILTIN_ADMIN])
+    caps = set(effective_capabilities_for_member(org, member))
+    assert caps == set(ALL_CAPABILITIES)
+
+
 @pytest.mark.asyncio
 async def test_operator_permissions_me_no_config_write(org_and_users, test_db):
     from bson import ObjectId
@@ -75,6 +119,8 @@ async def test_operator_permissions_me_no_config_write(org_and_users, test_db):
     data = resp.json()
     assert CAPABILITY_CONFIG_WRITE not in data["capabilities"]
     assert data["persona"] == BUILTIN_OPERATOR
+    assert CAPABILITY_DOCUMENTS_WRITE in data["capabilities"]
+    assert CAPABILITY_RUNS_EXECUTE in data["capabilities"]
 
 
 @pytest.mark.asyncio
@@ -96,6 +142,31 @@ async def test_viewer_permissions_me_no_config_write(org_and_users, test_db):
     data = resp.json()
     assert CAPABILITY_CONFIG_WRITE not in data["capabilities"]
     assert data["persona"] == BUILTIN_VIEWER
+    assert set(data["capabilities"]) == {
+        CAPABILITY_DOCUMENTS_READ,
+        CAPABILITY_CONFIG_READ,
+    }
+    assert CAPABILITY_DOCUMENTS_WRITE not in data["capabilities"]
+
+
+@pytest.mark.asyncio
+async def test_admin_permissions_me_all_capabilities(org_and_users, test_db):
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    member_id = org_and_users["member"]["id"]
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_ADMIN]}},
+    )
+    resp = client.get(
+        f"/v0/orgs/{org_id}/permissions/me",
+        headers=get_token_headers(org_and_users["member"]["token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert set(data["capabilities"]) == set(ALL_CAPABILITIES)
+    assert data["persona"] == BUILTIN_ADMIN
 
 
 @pytest.mark.asyncio
@@ -221,6 +292,43 @@ async def test_viewer_cannot_read_subscription(org_and_users, test_db):
         headers=get_token_headers(org_and_users["member"]["token"]),
     )
     assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.asyncio
+async def test_viewer_cannot_create_case(org_and_users, test_db):
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    member_id = org_and_users["member"]["id"]
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_VIEWER]}},
+    )
+    resp = client.post(
+        f"/v0/orgs/{org_id}/cases",
+        json={"case_id": "VIEWER-CASE-1"},
+        headers=get_token_headers(org_and_users["member"]["token"]),
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.asyncio
+async def test_operator_can_create_case(org_and_users, test_db):
+    from tests.conftest_utils import client, get_token_headers
+
+    org_id = org_and_users["org_id"]
+    member_id = org_and_users["member"]["id"]
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id), "members.user_id": member_id},
+        {"$set": {"members.$.permission_group_ids": [BUILTIN_OPERATOR]}},
+    )
+    resp = client.post(
+        f"/v0/orgs/{org_id}/cases",
+        json={"case_id": "OP-CASE-1"},
+        headers=get_token_headers(org_and_users["member"]["token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["case_id"] == "OP-CASE-1"
 
 
 @pytest.mark.asyncio

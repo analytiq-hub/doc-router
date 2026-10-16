@@ -6,8 +6,10 @@ from datetime import datetime, UTC
 
 # Import shared test utilities
 from .conftest_utils import (
-    client, TEST_ORG_ID, 
-    get_auth_headers
+    client,
+    TEST_ORG_ID,
+    TEST_USER_ID,
+    get_auth_headers,
 )
 import analytiq_data as ad
 
@@ -266,8 +268,14 @@ async def test_form_submission_validation(test_db, mock_auth):
 async def test_form_submission_cross_organization_isolation(test_db, mock_auth):
     """Test that form submissions are isolated between organizations"""
     logger.info(f"test_form_submission_cross_organization_isolation() start")
-    
+
     try:
+        # Default test user is platform sysadmin (bypasses org membership checks).
+        await test_db.users.update_one(
+            {"_id": ObjectId(TEST_USER_ID)},
+            {"$unset": {"system_role": ""}},
+        )
+
         # Create a form in the test organization
         form_data = {
             "name": "Isolation Test Form",

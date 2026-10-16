@@ -16,6 +16,18 @@ from analytiq_data.agent.agent_loop import (
     _build_effective_approvals,
 )
 from analytiq_data.agent.session import set_turn_state, get_turn_state, clear_turn_state, generate_turn_id
+from analytiq_data.org_permissions import ALL_CAPABILITIES
+
+
+@pytest.fixture(autouse=True)
+def mock_load_member_capabilities():
+    """Agent loop loads org caps from Mongo; unit tests use fake org/user ids."""
+    with patch(
+        "analytiq_data.agent.agent_loop.load_member_capabilities",
+        new_callable=AsyncMock,
+    ) as mock_load:
+        mock_load.return_value = frozenset(ALL_CAPABILITIES)
+        yield mock_load
 
 
 @pytest.fixture

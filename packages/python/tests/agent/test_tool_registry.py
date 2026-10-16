@@ -13,6 +13,11 @@ from analytiq_data.agent.tool_registry import (
     READ_WRITE_TOOLS,
     is_read_only_tool,
 )
+from analytiq_data.org_permissions import ALL_CAPABILITIES
+
+
+def _context_with_all_capabilities(**extra: object) -> dict:
+    return {"capabilities": frozenset(ALL_CAPABILITIES), **extra}
 
 
 def test_read_only_and_read_write_tools():
@@ -48,7 +53,7 @@ def test_tool_definitions_have_required_fields():
 
 @pytest.mark.asyncio
 async def test_help_schemas_returns_content():
-    context = {}
+    context = _context_with_all_capabilities()
     result_str = await execute_tool("help_schemas", context, "{}")
     result = json.loads(result_str)
     assert "content" in result
@@ -57,7 +62,7 @@ async def test_help_schemas_returns_content():
 
 @pytest.mark.asyncio
 async def test_help_prompts_returns_content():
-    context = {}
+    context = _context_with_all_capabilities()
     result_str = await execute_tool("help_prompts", context, "{}")
     result = json.loads(result_str)
     assert "content" in result
@@ -70,6 +75,7 @@ async def test_list_llm_models_returns_models(org_and_users, setup_test_models, 
     org_id = org_and_users["org_id"]
     context = {
         "organization_id": org_id,
+        "created_by": org_and_users["member"]["id"],
         "analytiq_client": ad.common.get_analytiq_client(),
     }
     result_str = await execute_tool("list_llm_models", context, "{}")
@@ -96,7 +102,7 @@ async def test_unknown_tool_returns_error():
 
 @pytest.mark.asyncio
 async def test_validate_schema_valid():
-    context = {}
+    context = _context_with_all_capabilities()
     schema = {
         "type": "json_schema",
         "json_schema": {
@@ -117,7 +123,7 @@ async def test_validate_schema_valid():
 
 @pytest.mark.asyncio
 async def test_validate_schema_invalid():
-    context = {}
+    context = _context_with_all_capabilities()
     # Missing required "schema" in json_schema, or invalid structure
     result_str = await execute_tool(
         "validate_schema",
