@@ -35,7 +35,7 @@ const PERMISSION_GROUP_DISPLAY_ORDER: BuiltinPermissionGroupId[] = [
 /** Stable order for displaying multiple groups (highest tier first). */
 export function sortPermissionGroupIds(ids: string[]): string[] {
   const set = new Set(ids);
-  const ordered = PERMISSION_GROUP_DISPLAY_ORDER.filter((id) => set.has(id));
+  const ordered: string[] = PERMISSION_GROUP_DISPLAY_ORDER.filter((id) => set.has(id));
   for (const id of ids) {
     if (!ordered.includes(id)) {
       ordered.push(id);

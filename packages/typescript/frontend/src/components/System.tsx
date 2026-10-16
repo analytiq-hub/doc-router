@@ -3,7 +3,7 @@ const System: React.FC = () => {
   const { session } = useAppSession();
   console.log('Session:', session);
   console.log('Session user:', session?.user);
-  console.log('Session role:', session?.user?.role); // Should be properly typed
+  console.log('Session isSysadmin:', session?.user?.isSysadmin);
 
   return (
     <div className="p-2">
