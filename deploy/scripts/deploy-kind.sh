@@ -44,6 +44,8 @@ docker build -t analytiq-hub/doc-router-frontend:"$IMAGE_TAG" \
   --target runner \
   --build-arg NODE_ENV=production \
   --build-arg PUBLIC_API_URL="http://localhost/fastapi" \
+  --build-arg APP_NAME="${APP_NAME:-Smart Document Router}" \
+  --build-arg APP_FAVICON="${APP_FAVICON:-}" \
   -f deploy/shared/docker/Dockerfile .
 
 echo "Building backend image..."

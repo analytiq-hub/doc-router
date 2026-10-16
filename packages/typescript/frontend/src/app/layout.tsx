@@ -9,14 +9,18 @@ import { getAppServerSession } from '@/utils/session';
 import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import FormioProvider from '@/components/FormioProvider';
+import { appFaviconUrl, appName } from '@/config/branding';
+import type { Metadata } from 'next';
 
-export const metadata = {
-  title: 'Smart Document Router',
-  description: 'Smart Document Router',
-  icons: {
-    icon: '/favicon.ico',
-  },
-};
+export function generateMetadata(): Metadata {
+  return {
+    title: appName,
+    description: appName,
+    icons: {
+      icon: appFaviconUrl,
+    },
+  };
+}
 
 export default async function RootLayout({
   children,

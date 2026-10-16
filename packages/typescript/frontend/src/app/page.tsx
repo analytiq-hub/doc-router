@@ -1,4 +1,5 @@
 import React from 'react';
+import { appName } from '@/config/branding';
 
 const Home = () => {
   return (
@@ -7,7 +8,7 @@ const Home = () => {
         {/* Hero Section */}
         <header className="text-center mb-12 hidden md:block">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            <span>Smart Document Router</span>
+            <span>{appName}</span>
           </h1>
           <div className="text-xl text-gray-600 space-y-1">
             <p>AI-powered document processing</p>
@@ -20,7 +21,7 @@ const Home = () => {
           <section className="bg-white rounded-lg shadow-lg p-8 mb-12">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">About</h2>
             <p className="text-gray-600 mb-6">
-              The Smart Document Router transforms unstructured documents into structured ERP data automatically. 
+              {appName} transforms unstructured documents into structured ERP data automatically. 
               It processes incoming documents from multiple sources and enriches them with AI for seamless integration.
             </p>
             

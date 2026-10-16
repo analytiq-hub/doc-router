@@ -112,8 +112,13 @@ setup-python:
 
 setup-dev: setup-python setup-typescript
 
+sync-branding:
+	chmod +x scripts/sync-branding.sh
+	./scripts/sync-branding.sh
+
 deploy-dev: setup-python
 	cp .env packages/typescript/frontend/.env.local
+	$(MAKE) sync-branding
 	./start-all.sh
 
 setup-typescript: setup-python
@@ -161,6 +166,7 @@ endef
 
 deploy-local-dev:
 	cp .env packages/typescript/frontend/.env.local
+	$(MAKE) sync-branding
 	./start-all.sh
 
 deploy-compose:

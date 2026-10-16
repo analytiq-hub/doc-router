@@ -185,3 +185,6 @@ tools/*.jsonl
 # Template files (*.template) are kept in git, generated files are ignored
 deploy/kubernetes/base/configmap.yaml
 deploy/kubernetes/base/secrets.yaml
+
+# Copied from APP_FAVICON via scripts/sync-branding.sh
+packages/typescript/frontend/public/branded-favicon.ico

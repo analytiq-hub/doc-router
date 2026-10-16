@@ -53,6 +53,7 @@ from app.routes.flows_credentials import flow_credentials_router
 from app.routes.license import license_router
 from app.licensing_gate import LicenseGateMiddleware
 import analytiq_data as ad
+from analytiq_data.common.branding import app_name
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -142,6 +143,7 @@ async def lifespan(app):
 
 # Create the FastAPI app with the lifespan
 app = FastAPI(
+    title=app_name(),
     root_path=FASTAPI_ROOT_PATH,
     lifespan=lifespan
 )

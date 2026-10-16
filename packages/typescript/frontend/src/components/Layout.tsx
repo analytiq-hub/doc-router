@@ -26,6 +26,7 @@ import { SvgIconProps } from '@mui/material';
 import TourGuide from '@/components/TourGuide';
 import SidebarNavTooltip from '@/components/SidebarNavTooltip';
 import LicenseBanner from '@/components/LicenseBanner';
+import { appName } from '@/config/branding';
 
 // First, let's fix the type errors (exported for use in doc viewer page)
 export interface PDFViewerControlsType {
@@ -241,8 +242,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               href={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
               className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}
             >
-              <span className="block sm:hidden">DocRouter</span>
-              <span className="hidden sm:block">Smart Document Router</span>
+              <span>{appName}</span>
             </Link>
           </div>
 

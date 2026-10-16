@@ -105,6 +105,8 @@ echo "Running database migrations..."
   python3 migrate.py
 ) || exit 1
 
+"${PROJECT_ROOT}/scripts/sync-branding.sh"
+
 # Run all processes (workers run inside uvicorn via FastAPI lifespan)
 run_with_color "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" "$RED" "FASTAPI" "packages/python"
 run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"

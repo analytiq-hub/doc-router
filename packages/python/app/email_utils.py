@@ -12,8 +12,7 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 
 import analytiq_data as ad
-
-SITE_NAME = "Smart Document Router"
+from analytiq_data.common.branding import app_name
 
 async def send_email(
     analytiq_client,
@@ -88,7 +87,7 @@ def get_verification_email_content(verification_url: str, site_url: str, user_na
     return f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>{greeting},</h2>
-        <p>Please verify your email address for your {SITE_NAME} account by clicking the link below:</p>
+        <p>Please verify your email address for your {app_name()} account by clicking the link below:</p>
         <p style="margin: 20px 0;">
             <a href="{verification_url}" 
                style="background-color: #0070f3; color: white; padding: 12px 24px; 
@@ -103,7 +102,7 @@ def get_verification_email_content(verification_url: str, site_url: str, user_na
         <p>This link will expire in 24 hours.</p>
         <hr style="border: none; border-top: 1px solid #eaeaea; margin: 20px 0;">
         <p style="color: #666; font-size: 0.9em;">
-            If you didn't request this verification for {SITE_NAME}, you can safely ignore this email.
+            If you didn't request this verification for {app_name()}, you can safely ignore this email.
         </p>
     </div>
     """
@@ -120,7 +119,7 @@ def get_email_subject(email_type: str) -> str:
     """
     subjects = {
         "verification": "Verify your email address",
-        "invitation": f"You've been invited to join a {SITE_NAME} organization",
+        "invitation": f"You've been invited to join a {app_name()} organization",
         "password_reset": "Reset your password"
     }
     return subjects.get(email_type, "Notification") 
@@ -147,9 +146,9 @@ def get_invitation_email_content(
     
     # Customize message based on whether it's an org invite
     invite_message = (
-        f"You've been invited to join a {SITE_NAME} organization: {organization_name}" 
+        f"You've been invited to join a {app_name()} organization: {organization_name}" 
         if organization_name 
-        else f"You've been invited to join a {SITE_NAME} organization"
+        else f"You've been invited to join a {app_name()} organization"
     )
     
     return f"""
@@ -170,7 +169,7 @@ def get_invitation_email_content(
         <p>This invitation will expire on {expires_str}.</p>
         <hr style="border: none; border-top: 1px solid #eaeaea; margin: 20px 0;">
         <p style="color: #666; font-size: 0.9em;">
-            If you weren't expecting this invitation to {SITE_NAME}, you can safely ignore this email.
+            If you weren't expecting this invitation to {app_name()}, you can safely ignore this email.
         </p>
     </div>
     """ 

@@ -15,16 +15,26 @@ RUN cd packages/typescript/frontend && npm install
 # Build-time arguments
 ARG NODE_ENV=production
 ARG PUBLIC_API_URL=/fastapi
+ARG APP_NAME="Smart Document Router"
+ARG APP_FAVICON=""
 
 # Set build-time environment variables
 ENV NODE_ENV=${NODE_ENV}
 ENV PUBLIC_API_URL=${PUBLIC_API_URL}
+ENV APP_NAME=${APP_NAME}
+ENV APP_FAVICON=${APP_FAVICON}
 
 RUN echo "NODE_ENV=${NODE_ENV}"
 # Now copy the rest of the frontend files
 COPY packages/typescript/frontend/ ./packages/typescript/frontend/
+COPY branding ./branding
+COPY scripts/sync-branding.sh ./scripts/sync-branding.sh
 ENV NODE_OPTIONS=--max-old-space-size=4096
-RUN cd packages/typescript/frontend && npm run build
+RUN chmod +x ./scripts/sync-branding.sh \
+    && printf 'APP_NAME=%s\n' "$APP_NAME" > .env \
+    && { [ -z "$APP_FAVICON" ] || printf 'APP_FAVICON=%s\n' "$APP_FAVICON" >> .env; } \
+    && ./scripts/sync-branding.sh \
+    && cd packages/typescript/frontend && npm run build
 
 EXPOSE 3000
 

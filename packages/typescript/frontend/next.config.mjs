@@ -1,10 +1,24 @@
 /** @type {import('next').NextConfig} */
 //import { withPlugins } from 'next-compose-plugins';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import TerserPlugin from 'terser-webpack-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const DEFAULT_APP_NAME = 'Smart Document Router';
+
+const appNameFromEnv = () =>
+  (process.env.APP_NAME && process.env.APP_NAME.trim()) || DEFAULT_APP_NAME;
+
+const appFaviconFromEnv = () => {
+  const branded = path.join(__dirname, 'public/branded-favicon.ico');
+  if (fs.existsSync(branded)) {
+    return '/branded-favicon.ico';
+  }
+  return '/favicon.ico';
+};
 
 // Hostnames (no scheme/port) that may load the dev server, taken from the top-level .env
 // so remote dev access doesn't need a hardcoded IP.
@@ -23,6 +37,8 @@ const devOriginHosts = (urls) => {
 const nextConfig = {
   env: {
     NEXT_PUBLIC_FASTAPI_FRONTEND_URL: process.env.PUBLIC_API_URL || '/fastapi',
+    NEXT_PUBLIC_APP_NAME: appNameFromEnv(),
+    NEXT_PUBLIC_APP_FAVICON: appFaviconFromEnv(),
   },
   output: 'standalone',
   allowedDevOrigins: devOriginHosts([process.env.NEXTAUTH_URL, process.env.PUBLIC_API_URL]),
