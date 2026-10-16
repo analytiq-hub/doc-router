@@ -9,6 +9,7 @@ services:
         # Build-time environment
         - NODE_ENV=production
         - PUBLIC_API_URL=${PUBLIC_API_URL:-/fastapi}
+        - NODE_MAX_OLD_SPACE_MB=${NODE_MAX_OLD_SPACE_MB:-2560}
         - APP_NAME=${APP_NAME:-Smart Document Router}
         - APP_FAVICON=${APP_FAVICON:-}
     environment:

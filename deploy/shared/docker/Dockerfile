@@ -29,7 +29,8 @@ RUN echo "NODE_ENV=${NODE_ENV}"
 COPY packages/typescript/frontend/ ./packages/typescript/frontend/
 COPY branding ./branding
 COPY scripts/sync-branding.sh ./scripts/sync-branding.sh
-ENV NODE_OPTIONS=--max-old-space-size=4096
+ARG NODE_MAX_OLD_SPACE_MB=4096
+ENV NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE_MB}
 RUN chmod +x ./scripts/sync-branding.sh \
     && printf 'APP_NAME=%s\n' "$APP_NAME" > .env \
     && { [ -z "$APP_FAVICON" ] || printf 'APP_FAVICON=%s\n' "$APP_FAVICON" >> .env; } \
