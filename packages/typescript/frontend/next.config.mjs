@@ -3,7 +3,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import TerserPlugin from 'terser-webpack-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -79,17 +78,6 @@ const nextConfig = {
       ...config.resolve.alias,
       '@docrouter/sdk': path.resolve(__dirname, '../sdk/src/index.ts'),
     };
-
-    if (config.optimization) {
-      config.optimization.minimizer = [
-        new TerserPlugin({
-          terserOptions: {
-            // Your Terser options here
-          },
-          exclude: /pdf.worker.min.mjs/,
-        }),
-      ];
-    }
 
     // Handle ESM modules - exclude PDF.js worker
     config.module.rules.push({

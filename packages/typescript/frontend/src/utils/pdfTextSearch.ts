@@ -1,7 +1,6 @@
 import { Util } from 'pdfjs-dist';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils';
 
 export type PdfSearchHit = {
   page: number;
