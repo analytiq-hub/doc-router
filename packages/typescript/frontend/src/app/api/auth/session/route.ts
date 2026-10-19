@@ -3,10 +3,20 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE_NAME } from '@/constants/sessionCookie';
 import { appSessionFromApiToken } from '@/utils/sessionFromToken';
 
-const cookieOptions = () => ({
+// Browsers drop Secure cookies on plain-HTTP origins (other than localhost), so derive
+// the flag from the scheme the browser actually used (nginx sets X-Forwarded-Proto).
+const isHttpsRequest = (req: Request) => {
+  const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0].trim();
+  if (forwardedProto) {
+    return forwardedProto === 'https';
+  }
+  return new URL(req.url).protocol === 'https:';
+};
+
+const cookieOptions = (req: Request) => ({
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  secure: isHttpsRequest(req),
   path: '/',
 });
 
@@ -37,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, cookieOptions());
+  cookieStore.set(SESSION_COOKIE_NAME, token, cookieOptions(req));
   return NextResponse.json({ session });
 }
 
