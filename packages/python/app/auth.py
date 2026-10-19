@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 import analytiq_data as ad
 
 from app.models import User
+from app.session_jwt import require_app_secret
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -32,7 +33,6 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 logger = logging.getLogger(__name__)
 
 # JWT settings
-NEXTAUTH_SECRET = os.getenv("NEXTAUTH_SECRET")
 ALGORITHM = "HS256"
 
 # Security scheme for JWT authentication (auto_error=False so X-Api-Key can be used instead)
@@ -89,7 +89,7 @@ async def get_session_user(credentials: HTTPAuthorizationCredentials = Security(
 
     try:
         # Only validate as JWT (no API token fallback)
-        payload = jwt.decode(token, NEXTAUTH_SECRET, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, require_app_secret(), algorithms=[ALGORITHM])
         userId: str = payload.get("userId")
         userName: str = payload.get("userName")
         email: str = payload.get("email")

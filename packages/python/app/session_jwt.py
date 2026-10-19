@@ -1,4 +1,4 @@
-"""Browser session JWT (same payload/secret as legacy NextAuth token minting)."""
+"""Browser session JWT (HS256, keyed with APP_SECRET like at-rest encryption)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,16 @@ from typing import Any
 import jwt
 
 ALGORITHM = "HS256"
-NEXTAUTH_SECRET = os.getenv("NEXTAUTH_SECRET")
+
+
+def require_app_secret() -> str:
+    secret = os.getenv("APP_SECRET")
+    if not secret:
+        raise RuntimeError("APP_SECRET is not configured")
+    return secret
 
 
 def mint_session_jwt(*, user_id: str, user_name: str | None, email: str) -> str:
-    if not NEXTAUTH_SECRET:
-        raise RuntimeError("NEXTAUTH_SECRET not configured")
     name = user_name or email
     return jwt.encode(
         {
@@ -21,12 +25,10 @@ def mint_session_jwt(*, user_id: str, user_name: str | None, email: str) -> str:
             "userName": name,
             "email": email,
         },
-        NEXTAUTH_SECRET,
+        require_app_secret(),
         algorithm=ALGORITHM,
     )
 
 
 def decode_session_jwt(token: str) -> dict[str, Any]:
-    if not NEXTAUTH_SECRET:
-        raise RuntimeError("NEXTAUTH_SECRET not configured")
-    return jwt.decode(token, NEXTAUTH_SECRET, algorithms=[ALGORITHM])
+    return jwt.decode(token, require_app_secret(), algorithms=[ALGORITHM])

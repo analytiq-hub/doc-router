@@ -13,7 +13,7 @@ type SessionJwtPayload = {
 };
 
 export async function appSessionFromApiToken(token: string): Promise<AppSession | null> {
-  const secret = process.env.NEXTAUTH_SECRET;
+  const secret = process.env.APP_SECRET;
   if (!secret) {
     return null;
   }

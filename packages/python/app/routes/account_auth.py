@@ -21,7 +21,7 @@ import analytiq_data as ad
 from app.account.oauth_provision import provision_oauth_signin
 from app.account.oauth_models import OAuthAccountData, OAuthSignInRequest
 from app.routes.emails import send_registration_verification_email_for_user
-from app.session_jwt import ALGORITHM, NEXTAUTH_SECRET, mint_session_jwt
+from app.session_jwt import ALGORITHM, mint_session_jwt, require_app_secret
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +93,7 @@ def _safe_return_path(return_to: str | None) -> str:
 
 
 def _oauth_state(*, provider: str, return_to: str) -> str:
-    if not NEXTAUTH_SECRET:
-        raise HTTPException(status_code=500, detail="Server configuration error")
+    secret = require_app_secret()
     now = datetime.now(UTC)
     exp = now + OAUTH_STATE_TTL
     payload = {
@@ -104,14 +103,13 @@ def _oauth_state(*, provider: str, return_to: str) -> str:
         "exp": int(exp.timestamp()),
         "iat": int(now.timestamp()),
     }
-    return jwt.encode(payload, NEXTAUTH_SECRET, algorithm=ALGORITHM)
+    return jwt.encode(payload, secret, algorithm=ALGORITHM)
 
 
 def _decode_oauth_state(state: str, *, provider: str) -> str:
-    if not NEXTAUTH_SECRET:
-        raise HTTPException(status_code=500, detail="Server configuration error")
+    secret = require_app_secret()
     try:
-        payload = jwt.decode(state, NEXTAUTH_SECRET, algorithms=[ALGORITHM])
+        payload = jwt.decode(state, secret, algorithms=[ALGORITHM])
     except jwt.PyJWTError:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
     if payload.get("provider") != provider:

@@ -18,7 +18,7 @@
 #   DOC_ROUTER_GITHUB_REPO  owner/repo (default: analytiq-hub/doc-router)
 #   DOC_ROUTER_STATE_DIR    State dir with compose/nginx/.env (default: ~/.cache/doc-router-docker/run)
 #   IMAGE_TAG               GHCR tag for frontend/backend (default: latest)
-#   NEXTAUTH_SECRET / NEXTAUTH_URL / ADMIN_EMAIL / ADMIN_PASSWORD — passed into compose .env when set
+#   APP_SECRET / NEXTAUTH_URL / ADMIN_EMAIL / ADMIN_PASSWORD — passed into compose .env when set
 #
 
 set -euo pipefail
@@ -67,7 +67,7 @@ services:
       - ENV=${ENV:-dev}
       - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - APP_SECRET=${APP_SECRET:-default_secret_for_development}
     command: node frontend/server.js
     restart: unless-stopped
     networks:
@@ -103,7 +103,7 @@ services:
       - ENV=${ENV:-dev}
       - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - APP_SECRET=${APP_SECRET:-default_secret_for_development}
       - AUTH_GITHUB_ID=${AUTH_GITHUB_ID:-}
       - AUTH_GITHUB_SECRET=${AUTH_GITHUB_SECRET:-}
       - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID:-}
@@ -146,7 +146,7 @@ services:
       - ENV=${ENV:-dev}
       - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - APP_SECRET=${APP_SECRET:-default_secret_for_development}
       - FASTAPI_SECRET=${FASTAPI_SECRET:-}
       - FASTAPI_ROOT_PATH=${FASTAPI_ROOT_PATH:-/fastapi}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
@@ -262,11 +262,11 @@ ensure_env_file() {
 IMAGE_TAG=${IMAGE_TAG:-latest}
 ENV=${ENV:-dev}
 NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-$secret}
+APP_SECRET=${APP_SECRET:-$secret}
 ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
 EOF
-  echo "Wrote ${env_file} (set NEXTAUTH_SECRET and credentials for anything beyond local dev)." >&2
+  echo "Wrote ${env_file} (set APP_SECRET and credentials for anything beyond local dev)." >&2
 }
 
 ghcr_hint() {

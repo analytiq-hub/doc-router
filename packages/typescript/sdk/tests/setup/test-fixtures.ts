@@ -82,7 +82,7 @@ export class TestFixtures {
 
   /** Mint the same session JWT shape as FastAPI ``mint_session_jwt`` (integration tests). */
   static createSessionJwt(userId: string, userName: string, email: string): string {
-    const secret = process.env.NEXTAUTH_SECRET || 'test_secret_key_for_tests_32bytes_min!!';
+    const secret = process.env.APP_SECRET || 'test_secret_key_for_tests_32bytes_min!!';
     return jwt.sign({ userId, userName, email }, secret, { algorithm: 'HS256' });
   }
 

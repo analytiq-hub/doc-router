@@ -39,11 +39,11 @@ def _build_cipher(key: bytes, iv: bytes) -> Cipher:
     return Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
 
 
-def encrypt_secret(plaintext: str, key_env_var: str = "NEXTAUTH_SECRET") -> str:
+def encrypt_secret(plaintext: str, key_env_var: str = "APP_SECRET") -> str:
     """Encrypt ``plaintext`` and return ``v2:<urlsafe_b64(iv || ciphertext)>``.
 
     ``key_env_var`` is the **name of the environment variable** that holds the
-    AES key material (default ``NEXTAUTH_SECRET``) — not the name/label of the
+    AES key material (default ``APP_SECRET``) — not the name/label of the
     secret being encrypted.
     """
     try:
@@ -59,7 +59,7 @@ def encrypt_secret(plaintext: str, key_env_var: str = "NEXTAUTH_SECRET") -> str:
         raise ValueError(f"Encryption failed: {str(e)}")
 
 
-def fingerprint_secret(plaintext: str, key_env_var: str = "NEXTAUTH_SECRET") -> str:
+def fingerprint_secret(plaintext: str, key_env_var: str = "APP_SECRET") -> str:
     """HMAC-SHA256(plaintext) hex digest, keyed with the env-var key material.
 
     Deterministic and indexable. Use as the equality lookup column for stored
@@ -94,7 +94,7 @@ def _decrypt_legacy(payload: str, key_env_var: str) -> str:
     return decrypted_bytes.decode('utf-8', errors='strict')
 
 
-def decrypt_secret(encrypted_secret: str | None, key_env_var: str = "NEXTAUTH_SECRET") -> str | None:
+def decrypt_secret(encrypted_secret: str | None, key_env_var: str = "APP_SECRET") -> str | None:
     """Decrypt a value written by :func:`encrypt_secret` (or legacy v1).
 
     ``key_env_var`` is the **name of the environment variable** that holds the

@@ -41,7 +41,7 @@ def setup_env():
     if "MONGODB_URI" not in os.environ:
         os.environ["MONGODB_URI"] = "mongodb://localhost:27017"
     # >= 32 bytes so PyJWT HS256 does not warn about short HMAC keys in tests.
-    os.environ["NEXTAUTH_SECRET"] = "test_secret_key_for_tests_32bytes_min!!"
+    os.environ["APP_SECRET"] = "test_secret_key_for_tests_32bytes_min!!"
 
 # Set test environment variables
 setup_env()

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-os.environ.setdefault("NEXTAUTH_SECRET", "test-secret-for-credential-runtime-tests")
+os.environ.setdefault("APP_SECRET", "test-secret-for-credential-runtime-tests")
 
 import analytiq_data as ad
 from analytiq_data.flows.credential_runtime import (

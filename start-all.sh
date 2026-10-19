@@ -5,6 +5,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="${SCRIPT_DIR}"
 VENV_PATH="${PROJECT_ROOT}/.venv"
 
+ENV_FILE="${PROJECT_ROOT}/.env"
+if grep -qE '^NEXTAUTH_SECRET=' "$ENV_FILE" 2>/dev/null; then
+    echo "ERROR: Rename NEXTAUTH_SECRET to APP_SECRET in .env" >&2
+    exit 1
+fi
+if ! grep -qE '^APP_SECRET=' "$ENV_FILE" 2>/dev/null; then
+    echo "ERROR: APP_SECRET is required in .env" >&2
+    exit 1
+fi
+
 # Define colors for different processes
 RED='\033[0;31m'
 GREEN='\033[0;32m'

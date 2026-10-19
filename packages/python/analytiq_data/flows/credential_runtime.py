@@ -34,7 +34,11 @@ _SCOPE_FIELD_PLACEHOLDER = re.compile(
     r"\{\{\s*(?:\$self\.)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}"
 )
 
-_ENV_SECRET = os.getenv("NEXTAUTH_SECRET")
+def _app_secret() -> str:
+    secret = os.getenv("APP_SECRET")
+    if not secret:
+        raise RuntimeError("APP_SECRET is not configured")
+    return secret
 _ALGORITHM = "HS256"
 _PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "http://127.0.0.1:8000")
 _NEXTAUTH_URL = os.getenv("NEXTAUTH_URL", "http://localhost:3000")
@@ -142,8 +146,7 @@ def encode_flow_oauth_state(
 ) -> str:
     """Signed JWT state (tests / legacy). Browser OAuth uses opaque server-side state instead."""
 
-    if not _ENV_SECRET:
-        raise RuntimeError("NEXTAUTH_SECRET is not configured")
+    secret = _app_secret()
     now = int(time.time())
     payload: dict[str, Any] = {
         "sub": "flow_credential_oauth",
@@ -153,13 +156,11 @@ def encode_flow_oauth_state(
         "iat": now,
         "exp": now + ttl_seconds,
     }
-    return jwt.encode(payload, _ENV_SECRET, algorithm=_ALGORITHM)
+    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
 
 
 def decode_flow_oauth_state(token: str) -> dict[str, Any]:
-    if not _ENV_SECRET:
-        raise RuntimeError("NEXTAUTH_SECRET is not configured")
-    return jwt.decode(token, _ENV_SECRET, algorithms=[_ALGORITHM])
+    return jwt.decode(token, _app_secret(), algorithms=[_ALGORITHM])
 
 
 FLOW_OAUTH_STATE_COLLECTION = "flow_oauth_states"

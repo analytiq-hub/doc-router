@@ -163,7 +163,7 @@ def test_google_start_redirects_when_configured(client, monkeypatch):
     monkeypatch.setenv("AUTH_GOOGLE_ID", "google-client-id")
     monkeypatch.setenv("AUTH_GOOGLE_SECRET", "google-secret")
     monkeypatch.setenv("NEXTAUTH_URL", "http://localhost:3000")
-    monkeypatch.setenv("NEXTAUTH_SECRET", os.environ.get("NEXTAUTH_SECRET", "test_secret_key_for_tests_32bytes_min!!"))
+    monkeypatch.setenv("APP_SECRET", os.environ.get("APP_SECRET", "test_secret_key_for_tests_32bytes_min!!"))
 
     response = client.get("/v0/account/auth/google/start", follow_redirects=False)
     assert response.status_code == 302

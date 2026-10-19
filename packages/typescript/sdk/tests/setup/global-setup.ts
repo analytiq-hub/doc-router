@@ -10,7 +10,7 @@ export default async function globalSetup() {
   // NOTE: When ENV starts with 'pytest', the .env file will NOT be loaded (see analytiq_data/common/setup.py)
   // All required environment variables must be set here
   process.env.ENV = 'pytest_ts';
-  process.env.NEXTAUTH_SECRET = 'test_secret_key_for_tests';
+  process.env.APP_SECRET = 'test_secret_key_for_tests_32bytes_min!!';
   process.env.NEXTAUTH_URL = 'http://127.0.0.1:3000';
   process.env.MONGODB_URI = 'mongodb://localhost:27017/?directConnection=true';
   process.env.FASTAPI_ROOT_PATH = '/';
