@@ -64,46 +64,41 @@ class AcceptInvitationRequest(BaseModel):
     name: Optional[str] = None
     password: Optional[str] = None
 
-# Email verification endpoints
-@emails_router.post("/v0/account/email/verification/register/{user_id}", tags=["account/email"])
-async def send_registration_verification_email(user_id: str):
-    """Send verification email for newly registered users (no auth required)"""
+async def send_registration_verification_email_for_user(user_id: str) -> None:
+    """Send verification email for newly registered users (no auth required)."""
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
 
     user = await db.users.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-        
+
     if user.get("email_verified"):
         raise HTTPException(status_code=400, detail="Email already verified")
 
-    # Generate verification token
     token = f"ver_{secrets.token_urlsafe(32)}"
     expires = (datetime.now(UTC) + timedelta(hours=24)).replace(tzinfo=UTC)
-    
-    # Store verification token
+
     await db.email_verifications.update_one(
         {"user_id": user_id},
         {
             "$set": {
                 "token": token,
                 "expires": expires,
-                "email": user["email"]
+                "email": user["email"],
             }
         },
-        upsert=True
+        upsert=True,
     )
-        
+
     verification_url = f"{NEXTAUTH_URL}/auth/verify-email?token={token}"
-    
+
     html_content = email_utils.get_verification_email_content(
         verification_url=verification_url,
         site_url=NEXTAUTH_URL,
-        user_name=user.get("name")
+        user_name=user.get("name"),
     )
-        
-    # Use the send_email utility function instead of direct SES client call
+
     await email_utils.send_email(
         analytiq_client,
         to_email=user["email"],
@@ -111,7 +106,12 @@ async def send_registration_verification_email(user_id: str):
         subject=email_utils.get_email_subject("verification"),
         content=html_content,
     )
-    
+
+
+# Email verification endpoints
+@emails_router.post("/v0/account/email/verification/register/{user_id}", tags=["account/email"])
+async def send_registration_verification_email(user_id: str):
+    await send_registration_verification_email_for_user(user_id)
     return {"message": "Registration email sent"}
 
 @emails_router.post("/v0/account/email/verification/send/{user_id}", tags=["account/email"])

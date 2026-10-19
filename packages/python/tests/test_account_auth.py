@@ -1,5 +1,6 @@
 import os
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 
 import bcrypt
 import pytest
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 
 import analytiq_data as ad
 from app.main import app
-from app.session_jwt import ALGORITHM, decode_session_jwt
+from app.session_jwt import decode_session_jwt
 
 
 @pytest.fixture
@@ -65,6 +66,89 @@ async def test_login_rejects_unverified_email(client, worker_db_name):
     )
     assert response.status_code == 401
     assert "verify" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_register_creates_user_and_sends_verification(client, worker_db_name):
+    db = ad.common.get_async_db()
+    with patch(
+        "app.routes.account_auth.send_registration_verification_email_for_user",
+        new_callable=AsyncMock,
+    ) as send_verification:
+        response = client.post(
+            "/v0/account/auth/register",
+            json={
+                "email": "new-user@example.com",
+                "password": "register-password",
+                "name": "New User",
+            },
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True
+    assert "verify" in body["message"].lower()
+    send_verification.assert_awaited_once()
+
+    user = await db.users.find_one({"email": "new-user@example.com"})
+    assert user is not None
+    assert user["email_verified"] is False
+    assert user["name"] == "New User"
+    assert bcrypt.checkpw(
+        b"register-password",
+        user["password"].encode("utf-8"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_rejects_verified_duplicate_email(client, worker_db_name):
+    db = ad.common.get_async_db()
+    await db.users.insert_one({
+        "email": "taken@example.com",
+        "password": _hash_password("x"),
+        "name": "Taken",
+        "email_verified": True,
+        "created_at": datetime.now(UTC),
+    })
+
+    response = client.post(
+        "/v0/account/auth/register",
+        json={"email": "taken@example.com", "password": "pw", "name": "Other"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "User already exists"
+
+
+@pytest.mark.asyncio
+async def test_register_resends_verification_for_unverified_email(client, worker_db_name):
+    db = ad.common.get_async_db()
+    result = await db.users.insert_one({
+        "email": "pending@example.com",
+        "password": _hash_password("old-password"),
+        "name": "Old Name",
+        "email_verified": False,
+        "created_at": datetime.now(UTC),
+    })
+    user_id = str(result.inserted_id)
+
+    with patch(
+        "app.routes.account_auth.send_registration_verification_email_for_user",
+        new_callable=AsyncMock,
+    ) as send_verification:
+        response = client.post(
+            "/v0/account/auth/register",
+            json={
+                "email": "pending@example.com",
+                "password": "new-password",
+                "name": "New Name",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    send_verification.assert_awaited_once_with(user_id)
+
+    user = await db.users.find_one({"_id": result.inserted_id})
+    assert user["name"] == "New Name"
+    assert bcrypt.checkpw(b"new-password", user["password"].encode("utf-8"))
 
 
 def test_login_invalid_password(client):

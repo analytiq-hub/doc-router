@@ -12,6 +12,28 @@ export type LoginResponse = {
   };
 };
 
+export type RegisterResponse = {
+  success: boolean;
+  message: string;
+};
+
+export async function registerWithPassword(
+  email: string,
+  password: string,
+  name: string,
+): Promise<RegisterResponse> {
+  try {
+    const response = await apiClient.post<RegisterResponse>('/v0/account/auth/register', {
+      email,
+      password,
+      name,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(getApiErrorMsg(error));
+  }
+}
+
 export async function loginWithPassword(email: string, password: string): Promise<LoginResponse> {
   try {
     const response = await apiClient.post<LoginResponse>('/v0/account/auth/login', { email, password });

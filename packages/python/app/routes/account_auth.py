@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urlparse
 import bcrypt
 import httpx
 import jwt
+from bcrypt import gensalt, hashpw
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -19,6 +20,7 @@ from pydantic import BaseModel, Field
 import analytiq_data as ad
 from app.account.oauth_provision import provision_oauth_signin
 from app.account.oauth_models import OAuthAccountData, OAuthSignInRequest
+from app.routes.emails import send_registration_verification_email_for_user
 from app.session_jwt import ALGORITHM, NEXTAUTH_SECRET, mint_session_jwt
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,17 @@ class SessionUser(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     user: SessionUser
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+
+
+class RegisterResponse(BaseModel):
+    success: bool = True
+    message: str
 
 
 def _oauth_api_base_url() -> str:
@@ -122,6 +135,46 @@ async def _session_user_for_id(user_id: str) -> SessionUser:
 def _complete_redirect(token: str, return_to: str) -> RedirectResponse:
     query = urlencode({"token": token, "return_to": return_to})
     return RedirectResponse(url=f"{_nextauth_url()}/auth/complete?{query}", status_code=302)
+
+
+_REGISTER_SUCCESS_MESSAGE = (
+    "Registration successful. Please check your email to verify your account."
+)
+
+
+@account_auth_router.post("/v0/account/auth/register", response_model=RegisterResponse, tags=["account/auth"])
+async def register_with_password(body: RegisterRequest):
+    db = ad.common.get_async_db()
+    hashed_password = hashpw(body.password.encode("utf-8"), gensalt(12)).decode("utf-8")
+
+    existing_user = await db.users.find_one({"email": body.email})
+    if existing_user:
+        if existing_user.get("email_verified"):
+            raise HTTPException(status_code=400, detail="User already exists")
+        user_id = str(existing_user["_id"])
+        await db.users.update_one(
+            {"_id": existing_user["_id"]},
+            {"$set": {"name": body.name, "password": hashed_password}},
+        )
+    else:
+        result = await db.users.insert_one({
+            "email": body.email,
+            "password": hashed_password,
+            "name": body.name,
+            "email_verified": False,
+            "created_at": datetime.now(UTC),
+        })
+        user_id = str(result.inserted_id)
+
+    try:
+        await send_registration_verification_email_for_user(user_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"register_with_password(): failed to send verification email for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed")
+
+    return RegisterResponse(message=_REGISTER_SUCCESS_MESSAGE)
 
 
 @account_auth_router.post("/v0/account/auth/login", response_model=LoginResponse, tags=["account/auth"])

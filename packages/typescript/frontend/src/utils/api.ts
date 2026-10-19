@@ -68,19 +68,31 @@ const api = axios.create({
 // Export for custom (non-SDK) backend endpoints.
 export const apiClient = api;
 
+function isPublicAccountAuthRequest(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  return (
+    url.includes('/v0/account/auth/login')
+    || url.includes('/v0/account/auth/register')
+  );
+}
+
 // Add authorization header to all requests
 api.interceptors.request.use(async (config) => {
+  const publicAuth = isPublicAccountAuthRequest(config.url);
+
   // First try to use global session (pre-fetched from context)
   let session = getGlobalSession();
   
   // Fallback to cached session if global session is not available
-  if (!session) {
+  if (!session && !publicAuth) {
     session = await getCachedSession();
   }
   
   if (session?.apiAccessToken) {
     config.headers.Authorization = `Bearer ${session.apiAccessToken}`;
-  } else {
+  } else if (!publicAuth) {
     console.warn('No API token found in session');
   }
   return config;

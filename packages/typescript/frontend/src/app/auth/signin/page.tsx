@@ -3,7 +3,7 @@
 import React from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginWithPassword, oauthStartUrl, persistSessionToken } from '@/utils/backendAuth';
+import { loginWithPassword, oauthStartUrl, persistSessionToken, registerWithPassword } from '@/utils/backendAuth';
 import { useAppSession } from '@/contexts/AppSessionContext';
 
 export default function SigninPage() {
@@ -50,21 +50,10 @@ export default function SigninPage() {
 
   const handleRegister = async (email: string, password: string, name: string) => {
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        setError(null);
-        setSuccessMessage(data.message || 'Registration successful. Please check your email to verify your account.');
-        setIsLoginMode(true);
-      } else {
-        throw new Error(data.error || 'Registration failed');
-      }
+      setError(null);
+      const data = await registerWithPassword(email, password, name);
+      setSuccessMessage(data.message || 'Registration successful. Please check your email to verify your account.');
+      setIsLoginMode(true);
     } catch (registerError) {
       console.error('Registration error:', registerError);
       setError(registerError instanceof Error ? registerError.message : 'Registration failed');
