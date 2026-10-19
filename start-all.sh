@@ -107,6 +107,11 @@ echo "Running database migrations..."
 
 "${PROJECT_ROOT}/scripts/sync-branding.sh"
 
+FRONTEND_DIR="${PROJECT_ROOT}/packages/typescript/frontend"
+# Stale .next client chunks can still call removed next-auth APIs after auth migrations.
+echo "Clearing Next.js build cache..."
+rm -rf "${FRONTEND_DIR}/.next"
+
 # Run all processes (workers run inside uvicorn via FastAPI lifespan)
 run_with_color "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" "$RED" "FASTAPI" "packages/python"
 run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"

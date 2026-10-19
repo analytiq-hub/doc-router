@@ -39,6 +39,7 @@ from app.routes.azure import azure_router
 from app.routes.system_settings import system_settings_router
 from app.routes.token import token_router
 from app.routes.oauth import oauth_router
+from app.routes.account_auth import account_auth_router
 from app.routes.orgs import orgs_router
 from app.routes.org_permissions import org_permissions_router
 from app.routes.users import users_router
@@ -193,6 +194,7 @@ app.include_router(azure_router)
 app.include_router(system_settings_router)
 app.include_router(license_router)
 app.include_router(oauth_router)
+app.include_router(account_auth_router)
 app.include_router(orgs_router)
 app.include_router(org_permissions_router)
 app.include_router(users_router)

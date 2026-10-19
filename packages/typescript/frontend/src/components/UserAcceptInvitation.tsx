@@ -5,8 +5,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DocRouterAccountApi } from '@/utils/api';
 import { toast } from 'react-toastify';
-import { signIn } from 'next-auth/react';
 import { useAppSession } from '@/contexts/AppSessionContext';
+import { loginWithPassword, persistSessionToken } from '@/utils/backendAuth';
 
 interface Invitation {
   email: string;
@@ -44,7 +44,7 @@ const handleExistingUserAccept = async (
 
 const UserAcceptInvitation: React.FC<UserAcceptInvitationProps> = ({ token }) => {
   const router = useRouter();
-  const { session } = useAppSession();
+  const { session, refreshSession } = useAppSession();
   
   const [formData, setFormData] = useState({
     name: '',
@@ -142,17 +142,10 @@ const UserAcceptInvitation: React.FC<UserAcceptInvitationProps> = ({ token }) =>
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Then attempt to sign in
-      const result = await signIn('credentials', {
-        email: invitation.email,
-        password: formData.password,
-        redirect: false,
-        callbackUrl: '/dashboard'
-      });
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
+      const loginResult = await loginWithPassword(invitation.email, formData.password);
+      await persistSessionToken(loginResult.token);
+      await refreshSession();
+      router.refresh();
       router.push('/dashboard');
     } catch (error) {
       console.error('Error accepting invitation:', error);

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/auth';
+import { getAppServerSession } from '@/utils/session';
 import { getDatabase } from '@/utils/mongodb';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getAppServerSession();
     
     // Check if user is authenticated
     if (!session) {

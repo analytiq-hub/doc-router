@@ -16,6 +16,8 @@ from bson import ObjectId
 import jwt
 from pydantic import BaseModel
 
+from app.session_jwt import mint_session_jwt
+
 # Local imports
 import analytiq_data as ad
 from app.auth import (
@@ -198,15 +200,10 @@ async def create_auth_token(request: Request):
 
     logger.debug(f"create_auth_token(): user_data: {user_data}")
 
-    # Signature is valid, create token
-    token = jwt.encode(
-        {
-            "userId": user_data["id"],
-            "userName": user_data["name"],
-            "email": user_data["email"]
-        },
-        NEXTAUTH_SECRET,
-        algorithm=ALGORITHM
+    token = mint_session_jwt(
+        user_id=user_data["id"],
+        user_name=user_data.get("name"),
+        email=user_data["email"],
     )
 
     logger.debug(f"create_auth_token(): {token}")

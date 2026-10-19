@@ -1,6 +1,5 @@
 import "@/styles/globals.css";
 import React from 'react';
-import SessionProvider from "@/components/SessionProvider"
 import Layout from '@/components/Layout';
 import ThemeRegistry from '@/components/ThemeRegistry';
 import { OrganizationProvider } from '@/contexts/OrganizationContext';
@@ -35,15 +34,13 @@ export default async function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <ThemeRegistry>
-          <SessionProvider session={appSession}>
-            <AppSessionProvider>
+            <AppSessionProvider initialSession={appSession}>
               <OrganizationProvider>
                 <FormioProvider>
                   <Layout>{children}</Layout>
                 </FormioProvider>
               </OrganizationProvider>
             </AppSessionProvider>
-          </SessionProvider>
         </ThemeRegistry>
         <ToastContainer position="top-right" />
         <Toaster position="top-right" />

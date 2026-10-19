@@ -81,8 +81,10 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const appSession = session as AppSession | null;
     if (!appSession?.user?.id) {
-      console.warn('No user ID found in session');
+      setOrganizations([]);
+      setCurrentOrganization(null);
       setIsLoading(false);
+      fetchInFlightRef.current = false;
       return;
     }
 

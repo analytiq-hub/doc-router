@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/auth';
+import { getAppServerSession } from '@/utils/session';
 import clientPromise from '@/utils/mongodb';
 import { ObjectId } from 'mongodb';
 
@@ -9,8 +8,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    const isAdmin = (session?.user as { isSysadmin?: boolean } | undefined)?.isSysadmin === true;
+    const session = await getAppServerSession();
+    const isAdmin = session?.user?.isSysadmin === true;
     
     // Check if user is authenticated and is an admin
     if (!session || !isAdmin) {

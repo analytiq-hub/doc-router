@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Settings as SettingsIcon, ExitToApp as SignoutIcon, Help as HelpIcon, Info as InfoIcon, Feedback as FeedbackIcon, Payment as PaymentIcon } from '@mui/icons-material';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -29,9 +29,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
   const { currentOrganization } = useOrganization();
 
   const handleLogout = () => {
-    signOut({
-      callbackUrl: '/auth/signin'
-    });
+    void signOut();
     setIsOpen(false);
   };
 

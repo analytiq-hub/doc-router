@@ -1,6 +1,6 @@
 "use client"
 
-import { signOut } from "next-auth/react";
+import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { Typography, Button, Box } from '@mui/material';
 import { ExitToApp as LogoutIcon } from '@mui/icons-material';
@@ -16,9 +16,7 @@ function AuthButton() {
   };
 
   const handleLogout = () => {
-    signOut({
-      callbackUrl: '/auth/signin'
-    });
+    void signOut();
   };
 
   if (session) {

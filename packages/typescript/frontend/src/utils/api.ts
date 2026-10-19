@@ -1,5 +1,4 @@
 import axios, { isAxiosError } from 'axios';
-import { getSession } from 'next-auth/react';
 import { AppSession } from '@/types/AppSession';
 import { DocRouterOrg, DocRouterAccount } from '@docrouter/sdk';
 import type { ListOrganizationsResponse } from '@docrouter/sdk';
@@ -31,9 +30,20 @@ export async function getCachedSession(): Promise<AppSession | null> {
     return sessionCache.session;
   }
   
-  const session = await getSession() as AppSession | null;
-  sessionCache = { session, timestamp: now };
-  return session;
+  try {
+    const response = await fetch('/api/auth/session');
+    if (!response.ok) {
+      sessionCache = { session: null, timestamp: now };
+      return null;
+    }
+    const data = await response.json();
+    const session = (data.session as AppSession | null) ?? null;
+    sessionCache = { session, timestamp: now };
+    return session;
+  } catch {
+    sessionCache = { session: null, timestamp: now };
+    return null;
+  }
 }
 
 // Function to invalidate session cache

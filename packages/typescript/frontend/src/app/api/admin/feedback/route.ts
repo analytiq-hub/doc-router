@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/auth';
+import { getAppServerSession } from '@/utils/session';
 import clientPromise from '@/utils/mongodb';
 
 // Add this export to mark the route as dynamic
@@ -9,12 +8,12 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
     
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getAppServerSession();
     
     // Debug the session object to see what's available
     console.log("[NEXTJS] Complete Session:", JSON.stringify(session, null, 2));
     
-    const isAdmin = (session?.user as { isSysadmin?: boolean } | undefined)?.isSysadmin === true;
+    const isAdmin = session?.user?.isSysadmin === true;
 
     if (!session || !isAdmin) {
       console.log("[NEXTJS] Auth check failed - Session exists:", !!session, "Sysadmin:", isAdmin);

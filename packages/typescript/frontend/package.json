@@ -13,7 +13,6 @@
     "postinstall": "node scripts/patch-formio-css.js"
   },
   "dependencies": {
-    "@auth/mongodb-adapter": "^3.5.3",
     "@dagrejs/dagre": "^3.0.0",
     "@docrouter/sdk": "file:../sdk",
     "@emotion/react": "^11.13.3",
@@ -43,7 +42,6 @@
     "monaco-editor": "^0.55",
     "mongodb": "^6.9.0",
     "next": "^16.1.4",
-    "next-auth": "^4.24.13",
     "react": "^19",
     "react-data-grid": "^7.0.0-beta.47",
     "react-diff-viewer-continued": "^4.4.0",

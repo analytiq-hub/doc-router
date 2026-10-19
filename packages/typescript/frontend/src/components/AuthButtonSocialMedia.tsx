@@ -1,6 +1,6 @@
 "use client"
 
-import { signOut } from "next-auth/react";
+import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { Typography, Box, Button } from '@mui/material';
 import { ExitToApp as LogoutIcon, Login as LoginIcon } from '@mui/icons-material';
@@ -27,7 +27,7 @@ function AuthButtonSocialMediaOnly() {
         <Typography variant="body1" sx={{ mr: 2 }}>
           {session?.user?.name}
         </Typography>
-        <Button sx={buttonStyle} startIcon={<LogoutIcon />} onClick={() => signOut()}>Sign out</Button>
+        <Button sx={buttonStyle} startIcon={<LogoutIcon />} onClick={() => void signOut()}>Sign out</Button>
       </Box>
     );
   }

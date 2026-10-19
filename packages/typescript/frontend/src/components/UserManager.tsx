@@ -10,7 +10,7 @@ import { User, UserCreate } from '@docrouter/sdk';
 import { isAxiosError } from 'axios';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/utils/useAppSession';
 import UserInviteModal from './UserInviteModal';
 import UserAddModal from './UserAddModal';
@@ -117,7 +117,7 @@ const UserManager: React.FC = () => {
       await docRouterAccountApi.deleteUser(userToDelete.id);
       
       if (session?.session?.user?.id === userToDelete.id) {
-        signOut({ callbackUrl: '/auth/signin' });
+        void signOut();
         return;
       }
       

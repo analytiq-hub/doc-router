@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DocRouterAccountApi } from '@/utils/api';
 import { User, UserUpdate } from '@docrouter/sdk';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isSysAdmin } from '@/utils/roles';
 import { toast } from 'react-toastify';
@@ -229,7 +229,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
       // Check if deleting current user
       if (session?.user?.id === userId) {
         // Sign out if deleting self
-        signOut({ callbackUrl: '/auth/signin' });
+        void signOut();
       } else {
         // Otherwise just redirect to user list
         router.push('/settings/account/users');

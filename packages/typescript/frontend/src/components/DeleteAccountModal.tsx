@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/utils/signOut';
 import { toastActionError } from '@/utils/toastActionError';
 
 interface DeleteAccountModalProps {
@@ -23,7 +23,7 @@ export default function DeleteAccountModal({ open, onClose }: DeleteAccountModal
                 throw new Error(data.error || 'Failed to delete account');
             }
 
-            await signOut({ callbackUrl: '/auth/signin' });
+            await signOut();
         } catch (err) {
             console.error('Failed to delete account:', err);
             toastActionError('Failed to delete account', err);

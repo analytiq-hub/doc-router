@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/auth';
+import { getAppServerSession } from '@/utils/session';
 import { redirect } from 'next/navigation';
 import FeedbackAdmin from '@/components/FeedbackAdmin';
 
@@ -10,10 +9,10 @@ export const metadata = {
 
 export default async function AdminFeedbackPage() {
   // Get session server-side
-  const session = await getServerSession(authOptions);
+  const session = await getAppServerSession();
   
   // Check if user is admin
-  const isAdmin = (session?.user as { isSysadmin?: boolean } | undefined)?.isSysadmin === true;
+  const isAdmin = session?.user?.isSysadmin === true;
   
   // Add more visible logging
   console.log('==== ADMIN FEEDBACK PAGE ====');

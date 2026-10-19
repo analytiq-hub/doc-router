@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/auth';
+import { getAppServerSession } from '@/utils/session';
 import React from 'react';
 
 export default async function AccountSettingsLayout({
@@ -8,7 +7,7 @@ export default async function AccountSettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await getAppServerSession();
 
   // Redirect to home if not authenticated
   if (!session) {
@@ -16,7 +15,7 @@ export default async function AccountSettingsLayout({
   }
 
   // Redirect to settings if not admin
-  if (!(session.user as { isSysadmin?: boolean }).isSysadmin) {
+  if (!session.user.isSysadmin) {
     redirect('/settings');
   }
 
