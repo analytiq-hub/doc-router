@@ -68,10 +68,6 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
-      - AUTH_GITHUB_ID=${AUTH_GITHUB_ID:-}
-      - AUTH_GITHUB_SECRET=${AUTH_GITHUB_SECRET:-}
-      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID:-}
-      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET:-}
     command: node frontend/server.js
     restart: unless-stopped
     networks:
@@ -108,6 +104,10 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - AUTH_GITHUB_ID=${AUTH_GITHUB_ID:-}
+      - AUTH_GITHUB_SECRET=${AUTH_GITHUB_SECRET:-}
+      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID:-}
+      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET:-}
       - FASTAPI_SECRET=${FASTAPI_SECRET:-}
       - FASTAPI_ROOT_PATH=${FASTAPI_ROOT_PATH:-/fastapi}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
