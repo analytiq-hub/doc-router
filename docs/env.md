@@ -67,7 +67,7 @@ The DocRouter project uses a single `.env` file at the project root that is shar
   - Session JWT mint/verify (`packages/python/app/session_jwt.py`, `packages/python/app/auth.py`)
   - Next.js cookie session verify (`packages/typescript/frontend/src/utils/sessionFromToken.ts`)
   - Token encryption/decryption (`packages/python/analytiq_data/crypto/encryption.py`)
-- **Local dev**: `start-all.sh` exits with an error if `.env` still defines `NEXTAUTH_SECRET` or omits `APP_SECRET`.
+- **Local dev / compose deploy**: `scripts/check-app-secret-env.sh` runs from `start-all.sh` and `make deploy-compose` if `.env` still defines `NEXTAUTH_SECRET` or omits `APP_SECRET`.
 
 ### `AUTH_GITHUB_ID`
 - **Purpose**: GitHub OAuth application client ID

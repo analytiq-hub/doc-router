@@ -170,6 +170,7 @@ deploy-local-dev:
 	./start-all.sh
 
 deploy-compose:
+	@./scripts/check-app-secret-env.sh .env
 	$(call merge_env,.env,.env.compose)
 	cd deploy/compose && \
 	docker compose -f docker-compose.yml --env-file .env build && \
@@ -177,6 +178,7 @@ deploy-compose:
 	docker compose -f docker-compose.yml --env-file .env up -d
 
 deploy-compose-embedded:
+	@./scripts/check-app-secret-env.sh .env
 	$(call merge_env,.env,.env.compose.embedded)
 	cd deploy/compose && \
 	docker compose -f docker-compose.embedded.yml --env-file .env build && \
