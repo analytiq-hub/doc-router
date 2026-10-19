@@ -11,8 +11,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
-from app.auth import is_organization_admin
-
 from app.case_http import case_error_to_http
 from app.licensing_deps import require_feature
 from app.org_auth import require_org_config_read, require_org_config_write, require_org_documents_read, require_org_documents_write, require_org_runs_execute
@@ -264,7 +262,7 @@ async def delete_case_route(
     cascade: bool = Query(
         False,
         description=(
-            "Delete every document in the case (org admins only). Always returns 202 when "
+            "Delete every document in the case (requires documents.write). Always returns 202 when "
             "true, including empty cases; poll GET until 404 or refresh the list."
         ),
     ),
@@ -281,9 +279,6 @@ async def delete_case_route(
     refresh the cases list. Call DELETE again with the same ``cascade`` value to resume after
     a crash or deploy.
     """
-    if cascade and not await is_organization_admin(organization_id, current_user.user_id):
-        raise HTTPException(status_code=403, detail="Only org admins can delete a case with its documents")
-
     analytiq_client = ad.common.get_analytiq_client()
     try:
         case_id = ad.common.validate_case_id(case_id)

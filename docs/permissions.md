@@ -67,7 +67,7 @@ FastAPI, frontend, and phase-4 MCP call the resolver (or `require_capability(...
 | **`runs.execute`** | OCR, doc LLM, case LLM (`POST .../cases/{id}/runs`), bulk analyze, flow trigger from UI/API |
 | **`config.read`** | Read tags, schemas, prompts, forms, flow definitions |
 | **`config.write`** | CRUD on tags, schemas, prompts, forms; author/edit flow definitions (including assign-to-case node—see [`document_case_plan.md`](document_case_plan.md)) |
-| **`org.admin`** | Members, billing, org settings, SSO mapping config, cascade case delete |
+| **`org.admin`** | Members, billing, org settings, SSO mapping config |
 
 ### Route mapping notes (phase 3)
 
@@ -78,9 +78,8 @@ The six capabilities above are the **only** org permission flags in phase 3. The
 | Routes / behavior | Capability |
 |-------------------|------------|
 | List/get documents, cases, case runs/results (read) | `documents.read` |
-| Upload, PATCH/PUT, bulk doc ops, assign/remove case on doc, delete document | `documents.write` |
+| Upload, PATCH/PUT, bulk doc ops, assign/remove case on doc, delete document, delete case (with or without cascade) | `documents.write` |
 | Case LLM `POST .../cases/{id}/runs` | `runs.execute` |
-| Delete case **with cascade** | `org.admin` (not `documents.write` alone) |
 
 #### Forms
 

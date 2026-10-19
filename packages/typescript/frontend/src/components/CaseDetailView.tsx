@@ -14,6 +14,8 @@ import { caseDisplayName } from '@/utils/caseDisplayName';
 import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
+import CaseDeleteDialog from '@/components/CaseDeleteDialog';
+import { useRouter } from 'next/navigation';
 
 type CaseDetailViewProps = {
   organizationId: string;
@@ -22,11 +24,13 @@ type CaseDetailViewProps = {
 
 const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId }) => {
   const decodedCaseId = decodeURIComponent(caseId);
+  const router = useRouter();
   const { hasCapability: canWriteDocuments } = useOrgCapability(
     organizationId,
     CAP_DOCUMENTS_WRITE,
   );
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const [caseRow, setCaseRow] = useState<Case | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -104,6 +108,13 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
             >
               Edit case
             </Link>
+            <button
+              type="button"
+              className="px-3 py-2 border border-red-200 text-red-700 rounded text-sm hover:bg-red-50"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              Delete case
+            </button>
           </div>
         )}
       </div>
@@ -185,6 +196,19 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
             Expand a prompt to view case-level extraction fields (same layout as document Extraction).
           </div>
         </div>
+      )}
+
+      {caseRow && (
+        <CaseDeleteDialog
+          open={deleteDialogOpen}
+          organizationId={organizationId}
+          caseRow={caseRow}
+          canCascadeDelete={canWriteDocuments}
+          onClose={() => setDeleteDialogOpen(false)}
+          onDeleted={() => {
+            router.push(`/orgs/${organizationId}/cases`);
+          }}
+        />
       )}
     </div>
   );

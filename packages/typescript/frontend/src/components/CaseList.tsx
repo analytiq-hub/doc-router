@@ -30,10 +30,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
+import CaseDeleteDialog from '@/components/CaseDeleteDialog';
 import { formatLocalDate } from '@/utils/date';
 import { caseDisplayName } from '@/utils/caseDisplayName';
 import { parseAndEncodeMetadataSearch } from '@/utils/documentListQuery';
-import { toast } from 'react-toastify';
 import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
 
 const jsonStringifyForQuery = (value: unknown): string =>
@@ -84,6 +84,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     organizationId,
     CAP_DOCUMENTS_WRITE,
   );
+  const [deleteDialogCase, setDeleteDialogCase] = useState<Case | null>(null);
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [cases, setCases] = useState<Case[]>([]);
   const [message, setMessage] = useState('');
@@ -143,21 +144,9 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     setSelectedCase(null);
   };
 
-  const handleDelete = async (row: Case) => {
-    if (!window.confirm(`Delete case "${row.case_id}"? Documents will be kept and unassigned.`)) {
-      return;
-    }
-    try {
-      setIsLoading(true);
-      await docRouterOrgApi.deleteCase({ caseId: row.case_id, cascade: false });
-      toast.success('Case deleted');
-      handleMenuClose();
-      await loadCases();
-    } catch (error) {
-      toastActionError('Failed to delete case', error);
-    } finally {
-      setIsLoading(false);
-    }
+  const openDeleteDialog = (row: Case) => {
+    handleMenuClose();
+    setDeleteDialogCase(row);
   };
 
   const columns = useMemo<GridColDef[]>(
@@ -397,13 +386,28 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           </MenuItem>
           <MenuItem
             onClick={() => {
-              if (selectedCase) void handleDelete(selectedCase);
+              if (selectedCase) openDeleteDialog(selectedCase);
             }}
           >
             <DeleteOutlineIcon fontSize="small" className="mr-2 text-red-600" /> Delete case
           </MenuItem>
         </Menu>
       )}
+      <CaseDeleteDialog
+        open={deleteDialogCase != null}
+        organizationId={organizationId}
+        caseRow={deleteDialogCase}
+        canCascadeDelete={canWriteDocuments}
+        onClose={() => setDeleteDialogCase(null)}
+        onDeleted={async () => {
+          setIsLoading(true);
+          try {
+            await loadCases();
+          } finally {
+            setIsLoading(false);
+          }
+        }}
+      />
     </div>
   );
 };

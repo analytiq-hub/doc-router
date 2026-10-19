@@ -385,7 +385,7 @@ async def test_delete_case_resumes_after_interruption(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_cascade_delete_requires_org_admin(test_db, org_and_users):
+async def test_cascade_delete_allowed_with_documents_write(test_db, org_and_users):
     org_id = org_and_users["org_id"]
     member = org_and_users["member"]
     admin = org_and_users["admin"]
@@ -397,10 +397,8 @@ async def test_cascade_delete_requires_org_admin(test_db, org_and_users):
     kept = await _insert_doc(test_db, organization_id=org_id)
     member_doc = await _insert_doc(test_db, organization_id=org_id, case_id="CAS-1")
 
+    # Builder member has documents.write and may cascade-delete case documents.
     resp = client.delete(f"/v0/orgs/{org_id}/cases/CAS-1?cascade=true", headers=get_token_headers(member["token"]))
-    assert resp.status_code == 403
-
-    resp = client.delete(f"/v0/orgs/{org_id}/cases/CAS-1?cascade=true", headers=get_token_headers(admin["token"]))
     assert resp.status_code == 202, resp.text
     # TestClient runs background tasks before returning.
     assert await test_db.docs.find_one({"_id": member_doc}) is None

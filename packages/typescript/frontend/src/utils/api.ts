@@ -192,6 +192,18 @@ export class DocRouterOrgApi extends DocRouterOrg {
     });
   }
 
+  /** DELETE case — returns HTTP status (200 sync unassign, 202 cascade started). */
+  async deleteCaseWithStatus(params: {
+    caseId: string;
+    cascade?: boolean;
+  }): Promise<{ message: string; status: number }> {
+    const { caseId, cascade = false } = params;
+    const response = await apiClient.delete<{ message: string }>(
+      `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}`,
+      { params: { cascade } },
+    );
+    return { message: response.data?.message ?? '', status: response.status };
+  }
 }
 
 // In-flight promise cache for listOrganizations to avoid duplicate concurrent requests
