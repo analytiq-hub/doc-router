@@ -38,7 +38,6 @@ from app.routes.gcp import gcp_router
 from app.routes.azure import azure_router
 from app.routes.system_settings import system_settings_router
 from app.routes.token import token_router
-from app.routes.oauth import oauth_router
 from app.routes.account_auth import account_auth_router
 from app.routes.orgs import orgs_router
 from app.routes.org_permissions import org_permissions_router
@@ -73,10 +72,6 @@ logger.info(f"NEXTAUTH_URL: {NEXTAUTH_URL}")
 logger.info(f"FASTAPI_ROOT_PATH: {FASTAPI_ROOT_PATH}")
 logger.info(f"MONGODB_URI: {MONGODB_URI}")
 logger.info(f"SES_FROM_EMAIL: {SES_FROM_EMAIL}")
-# JWT settings
-NEXTAUTH_SECRET = os.getenv("NEXTAUTH_SECRET")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Define MongoDB connection check function to be used in lifespan
 async def check_mongodb_connection(uri):
@@ -193,7 +188,6 @@ app.include_router(gcp_router)
 app.include_router(azure_router)
 app.include_router(system_settings_router)
 app.include_router(license_router)
-app.include_router(oauth_router)
 app.include_router(account_auth_router)
 app.include_router(orgs_router)
 app.include_router(org_permissions_router)

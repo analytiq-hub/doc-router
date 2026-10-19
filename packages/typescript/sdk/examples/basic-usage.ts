@@ -118,10 +118,8 @@ async function tokenProviderExample() {
   const client = new DocRouter({
     baseURL: 'https://api.docrouter.com',
     tokenProvider: async () => {
-      // Fetch fresh token from your auth service
-      const response = await fetch('/api/auth/token');
-      const data = await response.json();
-      return data.token;
+      // Use a session JWT from your login flow (e.g. POST /v0/account/auth/login)
+      throw new Error('Configure tokenProvider with your session JWT');
     }
   });
 

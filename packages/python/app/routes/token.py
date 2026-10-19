@@ -1,22 +1,15 @@
 # token.py
 
 # Standard library imports
-import json
 import secrets
-import hmac
-import hashlib
 import logging
-import os
 from datetime import datetime, UTC
 from typing import Optional
 
 # Third-party imports
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from bson import ObjectId
-import jwt
 from pydantic import BaseModel
-
-from app.session_jwt import mint_session_jwt
 
 # Local imports
 import analytiq_data as ad
@@ -49,10 +42,6 @@ class ListAccessTokensResponse(BaseModel):
 class CreateAccessTokenRequest(BaseModel):
     name: str
     lifetime: int
-
-# Environment variables
-NEXTAUTH_SECRET = os.getenv("NEXTAUTH_SECRET")
-ALGORITHM = "HS256"
 
 # Organization-level access tokens
 @token_router.post("/v0/orgs/{organization_id}/access_tokens", response_model=AccessToken, tags=["access_tokens"])
@@ -149,65 +138,6 @@ async def delete_org_token(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Token not found")
     return {"message": "Token deleted successfully"}
-
-# Authentication token creation
-@token_router.post("/v0/account/auth/token", tags=["account/auth"])
-async def create_auth_token(request: Request):
-    """
-    Create an authentication token.
-    Requires HMAC signature in X-Request-Signature header for authentication.
-    """
-    # Verify request signature
-    signature = request.headers.get("X-Request-Signature")
-    if not signature:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing X-Request-Signature header"
-        )
-
-    if not NEXTAUTH_SECRET:
-        logger.error("NEXTAUTH_SECRET not configured")
-        raise HTTPException(
-            status_code=500,
-            detail="Server configuration error"
-        )
-
-    # Get raw request body for signature verification
-    raw_body = await request.body()
-
-    # Verify signature using HMAC-SHA256 on the raw body
-    expected_signature = hmac.new(
-        NEXTAUTH_SECRET.encode('utf-8'),
-        raw_body,
-        hashlib.sha256
-    ).hexdigest()
-
-    if not hmac.compare_digest(signature, expected_signature):
-        logger.warning(f"Invalid signature for token request")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid request signature"
-        )
-
-    # Parse request body after signature verification
-    try:
-        user_data = json.loads(raw_body)
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON: {str(e)}"
-        )
-
-    logger.debug(f"create_auth_token(): user_data: {user_data}")
-
-    token = mint_session_jwt(
-        user_id=user_data["id"],
-        user_name=user_data.get("name"),
-        email=user_data["email"],
-    )
-
-    logger.debug(f"create_auth_token(): {token}")
-    return {"token": token}
 
 # Account-level access tokens
 @token_router.post("/v0/account/access_tokens", response_model=AccessToken, tags=["account/access_tokens"])

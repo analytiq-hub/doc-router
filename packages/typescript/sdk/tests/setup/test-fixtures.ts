@@ -1,6 +1,5 @@
 import { ObjectId } from 'mongodb';
-import * as crypto from 'crypto';
-import axios from 'axios';
+import jwt from 'jsonwebtoken';
 
 export class TestFixtures {
   static async createOrgAndUsers(testDb: { collection: (name: string) => { findOne: (query: unknown) => Promise<unknown>; insertMany: (docs: unknown[]) => Promise<unknown>; insertOne: (doc: unknown) => Promise<unknown> } }, baseURL: string): Promise<{
@@ -81,30 +80,13 @@ export class TestFixtures {
     };
   }
 
-  static createRequestSignature(jsonString: string): string {
-    const secret = process.env.NEXTAUTH_SECRET || 'test_secret_key_for_tests';
-    const hmac = crypto.createHmac('sha256', secret);
-    hmac.update(jsonString);
-    return hmac.digest('hex');
+  /** Mint the same session JWT shape as FastAPI ``mint_session_jwt`` (integration tests). */
+  static createSessionJwt(userId: string, userName: string, email: string): string {
+    const secret = process.env.NEXTAUTH_SECRET || 'test_secret_key_for_tests_32bytes_min!!';
+    return jwt.sign({ userId, userName, email }, secret, { algorithm: 'HS256' });
   }
 
-  static async createJWTTokenFromAPI(userId: string, userName: string, email: string, baseURL: string): Promise<string> {
-    if (!baseURL) {
-      throw new Error('baseURL is required for createJWTTokenFromAPI');
-    }
-
-    const payload = { id: userId, name: userName, email };
-    const payloadJson = JSON.stringify(payload);
-    const signature = this.createRequestSignature(payloadJson);
-
-    const url = `${baseURL}/v0/account/auth/token`;
-    const response = await axios.post(url, payloadJson, {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Request-Signature': signature
-      }
-    });
-
-    return response.data.token;
+  static async createJWTTokenFromAPI(userId: string, userName: string, email: string, _baseURL: string): Promise<string> {
+    return this.createSessionJwt(userId, userName, email);
   }
 }

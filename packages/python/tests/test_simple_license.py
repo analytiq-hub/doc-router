@@ -204,7 +204,7 @@ async def test_installation_mismatch(test_db, mock_auth, license_keypair):
 def test_allowlist_paths():
     assert is_path_allowlisted("/v0/account/license")
     assert is_path_allowlisted("/v0/account/license/status")
-    assert is_path_allowlisted("/v0/account/auth/token")
+    assert is_path_allowlisted("/v0/account/auth/login")
     assert not is_path_allowlisted("/v0/account/organizations")
     assert not is_path_allowlisted("/v0/orgs/abc/documents")
 

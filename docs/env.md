@@ -53,7 +53,7 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 ## Authentication & NextAuth Variables
 
 ### `NEXTAUTH_URL`
-- **Purpose**: Base URL for NextAuth.js authentication
+- **Purpose**: Public URL of the Next.js app (login links, OAuth redirects, CORS)
 - **Usage**:
   - Used in FastAPI backend for CORS configuration
   - Used in payments module for webhook URLs
@@ -61,28 +61,28 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Format**: `https://yourdomain.com` or `http://localhost:3000`
 
 ### `NEXTAUTH_SECRET`
-- **Purpose**: Secret key for NextAuth.js session encryption
-- **Required**: Yes
-- **Usage**: 
-  - Used in NextAuth configuration (`packages/typescript/frontend/src/auth.ts`)
-  - JWT token signing in authentication (`packages/python/app/auth.py`)
+- **Purpose**: Shared HS256 key for browser session JWTs and default at-rest secret encryption
+- **Required**: Yes (same value on FastAPI backend and Next.js server)
+- **Usage**:
+  - Session JWT mint/verify (`packages/python/app/session_jwt.py`, `packages/python/app/auth.py`)
+  - Next.js cookie session verify (`packages/typescript/frontend/src/utils/sessionFromToken.ts`)
   - Token encryption/decryption (`packages/python/analytiq_data/crypto/encryption.py`)
 
 ### `AUTH_GITHUB_ID`
 - **Purpose**: GitHub OAuth application client ID
-- **Usage**: GitHub authentication provider configuration (`packages/typescript/frontend/src/auth.ts`)
+- **Usage**: FastAPI Google/GitHub login (`packages/python/app/routes/account_auth.py`)
 
 ### `AUTH_GITHUB_SECRET`
 - **Purpose**: GitHub OAuth application client secret
-- **Usage**: GitHub authentication provider configuration (`packages/typescript/frontend/src/auth.ts`)
+- **Usage**: FastAPI Google/GitHub login (`packages/python/app/routes/account_auth.py`)
 
 ### `AUTH_GOOGLE_ID`
 - **Purpose**: Google OAuth application client ID
-- **Usage**: Google authentication provider configuration (`packages/typescript/frontend/src/auth.ts`)
+- **Usage**: FastAPI Google/GitHub login (`packages/python/app/routes/account_auth.py`)
 
 ### `AUTH_GOOGLE_SECRET`
 - **Purpose**: Google OAuth application client secret
-- **Usage**: Google authentication provider configuration (`packages/typescript/frontend/src/auth.ts`)
+- **Usage**: FastAPI Google/GitHub login (`packages/python/app/routes/account_auth.py`)
 
 ## Frontend Configuration
 
