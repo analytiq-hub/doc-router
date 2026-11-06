@@ -34,6 +34,9 @@ const devOriginHosts = (urls) => {
 };
 
 const nextConfig = {
+  experimental: {
+    agentUpgrade: 'security',
+  },
   env: {
     NEXT_PUBLIC_FASTAPI_FRONTEND_URL: process.env.PUBLIC_API_URL || '/fastapi',
     NEXT_PUBLIC_APP_NAME: appNameFromEnv(),
