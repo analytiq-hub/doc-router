@@ -70,17 +70,17 @@ run_with_color() {
     local color=$2
     local name=$3
     local dir=$4
-    
-    # Run the command with virtual environment activation and optional directory change
-    if [ -n "$dir" ]; then
-        (cd "$dir" && source "${VENV_PATH}/bin/activate" && exec $command) 2>&1 | while read -r line; do
+
+    # One subshell wraps the pipeline so FASTAPI/NEXTJS/STRIPE jobs do not share a line handler
+    (
+        if [ -n "$dir" ]; then
+            (cd "$dir" && source "${VENV_PATH}/bin/activate" && exec $command) 2>&1
+        else
+            (source "${VENV_PATH}/bin/activate" && exec $command) 2>&1
+        fi | while IFS= read -r line; do
             echo -e "${color}[$name] $line${NC}"
-        done &
-    else
-        (source "${VENV_PATH}/bin/activate" && exec $command) 2>&1 | while read -r line; do
-            echo -e "${color}[$name] $line${NC}"
-        done &
-    fi
+        done
+    ) &
     # Store the PID of the last background process
     pids+=($!)
 }
@@ -114,13 +114,18 @@ FRONTEND_DIR="${PROJECT_ROOT}/packages/typescript/frontend"
 echo "Clearing Next.js build cache..."
 rm -rf "${FRONTEND_DIR}/.next"
 
+FASTAPI_HOST="${FASTAPI_HOST:-0.0.0.0}"
+FASTAPI_PORT="${FASTAPI_PORT:-8000}"
+FASTAPI_BIND="${FASTAPI_HOST}:${FASTAPI_PORT}"
+
 # Run all processes (workers run inside uvicorn via FastAPI lifespan)
-run_with_color "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" "$RED" "FASTAPI" "packages/python"
+echo -e "${RED}[FASTAPI] Starting uvicorn on http://${FASTAPI_BIND}${NC}"
+run_with_color "uvicorn app.main:app --reload --host ${FASTAPI_HOST} --port ${FASTAPI_PORT}" "$RED" "FASTAPI" "packages/python"
 run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"
 
 # Start Stripe webhook listener if configured
 if [ -n "$STRIPE_WEBHOOK_SECRET_SET" ]; then
-    run_with_color "stripe listen --forward-to localhost:8000/v0/account/payments/webhook" "$CYAN" "STRIPE" ""
+    run_with_color "stripe listen --forward-to localhost:${FASTAPI_PORT}/v0/account/payments/webhook" "$CYAN" "STRIPE" ""
 fi
 
 # Wait for any process to exit

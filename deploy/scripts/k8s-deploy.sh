@@ -37,6 +37,8 @@ set -a
 [ -f "$PROJECT_ROOT/.env.$OVERLAY" ] && source "$PROJECT_ROOT/.env.$OVERLAY"
 set +a
 
+"$PROJECT_ROOT/scripts/check-app-secret-env.sh" "$PROJECT_ROOT/.env"
+
 # Save app runtime AWS credentials before unsetting CLI env vars (AWS only).
 _APP_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
 _APP_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
@@ -77,7 +79,7 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 echo "Applying doc-router-secrets..."
 kubectl create secret generic doc-router-secrets \
   --namespace "$NAMESPACE" \
-  --from-literal=NEXTAUTH_SECRET="${NEXTAUTH_SECRET}" \
+  --from-literal=APP_SECRET="${APP_SECRET}" \
   --from-literal=MONGODB_URI="${MONGODB_URI}" \
   --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
   --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \

@@ -32,7 +32,9 @@ set -a
 [ -f "$PROJECT_ROOT/.env" ]      && source "$PROJECT_ROOT/.env"
 [ -f "$PROJECT_ROOT/.env.kind" ] && source "$PROJECT_ROOT/.env.kind"
 set +a
-#
+
+"$PROJECT_ROOT/scripts/check-app-secret-env.sh" "$PROJECT_ROOT/.env"
+
 # IMAGE_TAG can be provided from the environment (e.g. IMAGE_TAG=abc123 make deploy-kind).
 # If not provided, default to a timestamp-based tag so every deploy gets a unique image tag.
 IMAGE_TAG="${IMAGE_TAG:-$(date +%Y%m%d%H%M%S)}"
@@ -77,7 +79,7 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 echo "Applying doc-router-secrets..."
 kubectl create secret generic doc-router-secrets \
   --namespace "$NAMESPACE" \
-  --from-literal=NEXTAUTH_SECRET="${NEXTAUTH_SECRET}" \
+  --from-literal=APP_SECRET="${APP_SECRET}" \
   --from-literal=MONGODB_URI="${MONGODB_URI}" \
   --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
   --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
