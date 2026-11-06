@@ -14,20 +14,19 @@ export default function AuthCompletePage() {
   useEffect(() => {
     const token = searchParams.get('token');
     const returnTo = searchParams.get('return_to') || '/dashboard';
-
-    if (!token) {
-      setError('Missing sign-in token');
-      return;
-    }
+    const dest = returnTo.startsWith('/') ? returnTo : '/dashboard';
 
     let cancelled = false;
 
     (async () => {
       try {
-        await persistSessionToken(token);
+        // OAuth: FastAPI sets httpOnly cookie and redirects here without ?token=
+        if (token) {
+          await persistSessionToken(token);
+        }
         await refreshSession();
         if (!cancelled) {
-          router.replace(returnTo.startsWith('/') ? returnTo : '/dashboard');
+          router.replace(dest);
           router.refresh();
         }
       } catch (e) {

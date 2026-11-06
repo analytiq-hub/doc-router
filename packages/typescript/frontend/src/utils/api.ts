@@ -1,4 +1,4 @@
-import axios, { isAxiosError } from 'axios';
+import axios, { isAxiosError, InternalAxiosRequestConfig } from 'axios';
 import { AppSession } from '@/types/AppSession';
 import { DocRouterOrg, DocRouterAccount } from '@docrouter/sdk';
 import type { ListOrganizationsResponse } from '@docrouter/sdk';
@@ -61,6 +61,15 @@ const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEN
 /** Browser session fetches must stay same-origin (`/fastapi` proxy) so httpOnly cookie applies to Next. */
 const FASTAPI_SESSION_FETCH_PREFIX = "/fastapi";
 
+function authFromGlobalSessionOnly(config: InternalAxiosRequestConfig): void {
+  const token = getGlobalSession()?.apiAccessToken;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    delete config.headers.Authorization;
+  }
+}
+
 const api = axios.create({
   baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL, 
   headers: {
@@ -82,23 +91,14 @@ function isPublicAccountAuthRequest(url: string | undefined): boolean {
   );
 }
 
-// Add authorization header to all requests
+// Prefer httpOnly session cookie (withCredentials); add Bearer only when we already hold the token (context cache).
 api.interceptors.request.use(async (config) => {
   const publicAuth = isPublicAccountAuthRequest(config.url);
-
-  // First try to use global session (pre-fetched from context)
-  let session = getGlobalSession();
-  
-  // Fallback to cached session if global session is not available
-  if (!session && !publicAuth) {
-    session = await getCachedSession();
+  if (publicAuth) {
+    delete config.headers.Authorization;
+    return config;
   }
-  
-  if (session?.apiAccessToken) {
-    config.headers.Authorization = `Bearer ${session.apiAccessToken}`;
-  } else if (!publicAuth) {
-    console.warn('No API token found in session');
-  }
+  authFromGlobalSessionOnly(config);
   return config;
 }, (error) => {
   return Promise.reject(error);
@@ -165,14 +165,11 @@ api.interceptors.response.use(
         const session = await getCachedSession();
         if (session?.apiAccessToken) {
           originalRequest.headers.Authorization = `Bearer ${session.apiAccessToken}`;
-          processQueue();
-          return api(originalRequest);
         } else {
-          if (!sessionExpiredToastId || !toast.isActive(sessionExpiredToastId)) {
-            sessionExpiredToastId = toast.error('Your session has expired. Please login again.');
-          }
-          return Promise.reject(new Error('Session expired'));
+          delete originalRequest.headers.Authorization;
         }
+        processQueue();
+        return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError instanceof Error ? refreshError : new Error('Token refresh failed'));
         if (!sessionExpiredToastId || !toast.isActive(sessionExpiredToastId)) {
@@ -204,18 +201,8 @@ export class DocRouterOrgApi extends DocRouterOrg {
       organizationId: organizationId,
     });
 
-    // Set up token provider that gets called on every request
-    this.getHttpClient().updateTokenProvider(async () => {
-      // First try to use global session (pre-fetched from context)
-      let session = getGlobalSession();
-
-      // Fallback to cached session if global session is not available
-      if (!session) {
-        session = await getCachedSession();
-      }
-
-      return session?.apiAccessToken || '';
-    });
+    // Cookie-auth: empty string skips Authorization; use Bearer only when context already has token.
+    this.getHttpClient().updateTokenProvider(async () => getGlobalSession()?.apiAccessToken ?? '');
   }
 
   /** DELETE case — returns HTTP status (200 sync unassign, 202 cascade started). */
@@ -265,18 +252,7 @@ export class DocRouterAccountApi extends DocRouterAccount {
       accountToken: '', // Empty token so tokenProvider will be used
     });
 
-    // Set up token provider that gets called on every request
-    this.getHttpClient().updateTokenProvider(async () => {
-      // First try to use global session (pre-fetched from context)
-      let session = getGlobalSession();
-
-      // Fallback to cached session if global session is not available
-      if (!session) {
-        session = await getCachedSession();
-      }
-
-      return session?.apiAccessToken || '';
-    });
+    this.getHttpClient().updateTokenProvider(async () => getGlobalSession()?.apiAccessToken ?? '');
   }
 
   /**

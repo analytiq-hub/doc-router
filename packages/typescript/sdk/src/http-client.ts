@@ -15,6 +15,7 @@ export class HttpClient {
     this.axios = axios.create({
       baseURL: config.baseURL,
       timeout: config.timeout || 60000,
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -26,10 +27,12 @@ export class HttpClient {
   private setupInterceptors(): void {
     // Request interceptor for auth
     this.axios.interceptors.request.use(
-      async (config) => {
+        async (config) => {
         const token = await this.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+        } else {
+          delete config.headers.Authorization;
         }
         return config;
       },
@@ -66,6 +69,7 @@ export class HttpClient {
               this.processQueue();
               return this.axios(originalRequest);
             } else {
+              delete originalRequest.headers.Authorization;
               this.handleAuthError(error);
               return Promise.reject(this.createApiError(error));
             }

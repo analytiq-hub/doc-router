@@ -11,6 +11,8 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **`get_current_user`** accepts the session JWT from the **cookie** (browser) or **Bearer** (API clients).
 - Feedback: **`POST /v0/feedback`**, **`GET /v0/admin/feedback`**, **`DELETE /v0/admin/feedback/{id}`** replace Next route handlers (removed from `src/app/api/...`).
 - OAuth success redirects to **`return_to`** with the cookie set (no longer depends on `/auth/complete?token=` for happy path).
+- **Browser API clients:** axios + `@docrouter/sdk` use **`withCredentials`**; Bearer is added only when **`AppSessionContext`** already has `apiAccessToken`, otherwise the **cookie** authenticates (matches doc-orchestrator “no token in JS” for the common path).
+- **`/auth/complete`**: `?token=` optional; refreshes session after OAuth redirect when cookie is already set.
 
 ## Current state (inventory)
 
@@ -19,8 +21,8 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 | **Routing** | App Router under `src/app/` — on the order of **50+ `page.tsx` files**, nested dynamic segments (`orgs/[organizationId]/…`). |
 | **Layouts** | Nested `layout.tsx` under `settings/`, `orgs/`, etc. |
 | **Next-specific APIs** | Broad use of `next/navigation`, `next/image`, etc. across **many** `src/` files (grep: `next/` imports). |
-| **Route handlers** | `src/app/api/auth/session/route.ts`, `api/feedback/…`, `api/admin/feedback/…` — **must move off the Node server** or be reimplemented on FastAPI. |
-| **Auth** | **Not NextAuth in code:** login/OAuth live in FastAPI (`packages/python/app/routes/account_auth.py`). Next only implements **cookie session persistence** (`POST/GET/DELETE /api/auth/session`) and **`appSessionFromApiToken`** (MongoDB + JWT verify in Node — duplicate of what the API should own). |
+| **Route handlers** | ~~Next `src/app/api/…`~~ **removed** for session + feedback; use FastAPI routes above. |
+| **Auth** | **Not NextAuth in code:** login/OAuth and browser session live in FastAPI. **SSR layouts** may still use `getAppServerSession` / **`appSessionFromApiToken`** in Node until migrated. |
 | **Build / deploy** | `next.config.mjs`: standalone output, webpack tweaks, `rewrites` for `/fastapi` in dev, monorepo `file:` SDK alias. |
 | **Middleware** | No `middleware.ts` in frontend (good — one less Next-only layer). |
 
