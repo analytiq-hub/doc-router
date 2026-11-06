@@ -192,3 +192,6 @@ branding/*
 
 # Copied from APP_FAVICON via scripts/sync-branding.sh
 packages/typescript/frontend/public/branded-favicon.ico
+
+# Local / scratch logs (do not commit)
+log4.txt
