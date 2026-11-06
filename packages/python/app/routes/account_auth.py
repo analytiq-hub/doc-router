@@ -13,15 +13,23 @@ import httpx
 import jwt
 from bcrypt import gensalt, hashpw
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
 from app.account.oauth_provision import provision_oauth_signin
 from app.account.oauth_models import OAuthAccountData, OAuthSignInRequest
+from app.auth import get_session_user
+from app.models import User as CurrentUser
 from app.routes.emails import send_registration_verification_email_for_user
-from app.session_jwt import ALGORITHM, mint_session_jwt, require_app_secret
+from app.session_jwt import (
+    ALGORITHM,
+    clear_session_cookie,
+    mint_session_jwt,
+    require_app_secret,
+    set_session_cookie,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +73,30 @@ class SessionUser(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     user: SessionUser
+
+
+class AppSessionUser(BaseModel):
+    id: str
+    email: str
+    name: str | None = None
+    isSysadmin: bool
+
+
+class AppSessionPayload(BaseModel):
+    """JSON shape expected by the frontend (`AppSession`), including redundant token for axios."""
+
+    user: AppSessionUser
+    apiAccessToken: str
+    providerAccessToken: str = ""
+    expires: str
+
+
+class AppSessionResponse(BaseModel):
+    session: AppSessionPayload | None
+
+
+class SetSessionBody(BaseModel):
+    token: str
 
 
 class RegisterRequest(BaseModel):
@@ -130,9 +162,71 @@ async def _session_user_for_id(user_id: str) -> SessionUser:
     )
 
 
-def _complete_redirect(token: str, return_to: str) -> RedirectResponse:
-    query = urlencode({"token": token, "return_to": return_to})
-    return RedirectResponse(url=f"{_nextauth_url()}/auth/complete?{query}", status_code=302)
+def _complete_redirect(request: Request, token: str, return_to: str) -> RedirectResponse:
+    """OAuth success: set httpOnly session cookie and send the browser to the app."""
+    target = return_to if return_to.startswith("/") else "/dashboard"
+    url = f"{_nextauth_url().rstrip('/')}{target}"
+    response = RedirectResponse(url=url, status_code=302)
+    set_session_cookie(response, request, token)
+    return response
+
+
+async def _app_session_payload_for_user_async(user_id: str) -> AppSessionPayload:
+    db = ad.common.get_async_db()
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    su = await _session_user_for_id(user_id)
+    token = mint_session_jwt(
+        user_id=user_id,
+        user_name=su.name,
+        email=su.email,
+    )
+    expires = datetime.now(UTC).replace(microsecond=0).isoformat() + "Z"
+    return AppSessionPayload(
+        user=AppSessionUser(
+            id=su.id,
+            email=su.email,
+            name=su.name,
+            isSysadmin=su.is_sysadmin,
+        ),
+        apiAccessToken=token,
+        providerAccessToken="",
+        expires=expires,
+    )
+
+
+@account_auth_router.get(
+    "/v0/account/auth/session",
+    response_model=AppSessionResponse,
+    tags=["account/auth"],
+)
+async def get_browser_session(user: CurrentUser = Depends(get_session_user)):
+    payload = await _app_session_payload_for_user_async(user.user_id)
+    return AppSessionResponse(session=payload)
+
+
+@account_auth_router.post("/v0/account/auth/session", tags=["account/auth"])
+async def set_browser_session(request: Request, response: Response, body: SetSessionBody):
+    """Store session JWT in httpOnly cookie (replaces Next ``POST /api/auth/session``)."""
+    db = ad.common.get_async_db()
+    try:
+        payload = jwt.decode(body.token, require_app_secret(), algorithms=[ALGORITHM])
+        user_id = payload.get("userId")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if not await db.users.find_one({"_id": ObjectId(user_id)}, projection={"_id": 1}):
+            raise HTTPException(status_code=401, detail="User not found")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token") from None
+    set_session_cookie(response, request, body.token)
+    return {"ok": True}
+
+
+@account_auth_router.delete("/v0/account/auth/session", tags=["account/auth"])
+async def delete_browser_session(request: Request, response: Response):
+    clear_session_cookie(response, request)
+    return {"ok": True}
 
 
 _REGISTER_SUCCESS_MESSAGE = (
@@ -176,7 +270,7 @@ async def register_with_password(body: RegisterRequest):
 
 
 @account_auth_router.post("/v0/account/auth/login", response_model=LoginResponse, tags=["account/auth"])
-async def login_with_password(body: LoginRequest):
+async def login_with_password(request: Request, response: Response, body: LoginRequest):
     db = ad.common.get_async_db()
     user = await db.users.find_one({"email": body.email})
     if not user or not user.get("password"):
@@ -198,6 +292,7 @@ async def login_with_password(body: LoginRequest):
         user_name=session_user.name,
         email=session_user.email,
     )
+    set_session_cookie(response, request, token)
     return LoginResponse(token=token, user=session_user)
 
 
@@ -222,6 +317,7 @@ async def google_oauth_start(return_to: str | None = Query(None)):
 
 @account_auth_router.get("/v0/account/auth/google/callback", tags=["account/auth"])
 async def google_oauth_callback(
+    request: Request,
     code: str | None = Query(None),
     state: str | None = Query(None),
     error: str | None = Query(None),
@@ -281,7 +377,7 @@ async def google_oauth_callback(
     user_id, _ = await provision_oauth_signin(oauth_request)
     session_user = await _session_user_for_id(user_id)
     token = mint_session_jwt(user_id=user_id, user_name=session_user.name, email=session_user.email)
-    return _complete_redirect(token, return_to)
+    return _complete_redirect(request, token, return_to)
 
 
 @account_auth_router.get("/v0/account/auth/github/start", tags=["account/auth"])
@@ -321,6 +417,7 @@ async def _github_primary_email(client: httpx.AsyncClient, access_token: str) ->
 
 @account_auth_router.get("/v0/account/auth/github/callback", tags=["account/auth"])
 async def github_oauth_callback(
+    request: Request,
     code: str | None = Query(None),
     state: str | None = Query(None),
     error: str | None = Query(None),
@@ -386,4 +483,4 @@ async def github_oauth_callback(
     user_id, _ = await provision_oauth_signin(oauth_request)
     session_user = await _session_user_for_id(user_id)
     token = mint_session_jwt(user_id=user_id, user_name=session_user.name, email=session_user.email)
-    return _complete_redirect(token, return_to)
+    return _complete_redirect(request, token, return_to)

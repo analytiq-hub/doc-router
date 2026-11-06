@@ -46,7 +46,7 @@ export const AppSessionProvider: React.FC<{
   const refreshSession = useCallback(async () => {
     setStatus('loading')
     invalidateSessionCache()
-    const response = await fetch('/api/auth/session')
+    const response = await fetch('/fastapi/v0/account/auth/session', { credentials: 'include' })
     if (!response.ok) {
       applySession(null)
       return

@@ -8,6 +8,7 @@ from bson import ObjectId
 
 # Third-party imports
 from fastapi import (
+    Cookie,
     FastAPI, HTTPException, Depends, Security, Request, Header
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -19,7 +20,7 @@ from dotenv import load_dotenv
 import analytiq_data as ad
 
 from app.models import User
-from app.session_jwt import require_app_secret
+from app.session_jwt import SESSION_COOKIE_NAME, require_app_secret
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -79,60 +80,73 @@ def extract_org_id_from_path(path: str) -> Optional[str]:
         return parts[3]
     return None
 
-async def get_session_user(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    Get the current user from JWT session token only (no API tokens allowed).
-    Used for endpoints that should only be accessible via browser sessions.
-    """
+async def user_from_session_jwt(token: str) -> User:
+    """Resolve User from a session JWT (Bearer or httpOnly cookie)."""
     db = ad.common.get_async_db()
-    token = credentials.credentials
-
     try:
-        # Only validate as JWT (no API token fallback)
         payload = jwt.decode(token, require_app_secret(), algorithms=[ALGORITHM])
-        userId: str = payload.get("userId")
-        userName: str = payload.get("userName")
+        user_id: str = payload.get("userId")
+        user_name: str = payload.get("userName")
         email: str = payload.get("email")
 
-        if userName is None:
+        if user_name is None:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials: missing userName")
 
-        # Validate that userId exists in database
-        user = await db.users.find_one({"_id": ObjectId(userId)})
+        user = await db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
-            raise HTTPException(status_code=401, detail=f"User id '{userId}' not found in database")
+            raise HTTPException(status_code=401, detail=f"User id '{user_id}' not found in database")
 
         return User(
-            user_id=userId,
-            user_name=userName,
-            token_type="jwt"
+            user_id=user_id,
+            user_name=user_name,
+            token_type="jwt",
         )
-
     except PyJWTError:
         raise HTTPException(
             status_code=401,
-            detail="Invalid session token. Only browser sessions are allowed for this endpoint."
-        )
+            detail="Invalid session token. Only browser sessions are allowed for this endpoint.",
+        ) from None
+
+
+async def get_session_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
+    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
+):
+    """
+    Get the current user from JWT session token only (no API tokens allowed).
+    Used for endpoints that should only be accessible via browser sessions.
+    Accepts Authorization: Bearer or the dr.api-token httpOnly cookie.
+    """
+    if credentials is not None:
+        return await user_from_session_jwt(credentials.credentials)
+    if session_cookie:
+        return await user_from_session_jwt(session_cookie)
+    raise HTTPException(status_code=401, detail="No authentication credentials provided")
+
 
 # Modify get_current_user to validate based on context
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security),
-    request: Request = None,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
     x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
 ):
     """
     Validate user based on JWT or API token, considering the API context.
     Account APIs only accept account-level tokens.
     Organization APIs only accept org-specific tokens for that organization.
     Accepts the API token via Authorization: Bearer or X-Api-Key header.
+    Browser clients may send the session JWT in the httpOnly cookie (no Bearer).
     """
     db = ad.common.get_async_db()
 
-    # Resolve the raw token: prefer Authorization: Bearer, fall back to X-Api-Key
+    # Resolve the raw token: Bearer, X-Api-Key, or session cookie (browser)
     if credentials is not None:
         token = credentials.credentials
     elif x_api_key is not None:
         token = x_api_key
+    elif session_cookie is not None:
+        return await user_from_session_jwt(session_cookie)
     else:
         raise HTTPException(status_code=401, detail="No authentication credentials provided")
 
@@ -140,9 +154,9 @@ async def get_current_user(
     context_type, org_id = get_api_context(request.url.path)
 
     try:
-        # Try JWT first — only possible when credentials (Bearer) are present
+        # Try JWT first — only possible when Bearer credentials are present
         if credentials is not None:
-            return await get_session_user(credentials)
+            return await user_from_session_jwt(token)
     except HTTPException:
         pass
 
@@ -193,11 +207,12 @@ async def get_current_user(
 
 # Add this helper function to check admin status
 async def get_admin_user(
-    credentials: HTTPAuthorizationCredentials = Security(security),
-    request: Request = None,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
     x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
 ):
-    user = await get_current_user(credentials, request, x_api_key)
+    user = await get_current_user(request, credentials, x_api_key, session_cookie)
 
     if not await is_system_admin(user.user_id):
         raise HTTPException(

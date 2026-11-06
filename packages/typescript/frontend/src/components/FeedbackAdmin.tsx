@@ -51,7 +51,7 @@ const FeedbackAdmin: React.FC = () => {
   const fetchFeedback = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/admin/feedback');
+      const response = await fetch('/fastapi/v0/admin/feedback', { credentials: 'include' });
       
       if (!response.ok) {
         throw new Error('Failed to fetch feedback');
@@ -78,8 +78,9 @@ const FeedbackAdmin: React.FC = () => {
     
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/admin/feedback/${deleteId}`, {
+      const response = await fetch(`/fastapi/v0/admin/feedback/${deleteId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
       
       if (!response.ok) {

@@ -34,11 +34,12 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
     setSubmitStatus('idle');
     
     try {
-      const response = await fetch('/api/feedback', {
+      const response = await fetch('/fastapi/v0/feedback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           feedback,
           userId: session?.user?.id,

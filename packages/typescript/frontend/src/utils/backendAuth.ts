@@ -2,6 +2,9 @@ import { apiClient, getApiErrorMsg } from '@/utils/api';
 
 const FASTAPI_BASE = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
 
+/** Session cookie must be set/read on the Next origin; dev proxies `/fastapi` → backend. */
+const FASTAPI_SESSION_PREFIX = '/fastapi';
+
 export type LoginResponse = {
   token: string;
   user: {
@@ -49,17 +52,18 @@ export function oauthStartUrl(provider: 'google' | 'github', returnTo = '/dashbo
 }
 
 export async function persistSessionToken(token: string): Promise<void> {
-  const response = await fetch('/api/auth/session', {
+  const response = await fetch(`${FASTAPI_SESSION_PREFIX}/v0/account/auth/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ token }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || 'Failed to save session');
+    throw new Error((data as { detail?: string; error?: string }).detail || (data as { error?: string }).error || 'Failed to save session');
   }
 }
 
 export async function signOutClient(): Promise<void> {
-  await fetch('/api/auth/session', { method: 'DELETE' });
+  await fetch(`${FASTAPI_SESSION_PREFIX}/v0/account/auth/session`, { method: 'DELETE', credentials: 'include' });
 }

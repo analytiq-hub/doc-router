@@ -42,6 +42,7 @@ async def test_login_success(client, worker_db_name):
     assert body["user"]["id"] == user_id
     assert body["user"]["email"] == "login-test@example.com"
     assert body["token"]
+    assert "set-cookie" in {k.lower() for k in response.headers.keys()}
 
     payload = decode_session_jwt(body["token"])
     assert payload["userId"] == user_id

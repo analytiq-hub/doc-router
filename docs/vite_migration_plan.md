@@ -4,6 +4,14 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 
 **Branch for experimentation:** `vite` (create PRs from this branch when implementation starts.)
 
+### Implemented on `vite` (backend-first, partial)
+
+- FastAPI sets and clears the **`dr.api-token` httpOnly cookie** on login, OAuth completion, `POST/DELETE /v0/account/auth/session`.
+- **`GET /v0/account/auth/session`** returns `{ session }` in the shape expected by `AppSession`.
+- **`get_current_user`** accepts the session JWT from the **cookie** (browser) or **Bearer** (API clients).
+- Feedback: **`POST /v0/feedback`**, **`GET /v0/admin/feedback`**, **`DELETE /v0/admin/feedback/{id}`** replace Next route handlers (removed from `src/app/api/...`).
+- OAuth success redirects to **`return_to`** with the cookie set (no longer depends on `/auth/complete?token=` for happy path).
+
 ## Current state (inventory)
 
 | Area | Notes |

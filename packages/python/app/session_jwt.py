@@ -6,8 +6,12 @@ import os
 from typing import Any
 
 import jwt
+from fastapi import Request, Response
 
 ALGORITHM = "HS256"
+
+# Same name as the Next.js route used (`packages/typescript/frontend/src/constants/sessionCookie.ts`).
+SESSION_COOKIE_NAME = "dr.api-token"
 
 
 def require_app_secret() -> str:
@@ -15,6 +19,36 @@ def require_app_secret() -> str:
     if not secret:
         raise RuntimeError("APP_SECRET is not configured")
     return secret
+
+
+def _request_is_https(request: Request) -> bool:
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    if forwarded:
+        return forwarded == "https"
+    return request.url.scheme == "https"
+
+
+def set_session_cookie(response: Response, request: Request, token: str) -> None:
+    """httpOnly session cookie for browser clients (SPA-friendly)."""
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        secure=_request_is_https(request),
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        httponly=True,
+        secure=_request_is_https(request),
+        samesite="lax",
+        path="/",
+    )
 
 
 def mint_session_jwt(*, user_id: str, user_name: str | None, email: str) -> str:

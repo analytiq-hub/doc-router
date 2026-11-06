@@ -31,7 +31,9 @@ export async function getCachedSession(): Promise<AppSession | null> {
   }
   
   try {
-    const response = await fetch('/api/auth/session');
+    const response = await fetch(`${FASTAPI_SESSION_FETCH_PREFIX}/v0/account/auth/session`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       sessionCache = { session: null, timestamp: now };
       return null;
@@ -56,6 +58,8 @@ import { toast } from 'react-toastify';
 
 // These APIs execute from the frontend
 const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || "/fastapi";
+/** Browser session fetches must stay same-origin (`/fastapi` proxy) so httpOnly cookie applies to Next. */
+const FASTAPI_SESSION_FETCH_PREFIX = "/fastapi";
 
 const api = axios.create({
   baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL, 
