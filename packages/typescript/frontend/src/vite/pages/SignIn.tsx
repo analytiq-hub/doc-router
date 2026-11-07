@@ -1,5 +1,5 @@
 import Layout from '@/components/Layout';
-import SigninPage from '@/app/auth/signin/page';
+import SigninPage from '@/pages/auth/signin';
 
 /** Same chrome and markup as Next (`Layout` + `auth/layout` gray shell). */
 export function SignInPage() {

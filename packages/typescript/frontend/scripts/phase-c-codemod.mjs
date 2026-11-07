@@ -15,7 +15,6 @@ const SKIP_REL = new Set([
   'shims/next-navigation.ts',
   'shims/next-dynamic.tsx',
   'shims/next-image.tsx',
-  'utils/session.ts',
   'app/feedback/page.tsx',
   'app/admin/feedback/page.tsx',
   'app/settings/layout.tsx',

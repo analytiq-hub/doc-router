@@ -6,7 +6,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 
 **Route coverage:** see [`vite_route_manifest.md`](./vite_route_manifest.md).
 
-**Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phase A–B (ops + packaging): complete** — compose/release/Helm use Vite `runner` only; smoke: [`vite_smoke_test_5173.md`](./vite_smoke_test_5173.md). **Next: Phase C** (source imports).
+**Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phases A–C complete**; **Phase D in progress** (`src/pages/`, no `next/headers`). **Next: Phase D bulk move + Phase E** (drop `next` package).
 
 ### Implemented on `vite` (backend-first, partial)
 

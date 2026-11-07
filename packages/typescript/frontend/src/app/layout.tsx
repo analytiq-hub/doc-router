@@ -1,15 +1,8 @@
-import "@/styles/globals.css";
-import React from 'react';
-import Layout from '@/components/Layout';
-import ThemeRegistry from '@/components/ThemeRegistry';
-import { OrganizationProvider } from '@/contexts/OrganizationContext';
-import { AppSessionProvider } from '@/contexts/AppSessionContext';
-import { getAppServerSession } from '@/utils/session';
-import { Toaster } from 'react-hot-toast';
-import { ToastContainer } from 'react-toastify';
-import FormioProvider from '@/components/FormioProvider';
-import { appFaviconUrl, appName } from '@/config/branding';
+import '@/styles/globals.css';
 import type { Metadata } from 'next';
+
+import { ClientRootLayout } from '@/components/ClientRootLayout';
+import { appFaviconUrl, appName } from '@/config/branding';
 
 export function generateMetadata(): Metadata {
   return {
@@ -21,29 +14,14 @@ export function generateMetadata(): Metadata {
   };
 }
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const appSession = await getAppServerSession();
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <link rel="stylesheet" href="/formio.full.css" />
       </head>
       <body suppressHydrationWarning>
-        <ThemeRegistry>
-            <AppSessionProvider initialSession={appSession}>
-              <OrganizationProvider>
-                <FormioProvider>
-                  <Layout>{children}</Layout>
-                </FormioProvider>
-              </OrganizationProvider>
-            </AppSessionProvider>
-        </ThemeRegistry>
-        <ToastContainer position="top-right" />
-        <Toaster position="top-right" />
+        <ClientRootLayout>{children}</ClientRootLayout>
       </body>
     </html>
   );

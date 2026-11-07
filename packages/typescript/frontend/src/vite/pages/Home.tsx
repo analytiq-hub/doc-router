@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import Layout from '@/components/Layout';
-import MarketingHome from '@/app/page';
+import MarketingHome from '@/pages/home';
 import { useAppSession } from '@/contexts/AppSessionContext';
 
 export function HomePage() {
