@@ -84,6 +84,7 @@ RUN chmod +x ./scripts/sync-branding.sh \
     && cd packages/typescript/frontend && npm run build:vite
 
 FROM nginx:alpine AS runner-vite
+COPY packages/typescript/frontend/nginx-mjs-types.conf /etc/nginx/conf.d/00-mjs-types.conf
 COPY packages/typescript/frontend/nginx-spa.conf /etc/nginx/conf.d/default.conf
 COPY --from=frontend-vite /app/packages/typescript/frontend/dist-vite /usr/share/nginx/html
 EXPOSE 80
