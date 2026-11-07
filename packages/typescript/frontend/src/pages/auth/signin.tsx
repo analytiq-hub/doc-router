@@ -68,6 +68,8 @@ export default function SigninPage() {
     window.location.href = oauthStartUrl(provider, returnTo);
   };
 
+  const formWidthClass = 'w-full max-w-xs';
+
   return (
     <div className="flex flex-col items-center mt-8 px-4">
       <h1 className="text-2xl font-semibold mb-6">
@@ -75,18 +77,18 @@ export default function SigninPage() {
       </h1>
       
       {error && (
-        <div className="text-red-500 mb-4">
+        <div className={`${formWidthClass} text-red-500 mb-4 text-center`}>
           {error}
         </div>
       )}
       
       {successMessage && (
-        <div className="text-green-500 mb-4">
+        <div className={`${formWidthClass} text-green-500 mb-4 text-center`}>
           {successMessage}
         </div>
       )}
       
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-2">
+      <form onSubmit={handleSubmit} className={`${formWidthClass} space-y-2`}>
         {!isLoginMode && (
           <input
             type="text"
@@ -143,13 +145,13 @@ export default function SigninPage() {
         </div>
       </form>
 
-      <div className="w-full max-w-sm my-6 flex items-center">
+      <div className={`${formWidthClass} my-6 flex items-center`}>
         <div className="flex-grow border-t border-gray-300"></div>
         <span className="px-4 text-gray-500 text-sm">Or</span>
         <div className="flex-grow border-t border-gray-300"></div>
       </div>
 
-      <div className="flex flex-col gap-3 w-full max-w-sm">
+      <div className={`flex flex-col gap-3 ${formWidthClass}`}>
         <button
           onClick={() => handleSocialLogin('google')}
           className="flex items-center justify-center gap-2 w-full px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
