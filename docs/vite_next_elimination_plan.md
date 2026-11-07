@@ -133,7 +133,7 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 | # | Task | Status |
 |---|------|--------|
-| D1 | Move pages → `src/pages/**`; `app/**/page.tsx` re-exports | 🔶 auth + home done; org/settings via `orgPages` / `settingsPages` next |
+| D1 | Move pages → `src/pages/**`; `app/**/page.tsx` re-exports | ✅ org, settings, misc (`phase-d-move-pages.mjs`) |
 | D2 | Client root layout (`ClientRootLayout`); no server session | ✅ |
 | D3 | Remove `session.ts` / `next/headers` | ✅ |
 | D4 | Consolidate routing in `router.tsx` (+ `lazy()` per route) | Follow-up |

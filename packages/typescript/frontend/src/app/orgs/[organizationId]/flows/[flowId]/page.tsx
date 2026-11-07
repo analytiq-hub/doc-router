@@ -1,14 +1,17 @@
-import FlowDetailPageClient from './FlowDetailPageClient';
+'use client';
 
-export default async function FlowDetailPage({
-  params,
-}: {
+import FlowDetailPageClient from '@/pages/orgs/flow-detail-client';
+import { useRouteParams } from '@/utils/useRouteParams';
+
+export default function FlowDetailPage(props: {
   params: Promise<{ organizationId: string; flowId: string }>;
 }) {
-  const { organizationId, flowId } = await params;
-  // Remount when opening another flow — otherwise rfNodes/rfEdges from the previous canvas can stick around
-  // briefly (same dynamic route segment) and show stale nodes such as Manual Trigger on `/flows/new`.
+  const { organizationId, flowId } = useRouteParams(props);
   return (
-    <FlowDetailPageClient key={`${organizationId}:${flowId}`} organizationId={organizationId} flowId={flowId} />
+    <FlowDetailPageClient
+      key={`${organizationId}:${flowId}`}
+      organizationId={organizationId}
+      flowId={flowId}
+    />
   );
 }

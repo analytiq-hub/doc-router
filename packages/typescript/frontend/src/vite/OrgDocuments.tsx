@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 
-import DocumentsPageClient from '@/app/orgs/[organizationId]/docs/DocumentsPageClient';
+import DocumentsPageClient from '@/pages/orgs/documents-client';
 
 export function OrgDocuments() {
   const { organizationId } = useParams();

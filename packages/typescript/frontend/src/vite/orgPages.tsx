@@ -1,25 +1,25 @@
 import type { ComponentType } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import CasesPage from '@/app/orgs/[organizationId]/cases/page';
-import CaseDetailPage from '@/app/orgs/[organizationId]/cases/[caseId]/page';
-import CaseEditPage from '@/app/orgs/[organizationId]/cases/[caseId]/edit/page';
-import TagsPage from '@/app/orgs/[organizationId]/tags/page';
-import TagEditPage from '@/app/orgs/[organizationId]/tags/[tagId]/page';
-import SchemasPage from '@/app/orgs/[organizationId]/schemas/page';
-import SchemaEditPage from '@/app/orgs/[organizationId]/schemas/[schemaRevId]/page';
-import SchemaByIdRedirectPage from '@/app/orgs/[organizationId]/schemas/by-id/[schemaId]/page';
-import PromptsPage from '@/app/orgs/[organizationId]/prompts/page';
-import PromptEditPage from '@/app/orgs/[organizationId]/prompts/[promptRevId]/page';
-import PromptByIdRedirectPage from '@/app/orgs/[organizationId]/prompts/by-id/[promptId]/page';
-import FormsPage from '@/app/orgs/[organizationId]/forms/page';
-import FormEditPage from '@/app/orgs/[organizationId]/forms/[formId]/page';
-import FormByIdRedirectPage from '@/app/orgs/[organizationId]/forms/by-id/[formId]/page';
-import KnowledgeBasesPage from '@/app/orgs/[organizationId]/knowledge-bases/page';
-import ModelsPage from '@/app/orgs/[organizationId]/models/page';
-import UploadPageClient from '@/app/orgs/[organizationId]/upload/UploadPageClient';
-import FlowsPageClient, { type FlowsTab } from '@/app/orgs/[organizationId]/flows/FlowsPageClient';
-import FlowDetailPageClient from '@/app/orgs/[organizationId]/flows/[flowId]/FlowDetailPageClient';
+import CasesPage from '@/pages/orgs/cases';
+import CaseDetailPage from '@/pages/orgs/case-detail';
+import CaseEditPage from '@/pages/orgs/case-edit';
+import TagsPage from '@/pages/orgs/tags';
+import TagEditPage from '@/pages/orgs/tag-edit';
+import SchemasPage from '@/pages/orgs/schemas';
+import SchemaEditPage from '@/pages/orgs/schema-edit';
+import SchemaByIdRedirectPage from '@/pages/orgs/schema-by-id-redirect';
+import PromptsPage from '@/pages/orgs/prompts';
+import PromptEditPage from '@/pages/orgs/prompt-edit';
+import PromptByIdRedirectPage from '@/pages/orgs/prompt-by-id-redirect';
+import FormsPage from '@/pages/orgs/forms';
+import FormEditPage from '@/pages/orgs/form-edit';
+import FormByIdRedirectPage from '@/pages/orgs/form-by-id-redirect';
+import KnowledgeBasesPage from '@/pages/orgs/knowledge-bases';
+import ModelsPage from '@/pages/orgs/models';
+import UploadPageClient from '@/pages/orgs/upload-client';
+import FlowsPageClient, { type FlowsTab } from '@/pages/orgs/flows-client';
+import FlowDetailPageClient from '@/pages/orgs/flow-detail-client';
 
 import { withRouteParams } from './withRouteParams';
 

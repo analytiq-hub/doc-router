@@ -1,15 +1,9 @@
-import { Metadata } from 'next';
-import UploadPageClient from './UploadPageClient';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Upload Documents',
-};
+import UploadPageClient from '@/pages/orgs/upload-client';
+import { useRouteParams } from '@/utils/useRouteParams';
 
-export default async function UploadPage({
-  params,
-}: {
-  params: Promise<{ organizationId: string }>;
-}) {
-  const { organizationId } = await params;
+export default function UploadPage(props: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = useRouteParams(props);
   return <UploadPageClient organizationId={organizationId} />;
 }
