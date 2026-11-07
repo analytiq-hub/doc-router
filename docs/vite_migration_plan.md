@@ -15,7 +15,9 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **`/auth/complete`**: `?token=` optional; refreshes session after OAuth redirect when cookie is already set.
 - **Vite spike (parallel to Next):** `index.html`, `vite.config.ts` (`/fastapi` → backend), `npm run dev:vite` on port **5173**, routes **`/`**, **`/auth/signin`**, **`/auth/complete`** under `src/vite/` (output `dist-vite/`). Uses **`src/vite/vite-shell.css`** (Tailwind only) until Formio styles are ported for Vite. Pin **`cookie@1.1.1`** in npm overrides so React Router’s ESM build resolves `parse` (avoid accidental `cookie@2`).
 - **`make dev` / `start-all.sh`:** starts FastAPI + Next (**3000**) + Vite (**5173**) together; **`DOCROUTER_DEV_VITE=0`** skips Vite.
-- **Vite routes:** **`/dashboard`** (shared `useDashboardRedirect` with Next), org paths stub → placeholder with link to **:3000** until ported. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
+- **Vite routes:** **`createBrowserRouter`** in **`src/router.tsx`**; **`/orgs/:id/dashboard`** renders shared **`Dashboard`** inside **`Layout`** via **`OrgLayout`**. Unmigrated org paths → placeholder.
+- **Next shims (Vite only):** **`src/shims/next-link.tsx`** and **`next-navigation.ts`** aliased in **`vite.config.ts`** so shared components keep `next/link` and `next/navigation` imports.
+- **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 
 ## Current state (inventory)
 

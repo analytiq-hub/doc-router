@@ -1,9 +1,13 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 /** Stub until org routes are ported from the Next App Router. */
 export function OrgPlaceholderPage() {
   const { organizationId, '*': splat } = useParams();
-  const subpath = splat ? `/${splat}` : '';
+  const location = useLocation();
+  const subpath =
+    typeof splat === 'string' && splat.length > 0
+      ? `/${splat}`
+      : location.pathname.replace(/^\/orgs\/[^/]+/, '') || '';
 
   return (
     <main className="max-w-lg mx-auto mt-16 p-6 space-y-4">

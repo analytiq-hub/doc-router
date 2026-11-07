@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   loginWithPassword,
   oauthStartUrl,
@@ -11,6 +11,11 @@ import { useAppSession } from '@/contexts/AppSessionContext';
 /** Vite route — same flows as Next `auth/signin` without `next/navigation`. */
 export function SignInPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = (() => {
+    const from = searchParams.get('from');
+    return from && from.startsWith('/') ? from : '/dashboard';
+  })();
   const { refreshSession } = useAppSession();
   const [error, setError] = useState<string | null>(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -27,7 +32,7 @@ export function SignInPage() {
       const result = await loginWithPassword(email, password);
       await persistSessionToken(result.token);
       await refreshSession();
-      navigate('/dashboard', { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Login failed. Please try again.');
     }
@@ -108,10 +113,10 @@ export function SignInPage() {
         {isLoginMode ? 'Create an account' : 'Back to sign in'}
       </button>
       <div className="mt-6 flex flex-col gap-2 text-sm">
-        <a className="text-blue-600 hover:underline" href={oauthStartUrl('google', '/')}>
+        <a className="text-blue-600 hover:underline" href={oauthStartUrl('google', returnTo)}>
           Sign in with Google
         </a>
-        <a className="text-blue-600 hover:underline" href={oauthStartUrl('github', '/')}>
+        <a className="text-blue-600 hover:underline" href={oauthStartUrl('github', returnTo)}>
           Sign in with GitHub
         </a>
       </div>

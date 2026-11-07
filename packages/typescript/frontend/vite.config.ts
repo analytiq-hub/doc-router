@@ -32,6 +32,8 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@docrouter/sdk': path.resolve(__dirname, '../sdk/src/index.ts'),
+        'next/link': path.resolve(__dirname, './src/shims/next-link.tsx'),
+        'next/navigation': path.resolve(__dirname, './src/shims/next-navigation.ts'),
       },
     },
     define: nextPublicEnvDefine(mode),
