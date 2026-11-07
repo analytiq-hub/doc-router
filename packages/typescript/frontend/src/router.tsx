@@ -50,6 +50,7 @@ import {
 } from '@/vite/settingsPages';
 import { RequireAuth } from '@/vite/RequireAuth';
 import { RouterProviders } from '@/vite/RouterProviders';
+import { SettingsAppLayout } from '@/vite/SettingsAppLayout';
 
 const orgChildRoutes: RouteObject[] = [
   { index: true, element: <Navigate to="dashboard" replace /> },
@@ -119,7 +120,7 @@ export const routes: RouteObject[] = [
               },
               {
                 path: 'settings',
-                element: <Outlet />,
+                element: <SettingsAppLayout />,
                 children: settingsChildRoutes,
               },
               {
