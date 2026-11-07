@@ -27,7 +27,7 @@ export function SignInPage() {
       const result = await loginWithPassword(email, password);
       await persistSessionToken(result.token);
       await refreshSession();
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Login failed. Please try again.');
     }

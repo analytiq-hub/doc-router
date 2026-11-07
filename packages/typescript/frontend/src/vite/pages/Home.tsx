@@ -18,11 +18,17 @@ export function HomePage() {
           <div className="mt-1 text-gray-700">Signed in as {session.user.email}</div>
         )}
       </div>
-      {status !== 'authenticated' && (
-        <Link className="text-blue-600 hover:underline" to="/auth/signin">
-          Sign in
-        </Link>
-      )}
+      <div className="flex flex-col gap-2 text-sm">
+        {status === 'authenticated' ? (
+          <Link className="text-blue-600 hover:underline" to="/dashboard">
+            Open dashboard
+          </Link>
+        ) : (
+          <Link className="text-blue-600 hover:underline" to="/auth/signin">
+            Sign in
+          </Link>
+        )}
+      </div>
     </main>
   );
 }
