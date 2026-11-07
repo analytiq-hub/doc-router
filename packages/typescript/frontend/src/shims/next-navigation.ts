@@ -18,7 +18,8 @@ export function useRouter() {
   return {
     push: (href: string) => navigate(href),
     replace: (href: string) => navigate(href, { replace: true }),
-    refresh: () => navigate(0),
+    // Next revalidates RSC; full reload here races with push/replace after login.
+    refresh: () => {},
     back: () => navigate(-1),
     forward: () => navigate(1),
     prefetch: (_href: string) => {},

@@ -27,7 +27,6 @@ export default function AuthCompletePage() {
         await refreshSession();
         if (!cancelled) {
           router.replace(dest);
-          router.refresh();
         }
       } catch (e) {
         if (!cancelled) {

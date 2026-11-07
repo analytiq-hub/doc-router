@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { loginWithPassword, oauthStartUrl, persistSessionToken, registerWithPassword } from '@/utils/backendAuth';
 import { useAppSession } from '@/contexts/AppSessionContext';
 
@@ -15,6 +15,11 @@ export default function SigninPage() {
     name: ''
   });
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = (() => {
+    const from = searchParams.get('from') || searchParams.get('callbackUrl');
+    return from && from.startsWith('/') && !from.startsWith('//') ? from : '/dashboard';
+  })();
   const { refreshSession } = useAppSession();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -40,8 +45,7 @@ export default function SigninPage() {
       const result = await loginWithPassword(email, password);
       await persistSessionToken(result.token);
       await refreshSession();
-      router.refresh();
-      router.push('/dashboard');
+      router.replace(returnTo);
     } catch (loginError) {
       console.error('Login error:', loginError);
       setError(loginError instanceof Error ? loginError.message : 'Login failed. Please try again.');
@@ -61,7 +65,7 @@ export default function SigninPage() {
   };
 
   const handleSocialLogin = (provider: 'google' | 'github') => {
-    window.location.href = oauthStartUrl(provider, '/dashboard');
+    window.location.href = oauthStartUrl(provider, returnTo);
   };
 
   return (
