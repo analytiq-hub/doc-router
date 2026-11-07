@@ -1,13 +1,11 @@
 'use client'
 
-import { use } from 'react';
 import DocumentsPageClient from './DocumentsPageClient';
+import { useRouteParams } from '@/utils/useRouteParams';
 
-export default function DocumentsPage({
-  params,
-}: {
+export default function DocumentsPage(props: {
   params: Promise<{ organizationId: string }>;
 }) {
-  const { organizationId } = use(params);
+  const { organizationId } = useRouteParams(props);
   return <DocumentsPageClient organizationId={organizationId} />;
 }

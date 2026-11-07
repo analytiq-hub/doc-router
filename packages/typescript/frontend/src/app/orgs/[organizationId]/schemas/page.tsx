@@ -1,13 +1,13 @@
 'use client'
 
 import SchemaList from '@/components/SchemaList';
-import { useRouteParams, type RouteParamsProps } from '@/utils/useRouteParams';
+import { useRouteParams } from '@/utils/useRouteParams';
 import SchemaCreate from '@/components/SchemaCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
-export default function SchemasPage(props: RouteParamsProps<{ organizationId: string }>) {
+export default function SchemasPage(props: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = useRouteParams(props);
   const searchParams = useSearchParams();
   const router = useRouter();

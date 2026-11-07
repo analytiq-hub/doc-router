@@ -22,7 +22,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **Org routes in Vite:** hub lists + **detail/edit** (`cases/:id`, `tags/:id`, schema/prompt/form rev routes, `by-id` redirects), **`upload`**, **`models`**, flows editor.
 - **Settings in Vite:** **`/settings/**`** inside **`SettingsAppLayout`**; **account/development/** subtree fully wired (AWS/Azure/GCP, worker, LLM manager + provider).
 - **`/feedback`**, **`/admin/feedback`** (CSR auth/admin checks, FastAPI APIs).
-- **`withRouteParams`** bridges App Router **`use(params)`** pages; pages that call **`useParams()`** mount directly. **`next/dynamic`** shim for lazy chunks.
+- **`withRouteParams`** resolves React Router segments into **`params={Promise.resolve(...)}`** for shared pages; use **`useRouteParams`** instead of raw **`use(params)`** where both Next and Vite import the page. Pages that only call **`useParams()`** mount directly. **`next/dynamic`** shim for lazy chunks.
 - **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**). **`FormioProvider`** only under **`OrgLayout`** (not settings/home).
 - **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 

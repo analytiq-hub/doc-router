@@ -1,12 +1,10 @@
 import type { ComponentType } from 'react';
 import { useParams } from 'react-router-dom';
 
-import type { RouteParamsProps } from '@/utils/useRouteParams';
-
-/** Bridge App Router pages to React Router (sync props — no `use(Promise)` on the client). */
+/** Bridge App Router pages (`params` Promise) to React Router URL params. */
 export function withRouteParams<P extends Record<string, string>>(
   paramKeys: (keyof P)[],
-  Page: ComponentType<RouteParamsProps<P>>,
+  Page: ComponentType<{ params: Promise<P> }>,
 ) {
   function Wrapped() {
     const routeParams = useParams();
@@ -16,7 +14,7 @@ export function withRouteParams<P extends Record<string, string>>(
       if (!value) return null;
       resolved[key as string] = value;
     }
-    return <Page {...(resolved as P)} />;
+    return <Page params={Promise.resolve(resolved as P)} />;
   }
   return Wrapped;
 }

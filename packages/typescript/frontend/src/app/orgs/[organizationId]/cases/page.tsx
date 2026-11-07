@@ -1,13 +1,13 @@
 'use client';
 
 import CaseList from '@/components/CaseList';
-import { useRouteParams, type RouteParamsProps } from '@/utils/useRouteParams';
+import { useRouteParams } from '@/utils/useRouteParams';
 import CaseCreate from '@/components/CaseCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 
-export default function CasesPage(props: RouteParamsProps<{ organizationId: string }>) {
+export default function CasesPage(props: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = useRouteParams(props);
   const searchParams = useSearchParams();
   const router = useRouter();

@@ -1,13 +1,13 @@
 'use client'
 
 import FormList from '@/components/FormList';
-import { useRouteParams, type RouteParamsProps } from '@/utils/useRouteParams';
+import { useRouteParams } from '@/utils/useRouteParams';
 import FormCreate from '@/components/FormCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
-export default function FormsPage(props: RouteParamsProps<{ organizationId: string }>) {
+export default function FormsPage(props: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = useRouteParams(props);
   const searchParams = useSearchParams();
   const router = useRouter();

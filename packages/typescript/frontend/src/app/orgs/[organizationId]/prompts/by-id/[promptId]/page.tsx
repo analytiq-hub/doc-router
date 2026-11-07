@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouteParams } from '@/utils/useRouteParams';
 import { useRouter } from 'next/navigation';
 import { DocRouterOrgApi } from '@/utils/api';
 import { useMemo } from 'react';
@@ -9,8 +10,8 @@ interface PageProps {
   params: Promise<{ organizationId: string; promptId: string }>;
 }
 
-export default function PromptByIdRedirectPage({ params }: PageProps) {
-  const { organizationId, promptId } = use(params);
+export default function PromptByIdRedirectPage(props: PageProps) {
+  const { organizationId, promptId } = useRouteParams(props);
   const router = useRouter();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [error, setError] = useState<string | null>(null);

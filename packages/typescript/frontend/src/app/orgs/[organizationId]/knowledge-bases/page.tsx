@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react';
-import { useRouteParams, type RouteParamsProps } from '@/utils/useRouteParams';
+import { useRouteParams } from '@/utils/useRouteParams';
 import KnowledgeBaseList from '@/components/KnowledgeBaseList';
 import KnowledgeBaseCreate from '@/components/KnowledgeBaseCreate';
 import KnowledgeBaseSearch from '@/components/KnowledgeBaseSearch';
@@ -11,7 +11,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
-export default function KnowledgeBasesPage(props: RouteParamsProps<{ organizationId: string }>) {
+export default function KnowledgeBasesPage(props: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = useRouteParams(props);
   const searchParams = useSearchParams();
   const router = useRouter();
