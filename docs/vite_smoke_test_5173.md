@@ -35,8 +35,17 @@ Register in Google/GitHub OAuth apps when using Vite:
 | `/settings`, `/settings/account/users` | ✅ |
 | `/feedback`, `/system` | ✅ |
 
+## Production build
+
+| Check | Result |
+|-------|--------|
+| `make build-vite` (`npm run typecheck` + `npm run build:vite`) | ✅ (CI: `.github/workflows/frontend-build.yml`) |
+| `npm run preview:vite` + spot-check a route | manual (serves `dist-vite/`; API still needs FastAPI or proxy) |
+
+Build notes (non-blocking): esbuild CSS nesting warnings from Formio styles; main chunk &gt;500 kB (code-split later).
+
 ## Known gaps
 
 - **Org `*` catch-all:** rare nested URLs → `OrgPlaceholderPage` (see route manifest).
 - **OAuth providers:** must allow 5173 callback URLs in IdP console (in addition to 3000).
-- **Manual only:** PDF viewer on a real doc id, flow editor save, admin feedback (sysadmin), full OAuth click-through.
+- **Manual (browser):** optional `preview:vite` pass after build; chunk-size optimization deferred.
