@@ -17,7 +17,7 @@ Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_rou
 | **Compose / K8s** | **Vite SPA only** | Frontend container nginx :80; compose edge **localhost:3000** → edge nginx → frontend:80 |
 | **Vite production path** | **`runner`** | `Dockerfile` stages `frontend` (vite build) → `runner` (nginx + `dist-vite/`) |
 | **`next` npm package** | **Still installed** | Required for `npm run dev` / `npm run build` (Next) until removal |
-| **Source imports `next/*`** | **Client migrated** | `react-router-dom` + `@/utils/appRouter`; **7** server-only files still use `next/navigation` / `next/headers` |
+| **Source imports `next/*`** | **Almost gone** | Vite client uses React Router; only `session.ts` (`next/headers`) for Next root `layout.tsx` SSR |
 | **Next-only server code** | **Small but real** | `layout.tsx` files use `getAppServerSession` / `redirect` / `cookies()` from `next/headers`; **Vite does not run these layouts** (CSR + `RequireAuth` instead) |
 | **File layout** | **Still App Router** | **55** `page.tsx` under `src/app/`; Vite **imports them as components**, not as Next routes |
 
@@ -114,7 +114,7 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 ---
 
-### Phase C — Remove **shims** by fixing imports (source, not ops) — **mostly done**
+### Phase C — Remove **shims** by fixing imports (source, not ops) — **complete** (Vite path)
 
 **Goal:** Shared client code uses React Router; `vite.config.ts` has **no** `next/*` aliases.
 
@@ -124,9 +124,8 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 | C2 | `next/navigation` → `@/utils/appRouter` | ✅ client |
 | C3 | `next/dynamic` → `@/utils/dynamicImport` | ✅ |
 | C4 | `next/image` → `@/components/AppImage` | ✅ |
-| C5 | Server `redirect()` / layouts | 🔶 **7** Next server files (Phase D) |
-
-**Remaining for C/D:** convert server `layout.tsx` + `feedback/page.tsx` to client `RequireAuth` or drop when `src/app/` moves.
+| C5 | Server `redirect()` / layouts → `AuthLayoutGuard` | ✅ |
+| C6 | `session.ts` / `next/headers` | 🔶 Next `app/layout.tsx` only (Phase D) |
 
 ---
 
@@ -173,7 +172,7 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 1. **Merge `vite` → `main`** after review; cut a release so GHCR frontend image matches compose/Kind smoke.
 2. **Staging/K8s smoke** once per environment (login, PDF, flows).
-3. **Phase C** — codemod `next/*` imports; wire any remaining 🔶 org routes.
+3. **Phase D** — move off `src/app/**`; drop `getAppServerSession` / `next/headers`.
 
 ---
 
@@ -184,4 +183,4 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 - Docker Vite target: `deploy/shared/docker/Dockerfile` (`frontend` → `runner`), `packages/typescript/frontend/nginx-spa.conf`
 - Navigation: `packages/typescript/frontend/src/utils/appRouter.ts`, `dynamicImport.tsx`, `AppImage.tsx`
 
-*Last updated: Phase C batch 1 — client imports off `next/*` shims.*
+*Last updated: Phase C complete for Vite; `AuthLayoutGuard` replaces server redirects.*

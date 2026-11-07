@@ -1,18 +1,9 @@
-import { redirect } from 'next/navigation';
-import { getAppServerSession } from '@/utils/session';
+'use client';
+
 import React from 'react';
 
-export default async function OrgsLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const session = await getAppServerSession();
+import { AuthLayoutGuard } from '@/components/AuthLayoutGuard';
 
-  // Redirect to home if not authenticated
-  if (!session) {
-    redirect('/');
-  }
-
-  return <>{children}</>;
+export default function OrgsLayout({ children }: { children: React.ReactNode }) {
+  return <AuthLayoutGuard>{children}</AuthLayoutGuard>;
 }

@@ -1,23 +1,14 @@
-import React from 'react';
+'use client';
+
 import FeedbackForm from '@/components/FeedbackForm';
-import { getAppServerSession } from '@/utils/session';
-import { redirect } from 'next/navigation';
+import { AuthLayoutGuard } from '@/components/AuthLayoutGuard';
 
-export const metadata = {
-  title: 'Provide Feedback',
-  description: 'Share your feedback, suggestions, or report issues',
-};
-
-export default async function FeedbackPage() {
-  const session = await getAppServerSession();
-  
-  if (!session) {
-    redirect('/auth/signin?callbackUrl=/feedback');
-  }
-  
+export default function FeedbackPage() {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <FeedbackForm />
-    </div>
+    <AuthLayoutGuard unauthenticatedTo={`/auth/signin?from=${encodeURIComponent('/feedback')}`}>
+      <div className="container mx-auto px-4 py-8">
+        <FeedbackForm />
+      </div>
+    </AuthLayoutGuard>
   );
 }
