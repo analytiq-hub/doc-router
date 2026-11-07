@@ -17,7 +17,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **`make dev` / `start-all.sh`:** starts FastAPI + Next (**3000**) + Vite (**5173**) together; **`DOCROUTER_DEV_VITE=0`** skips Vite.
 - **Vite routes:** **`createBrowserRouter`** in **`src/router.tsx`**; **`/orgs/:id/dashboard`** renders shared **`Dashboard`** inside **`Layout`** via **`OrgLayout`**. Unmigrated org paths → placeholder.
 - **Next shims (Vite only):** **`src/shims/next-link.tsx`** and **`next-navigation.ts`** aliased in **`vite.config.ts`** so shared components keep `next/link` and `next/navigation` imports.
-- **Org routes in Vite:** **`dashboard`**, **`docs`**, **`docs/:id`** (PDF viewer via shared **`DocumentViewerPage`**); other org paths still use placeholder. **`next/dynamic`** shim for lazy **`PDFViewer`** / **`AgentTab`**.
+- **Org routes in Vite:** **`dashboard`**, **`docs`** (+ **`docs/:id`** viewer), **`cases`**, **`tags`**, **`schemas`**, **`prompts`**, **`forms`**, **`knowledge-bases`**, **`flows`** (+ **`flows/:flowId`** editor). Deep links (e.g. schema rev edit) still hit placeholder. **`vite/orgPages.tsx`** wraps App Router pages via **`use(params)`** + **`Promise.resolve`**. **`next/dynamic`** shim for lazy chunks.
 - **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**).
 - **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 

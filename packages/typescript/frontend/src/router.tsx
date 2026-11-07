@@ -10,8 +10,34 @@ import { OrgDashboard } from '@/vite/OrgDashboard';
 import { OrgDocumentViewer } from '@/vite/OrgDocumentViewer';
 import { OrgDocuments } from '@/vite/OrgDocuments';
 import { OrgLayout } from '@/vite/OrgLayout';
+import {
+  OrgCases,
+  OrgFlowDetail,
+  OrgFlows,
+  OrgForms,
+  OrgKnowledgeBases,
+  OrgPrompts,
+  OrgSchemas,
+  OrgTags,
+} from '@/vite/orgPages';
 import { RequireAuth } from '@/vite/RequireAuth';
 import { RouterProviders } from '@/vite/RouterProviders';
+
+const orgChildRoutes: RouteObject[] = [
+  { index: true, element: <Navigate to="dashboard" replace /> },
+  { path: 'dashboard', element: <OrgDashboard /> },
+  { path: 'docs', element: <OrgDocuments /> },
+  { path: 'docs/:id', element: <OrgDocumentViewer /> },
+  { path: 'cases', element: <OrgCases /> },
+  { path: 'tags', element: <OrgTags /> },
+  { path: 'schemas', element: <OrgSchemas /> },
+  { path: 'prompts', element: <OrgPrompts /> },
+  { path: 'forms', element: <OrgForms /> },
+  { path: 'knowledge-bases', element: <OrgKnowledgeBases /> },
+  { path: 'flows', element: <OrgFlows /> },
+  { path: 'flows/:flowId', element: <OrgFlowDetail /> },
+  { path: '*', element: <OrgPlaceholderPage /> },
+];
 
 export const routes: RouteObject[] = [
   {
@@ -31,13 +57,7 @@ export const routes: RouteObject[] = [
               {
                 path: 'orgs/:organizationId',
                 element: <OrgLayout />,
-                children: [
-                  { index: true, element: <Navigate to="dashboard" replace /> },
-                  { path: 'dashboard', element: <OrgDashboard /> },
-                  { path: 'docs', element: <OrgDocuments /> },
-                  { path: 'docs/:id', element: <OrgDocumentViewer /> },
-                  { path: '*', element: <OrgPlaceholderPage /> },
-                ],
+                children: orgChildRoutes,
               },
               {
                 path: '*',
