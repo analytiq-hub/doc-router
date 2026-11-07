@@ -16,6 +16,9 @@ help:
 	@echo ""
 	@echo "  make help                    - Show this help message"
 	@echo ""
+	@echo "Development:"
+	@echo "  make dev                     - Start FastAPI, Next.js, and Vite (./start-all.sh)"
+	@echo ""
 	@echo "Setup & Installation:"
 	@echo "  make setup                   - Interactive menu: Python, TypeScript, Dev (both), Kubernetes, or UI setup"
 	@echo "  make setup-dev               - Set up both Python and TypeScript (full dev environment)"
@@ -117,6 +120,12 @@ sync-branding:
 	./scripts/sync-branding.sh
 
 deploy-dev: setup-python
+	cp .env packages/typescript/frontend/.env.local
+	$(MAKE) sync-branding
+	./start-all.sh
+
+# Local dev stack: FastAPI + Next (3000) + optional Vite (5173). Same as deploy-local-dev without the gum menu.
+dev:
 	cp .env packages/typescript/frontend/.env.local
 	$(MAKE) sync-branding
 	./start-all.sh
@@ -339,4 +348,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts vitest deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port credential-dump credential-port
+.PHONY: help dev deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts vitest deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port credential-dump credential-port
