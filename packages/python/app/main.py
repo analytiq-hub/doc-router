@@ -53,6 +53,7 @@ from app.routes.flow_chat import chat_router
 from app.routes.flows_credentials import flow_credentials_router
 from app.routes.license import license_router
 from app.licensing_gate import LicenseGateMiddleware
+from app.frontend_origins import frontend_origins
 import analytiq_data as ad
 from analytiq_data.common.branding import app_name
 
@@ -146,19 +147,7 @@ app = FastAPI(
 )
 security = HTTPBearer()
 
-# CORS allowed origins
-CORS_ORIGINS_DEF = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://host.docker.internal:3000",
-]
-
-# Only add NEXTAUTH_URL if it's not None
-if NEXTAUTH_URL:
-    CORS_ORIGINS_DEF.append(NEXTAUTH_URL)
-
-cors_origins_extra = [o for o in os.getenv("CORS_ORIGINS_EXTRA", "").split(",") if o]
-cors_origins = list(CORS_ORIGINS_DEF) + cors_origins_extra
+cors_origins = frontend_origins()
 logger.info(f"CORS allowed origins: {cors_origins}")
 
 # License expiry gate innermost relative to CORS so 403 responses still get CORS headers.

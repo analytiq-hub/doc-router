@@ -48,6 +48,9 @@ export async function loginWithPassword(email: string, password: string): Promis
 
 export function oauthStartUrl(provider: 'google' | 'github', returnTo = '/dashboard'): string {
   const params = new URLSearchParams({ return_to: returnTo });
+  if (typeof window !== 'undefined') {
+    params.set('app_origin', window.location.origin);
+  }
   return `${FASTAPI_BASE}/v0/account/auth/${provider}/start?${params.toString()}`;
 }
 

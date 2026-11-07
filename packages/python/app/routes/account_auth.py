@@ -23,6 +23,7 @@ from app.account.oauth_models import OAuthAccountData, OAuthSignInRequest
 from app.auth import get_session_user
 from app.models import User as CurrentUser
 from app.routes.emails import send_registration_verification_email_for_user
+from app.frontend_origins import normalize_app_origin
 from app.session_jwt import (
     ALGORITHM,
     clear_session_cookie,
@@ -110,9 +111,10 @@ class RegisterResponse(BaseModel):
     message: str
 
 
-def _oauth_api_base_url() -> str:
-    """Public URL prefix that reaches FastAPI (via Next/nginx ``/fastapi`` proxy)."""
-    return f"{_nextauth_url()}/fastapi"
+def _oauth_api_base_url(app_origin: str | None = None) -> str:
+    """Public URL prefix that reaches FastAPI (``/fastapi`` proxy on the SPA origin)."""
+    base = (app_origin or _nextauth_url()).rstrip("/")
+    return f"{base}/fastapi"
 
 
 def _safe_return_path(return_to: str | None) -> str:
@@ -124,21 +126,23 @@ def _safe_return_path(return_to: str | None) -> str:
     return return_to
 
 
-def _oauth_state(*, provider: str, return_to: str) -> str:
+def _oauth_state(*, provider: str, return_to: str, app_origin: str | None = None) -> str:
     secret = require_app_secret()
     now = datetime.now(UTC)
     exp = now + OAUTH_STATE_TTL
-    payload = {
+    payload: dict[str, object] = {
         "provider": provider,
         "return_to": return_to,
         "nonce": secrets.token_urlsafe(16),
         "exp": int(exp.timestamp()),
         "iat": int(now.timestamp()),
     }
+    if app_origin:
+        payload["app_origin"] = app_origin
     return jwt.encode(payload, secret, algorithm=ALGORITHM)
 
 
-def _decode_oauth_state(state: str, *, provider: str) -> str:
+def _decode_oauth_state_payload(state: str, *, provider: str) -> dict[str, str | None]:
     secret = require_app_secret()
     try:
         payload = jwt.decode(state, secret, algorithms=[ALGORITHM])
@@ -146,7 +150,16 @@ def _decode_oauth_state(state: str, *, provider: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
     if payload.get("provider") != provider:
         raise HTTPException(status_code=400, detail="OAuth state provider mismatch")
-    return _safe_return_path(payload.get("return_to"))
+    raw_origin = payload.get("app_origin")
+    app_origin = normalize_app_origin(raw_origin if isinstance(raw_origin, str) else None)
+    return {
+        "return_to": _safe_return_path(payload.get("return_to")),
+        "app_origin": app_origin,
+    }
+
+
+def _decode_oauth_state(state: str, *, provider: str) -> str:
+    return _decode_oauth_state_payload(state, provider=provider)["return_to"] or "/dashboard"
 
 
 async def _session_user_for_id(user_id: str) -> SessionUser:
@@ -162,10 +175,16 @@ async def _session_user_for_id(user_id: str) -> SessionUser:
     )
 
 
-def _complete_redirect(request: Request, token: str, return_to: str) -> RedirectResponse:
+def _complete_redirect(
+    request: Request,
+    token: str,
+    return_to: str,
+    app_origin: str | None = None,
+) -> RedirectResponse:
     """OAuth success: set httpOnly session cookie and send the browser to the app."""
     target = return_to if return_to.startswith("/") else "/dashboard"
-    url = f"{_nextauth_url().rstrip('/')}{target}"
+    base = (app_origin or _nextauth_url()).rstrip("/")
+    url = f"{base}{target}"
     response = RedirectResponse(url=url, status_code=302)
     set_session_cookie(response, request, token)
     return response
@@ -297,12 +316,16 @@ async def login_with_password(request: Request, response: Response, body: LoginR
 
 
 @account_auth_router.get("/v0/account/auth/google/start", tags=["account/auth"])
-async def google_oauth_start(return_to: str | None = Query(None)):
+async def google_oauth_start(
+    return_to: str | None = Query(None),
+    app_origin: str | None = Query(None),
+):
     if not _auth_google_id() or not _auth_google_secret():
         raise HTTPException(status_code=503, detail="Google sign-in is not configured")
     return_to = _safe_return_path(return_to)
-    state = _oauth_state(provider="google", return_to=return_to)
-    redirect_uri = f"{_oauth_api_base_url()}/v0/account/auth/google/callback"
+    origin = normalize_app_origin(app_origin)
+    state = _oauth_state(provider="google", return_to=return_to, app_origin=origin)
+    redirect_uri = f"{_oauth_api_base_url(origin)}/v0/account/auth/google/callback"
     params = urlencode({
         "client_id": _auth_google_id(),
         "redirect_uri": redirect_uri,
@@ -326,8 +349,10 @@ async def google_oauth_callback(
         raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing OAuth code or state")
-    return_to = _decode_oauth_state(state, provider="google")
-    redirect_uri = f"{_oauth_api_base_url()}/v0/account/auth/google/callback"
+    oauth_ctx = _decode_oauth_state_payload(state, provider="google")
+    return_to = oauth_ctx["return_to"] or "/dashboard"
+    app_origin = oauth_ctx.get("app_origin")
+    redirect_uri = f"{_oauth_api_base_url(app_origin)}/v0/account/auth/google/callback"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         token_resp = await client.post(
@@ -377,16 +402,20 @@ async def google_oauth_callback(
     user_id, _ = await provision_oauth_signin(oauth_request)
     session_user = await _session_user_for_id(user_id)
     token = mint_session_jwt(user_id=user_id, user_name=session_user.name, email=session_user.email)
-    return _complete_redirect(request, token, return_to)
+    return _complete_redirect(request, token, return_to, app_origin)
 
 
 @account_auth_router.get("/v0/account/auth/github/start", tags=["account/auth"])
-async def github_oauth_start(return_to: str | None = Query(None)):
+async def github_oauth_start(
+    return_to: str | None = Query(None),
+    app_origin: str | None = Query(None),
+):
     if not _auth_github_id() or not _auth_github_secret():
         raise HTTPException(status_code=503, detail="GitHub sign-in is not configured")
     return_to = _safe_return_path(return_to)
-    state = _oauth_state(provider="github", return_to=return_to)
-    redirect_uri = f"{_oauth_api_base_url()}/v0/account/auth/github/callback"
+    origin = normalize_app_origin(app_origin)
+    state = _oauth_state(provider="github", return_to=return_to, app_origin=origin)
+    redirect_uri = f"{_oauth_api_base_url(origin)}/v0/account/auth/github/callback"
     params = urlencode({
         "client_id": _auth_github_id(),
         "redirect_uri": redirect_uri,
@@ -428,8 +457,10 @@ async def github_oauth_callback(
         raise HTTPException(status_code=400, detail=f"GitHub OAuth error: {detail}")
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing OAuth code or state")
-    return_to = _decode_oauth_state(state, provider="github")
-    redirect_uri = f"{_oauth_api_base_url()}/v0/account/auth/github/callback"
+    oauth_ctx = _decode_oauth_state_payload(state, provider="github")
+    return_to = oauth_ctx["return_to"] or "/dashboard"
+    app_origin = oauth_ctx.get("app_origin")
+    redirect_uri = f"{_oauth_api_base_url(app_origin)}/v0/account/auth/github/callback"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         token_resp = await client.post(
@@ -483,4 +514,4 @@ async def github_oauth_callback(
     user_id, _ = await provision_oauth_signin(oauth_request)
     session_user = await _session_user_for_id(user_id)
     token = mint_session_jwt(user_id=user_id, user_name=session_user.name, email=session_user.email)
-    return _complete_redirect(request, token, return_to)
+    return _complete_redirect(request, token, return_to, app_origin)

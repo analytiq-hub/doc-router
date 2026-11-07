@@ -173,3 +173,19 @@ def test_google_start_redirects_when_configured(client, monkeypatch):
     assert "client_id=google-client-id" in location
     assert "redirect_uri=" in location
     assert "localhost%3A3000%2Ffastapi%2Fv0%2Faccount%2Fauth%2Fgoogle%2Fcallback" in location
+
+
+def test_google_start_honors_vite_app_origin(client, monkeypatch):
+    monkeypatch.setenv("AUTH_GOOGLE_ID", "google-client-id")
+    monkeypatch.setenv("AUTH_GOOGLE_SECRET", "google-secret")
+    monkeypatch.setenv("NEXTAUTH_URL", "http://localhost:3000")
+    monkeypatch.setenv("APP_SECRET", os.environ.get("APP_SECRET", "test_secret_key_for_tests_32bytes_min!!"))
+
+    response = client.get(
+        "/v0/account/auth/google/start",
+        params={"return_to": "/dashboard", "app_origin": "http://localhost:5173"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    location = response.headers["location"]
+    assert "localhost%3A5173%2Ffastapi%2Fv0%2Faccount%2Fauth%2Fgoogle%2Fcallback" in location
