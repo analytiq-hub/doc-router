@@ -23,7 +23,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
 import type { Edge } from 'reactflow';
 import type { FlowBinaryRef, FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
-import type { DocRouterOrgApi } from '@/utils/api';
+import { fastApiBrowserBase, type DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
 import { parameterSchemaUsesCredentialAuthenticationWidget } from './flowSchemaParameterUtils';
@@ -164,7 +164,7 @@ const WebhookUrlHeader: React.FC<{
   }, [node.parameters, onChange]);
 
   const href = useMemo(() => {
-    const fastApiPrefixRaw = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
+    const fastApiPrefixRaw = fastApiBrowserBase();
     const fastApiBaseRaw = fastApiPrefixRaw.trim();
     const isAbsolute = /^https?:\/\//i.test(fastApiBaseRaw);
     const origin = typeof window !== 'undefined' ? window.location.origin : '';

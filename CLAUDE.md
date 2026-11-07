@@ -88,7 +88,7 @@ The Smart Document Router is a full-stack document processing platform with huma
 
 ### Services Running
 - FastAPI backend: http://localhost:8000 (API docs at /docs)
-- Vite SPA (primary UI): http://localhost:5173 — `make dev` starts FastAPI + Vite by default (`DOCROUTER_DEV_VITE=0` to skip; `DOCROUTER_DEV_NEXT=1` to also run Next on :3000)
+- Vite SPA (primary UI): http://localhost:5173 — `make dev` starts FastAPI + Vite by default (`DOCROUTER_DEV_VITE=0` to skip; `DOCROUTER_DEV_NEXT=1` for legacy Next on :3000). Public env: `VITE_*` (see `src/config/publicEnv.ts`).
 - Compose/K8s/release frontend image: **Vite** only (`Dockerfile` targets `frontend` + `runner` nginx, `dist-vite/`)
 - Background worker: processes queue tasks
 - Static file server: http://localhost:8080 (for public assets)

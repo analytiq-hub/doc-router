@@ -29,16 +29,51 @@ function stripBrokenFormioCssSourcemaps(): Plugin {
   };
 }
 
-/** Inject NEXT_PUBLIC_* from the repo root .env (same as Next) for shared config modules. */
-function nextPublicEnvDefine(mode: string): Record<string, string> {
+function pick(
+  env: Record<string, string>,
+  primary: string,
+  ...legacy: string[]
+): string {
+  for (const key of [primary, ...legacy]) {
+    const v = env[key];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+/** Inject VITE_* (and legacy NEXT_PUBLIC_* compat) from repo root `.env`. */
+function publicEnvDefine(mode: string): Record<string, string> {
   const env = loadEnv(mode, repoRoot, '');
-  const define: Record<string, string> = {
-    'process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL': JSON.stringify(
-      env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi',
-    ),
+  const fastApi = pick(
+    env,
+    'VITE_FASTAPI_FRONTEND_URL',
+    'NEXT_PUBLIC_FASTAPI_FRONTEND_URL',
+    'PUBLIC_API_URL',
+  ) || '/fastapi';
+  const appName = pick(env, 'VITE_APP_NAME', 'NEXT_PUBLIC_APP_NAME', 'APP_NAME');
+  const appFavicon = pick(env, 'VITE_APP_FAVICON', 'NEXT_PUBLIC_APP_FAVICON', 'APP_FAVICON');
+
+  const pairs: Record<string, string> = {
+    VITE_FASTAPI_FRONTEND_URL: fastApi,
+    VITE_APP_NAME: appName,
+    VITE_APP_FAVICON: appFavicon,
+    // Legacy until Phase E / Next removal
+    NEXT_PUBLIC_FASTAPI_FRONTEND_URL: fastApi,
+    NEXT_PUBLIC_APP_NAME: appName,
+    NEXT_PUBLIC_APP_FAVICON: appFavicon,
   };
+
+  const define: Record<string, string> = {};
+  for (const [key, value] of Object.entries(pairs)) {
+    define[`import.meta.env.${key}`] = JSON.stringify(value);
+    define[`process.env.${key}`] = JSON.stringify(value);
+  }
   for (const [key, value] of Object.entries(env)) {
-    if (key.startsWith('NEXT_PUBLIC_')) {
+    if (key.startsWith('NEXT_PUBLIC_') && !(key in pairs)) {
+      define[`process.env.${key}`] = JSON.stringify(value);
+    }
+    if (key.startsWith('VITE_') && !(key in pairs)) {
+      define[`import.meta.env.${key}`] = JSON.stringify(value);
       define[`process.env.${key}`] = JSON.stringify(value);
     }
   }
@@ -46,7 +81,9 @@ function nextPublicEnvDefine(mode: string): Record<string, string> {
 }
 
 export default defineConfig(({ mode }) => {
-  const backend = process.env.VITE_BACKEND_URL ?? loadEnv(mode, repoRoot, '').VITE_BACKEND_URL ?? 'http://127.0.0.1:8000';
+  const env = loadEnv(mode, repoRoot, '');
+  const backend =
+    process.env.VITE_BACKEND_URL ?? env.VITE_BACKEND_URL ?? 'http://127.0.0.1:8000';
 
   return {
     plugins: [react(), stripBrokenFormioCssSourcemaps()],
@@ -57,7 +94,7 @@ export default defineConfig(({ mode }) => {
         '@docrouter/sdk': path.resolve(__dirname, '../sdk/src/index.ts'),
       },
     },
-    define: nextPublicEnvDefine(mode),
+    define: publicEnvDefine(mode),
     server: {
       host: 'localhost',
       port: 5173,

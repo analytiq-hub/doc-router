@@ -54,18 +54,19 @@ export function invalidateSessionCache(): void {
   globalSession = null;
 }
 
+import { publicFastApiFrontendUrl } from '@/config/publicEnv';
 import { toast } from 'react-toastify';
 
 /** Same-origin API prefix for browser calls (compose/nginx proxy at `/fastapi`). */
 export function fastApiBrowserBase(): string {
-  const raw = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
+  const raw = publicFastApiFrontendUrl();
   if (raw.startsWith('http://') || raw.startsWith('https://')) {
     return '/fastapi';
   }
   return raw.replace(/\/$/, '') || '/fastapi';
 }
 
-const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = fastApiBrowserBase();
+const fastApiBrowserBaseUrl = fastApiBrowserBase();
 const FASTAPI_SESSION_FETCH_PREFIX = fastApiBrowserBase();
 
 function authFromGlobalSessionOnly(config: InternalAxiosRequestConfig): void {
@@ -78,7 +79,7 @@ function authFromGlobalSessionOnly(config: InternalAxiosRequestConfig): void {
 }
 
 const api = axios.create({
-  baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL, 
+  baseURL: fastApiBrowserBaseUrl, 
   headers: {
     'Content-Type': 'application/json',
   },
@@ -203,7 +204,7 @@ api.interceptors.response.use(
 export class DocRouterOrgApi extends DocRouterOrg {
  constructor(organizationId: string) {
     super({
-      baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL,
+      baseURL: fastApiBrowserBaseUrl,
       orgToken: '', // Empty token so tokenProvider will be used
       organizationId: organizationId,
     });
@@ -255,7 +256,7 @@ function listOrgsCacheKey(params?: {
 export class DocRouterAccountApi extends DocRouterAccount {
   constructor() {
     super({
-      baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL,
+      baseURL: fastApiBrowserBaseUrl,
       accountToken: '', // Empty token so tokenProvider will be used
     });
 

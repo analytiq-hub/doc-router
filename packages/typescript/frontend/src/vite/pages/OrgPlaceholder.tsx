@@ -1,6 +1,6 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 
-/** Stub until org routes are ported from the Next App Router. */
+/** Fallback when no org child route matches (should be rare). */
 export function OrgPlaceholderPage() {
   const { organizationId, '*': splat } = useParams();
   const location = useLocation();
@@ -10,26 +10,23 @@ export function OrgPlaceholderPage() {
       : location.pathname.replace(/^\/orgs\/[^/]+/, '') || '';
 
   return (
-    <main className="max-w-lg mx-auto mt-16 p-6 space-y-4">
-      <h1 className="text-xl font-semibold text-gray-900">Route not migrated yet (Vite)</h1>
+    <main className="mx-auto mt-16 max-w-lg space-y-4 p-6">
+      <h1 className="text-xl font-semibold text-gray-900">Unknown org route</h1>
       <p className="text-sm text-gray-600">
-        Org <code className="text-xs bg-gray-100 px-1 rounded">{organizationId}</code>
+        Org <code className="rounded bg-gray-100 px-1 text-xs">{organizationId}</code>
         {subpath && (
           <>
             {' '}
-            path <code className="text-xs bg-gray-100 px-1 rounded">{subpath}</code>
+            path <code className="rounded bg-gray-100 px-1 text-xs">{subpath}</code>
           </>
         )}
       </p>
       <p className="text-sm text-gray-600">
-        Use the full app on{' '}
-        <a className="text-blue-600 hover:underline" href={`http://localhost:3000/orgs/${organizationId}${subpath}`}>
-          Next.js :3000
-        </a>{' '}
-        until this screen is ported.
+        This path is not registered in the Vite router. Check{' '}
+        <code className="text-xs">src/router.tsx</code> or file a bug if a screen is missing.
       </p>
-      <Link className="text-blue-600 hover:underline text-sm" to="/">
-        ← Vite home
+      <Link className="text-sm text-blue-600 hover:underline" to={`/orgs/${organizationId}/dashboard`}>
+        Go to org dashboard
       </Link>
     </main>
   );

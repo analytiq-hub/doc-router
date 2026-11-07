@@ -1,7 +1,7 @@
 # Eliminating Next.js: where we are and cutover plan
 
 Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_route_manifest.md`](./vite_route_manifest.md).  
-**Branch:** `vite`. **Phase A–B complete**; **Phase C in progress** (client code off `next/*` shims); **`next` still in `package.json`** for server layouts + optional `DOCROUTER_DEV_NEXT` until Phase E.
+**Branch:** `vite`. **Phases A–D complete** for the Vite SPA; **`next` still in `package.json`** until Phase E (optional `DOCROUTER_DEV_NEXT=1`).
 
 ---
 
@@ -129,15 +129,16 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 ---
 
-### Phase D — Restructure away from App Router **filesystem** — **in progress**
+### Phase D — Restructure away from App Router **filesystem** — **complete**
 
 | # | Task | Status |
 |---|------|--------|
-| D1 | Move pages → `src/pages/**`; `app/**/page.tsx` re-exports | ✅ org, settings, misc (`phase-d-move-pages.mjs`) |
+| D1 | Move pages → `src/pages/**`; `app/**/page.tsx` re-exports | ✅ |
 | D2 | Client root layout (`ClientRootLayout`); no server session | ✅ |
 | D3 | Remove `session.ts` / `next/headers` | ✅ |
 | D4 | Lazy route chunks in `router.tsx` (`lazyRoute.tsx`) | ✅ |
-| D5 | Rename env `NEXT_PUBLIC_*` → `VITE_*` | Follow-up |
+| D5 | `publicEnv.ts` + `VITE_*` (legacy `NEXT_PUBLIC_*` in vite `define`) | ✅ |
+| D6 | `src/app/README.md`; stubs only; OrgPlaceholder trim | ✅ |
 
 ---
 
@@ -172,7 +173,7 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 1. **Merge `vite` → `main`** after review; cut a release so GHCR frontend image matches compose/Kind smoke.
 2. **Staging/K8s smoke** once per environment (login, PDF, flows).
-3. **Phase D (continued)** — move org/settings `page.tsx` into `src/pages/`; then Phase E (drop `next` package).
+3. **Phase E** — remove `next` package, `next.config.mjs`, Next scripts; ESLint without `eslint-config-next`.
 
 ---
 
@@ -183,4 +184,4 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 - Docker Vite target: `deploy/shared/docker/Dockerfile` (`frontend` → `runner`), `packages/typescript/frontend/nginx-spa.conf`
 - Navigation: `packages/typescript/frontend/src/utils/appRouter.ts`, `dynamicImport.tsx`, `AppImage.tsx`
 
-*Last updated: Phase D batch 1 — no `next/*` in src; auth/home under `src/pages/`.*
+*Last updated: Phase D complete — `src/pages/`, `VITE_*`, app stubs only.*

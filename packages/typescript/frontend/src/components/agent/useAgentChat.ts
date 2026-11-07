@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { apiClient, getApiErrorMsg, getSessionToken } from '@/utils/api';
+import { apiClient, fastApiBrowserBase, getApiErrorMsg, getSessionToken } from '@/utils/api';
 
-const API_BASE = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi') : '/fastapi';
+const API_BASE = fastApiBrowserBase();
 
 export interface ExecutedRound {
   thinking?: string | null;

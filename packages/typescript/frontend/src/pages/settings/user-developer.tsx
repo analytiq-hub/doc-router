@@ -4,9 +4,10 @@ import React from 'react';
 import SettingsLayout, { settingsSectionTitleClass, settingsDescriptionClass } from '@/components/SettingsLayout';
 import { Link } from 'react-router-dom';
 import { Button } from '@mui/material';
+import { fastApiBrowserBase } from '@/utils/api';
 
 const DeveloperPage: React.FC = () => {
-  const apiUrl = `${process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi'}/docs`;
+  const apiUrl = `${fastApiBrowserBase()}/docs`;
   
   return (
     <SettingsLayout selectedMenu="user_developer">
