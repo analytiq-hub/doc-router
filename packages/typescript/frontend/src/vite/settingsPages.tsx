@@ -23,10 +23,7 @@ export const SettingsOrganizationEdit = withRouteParams(
   OrganizationEditSettingsPage,
 );
 export const SettingsOrganizationWebhooks = OrganizationWebhooksPage;
-export const SettingsOrganizationSubscription = withRouteParams(
-  ['organizationId'],
-  OrganizationSubscriptionPage,
-);
+export const SettingsOrganizationSubscription = OrganizationSubscriptionPage;
 export const SettingsUserProfile = UserProfilePage;
 export const SettingsUserDeveloper = UserDeveloperPage;
 export const SettingsUserAccessTokens = UserAccessTokensPage;
