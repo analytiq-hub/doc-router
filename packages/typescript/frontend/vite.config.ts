@@ -34,6 +34,7 @@ export default defineConfig(({ mode }) => {
         '@docrouter/sdk': path.resolve(__dirname, '../sdk/src/index.ts'),
         'next/link': path.resolve(__dirname, './src/shims/next-link.tsx'),
         'next/navigation': path.resolve(__dirname, './src/shims/next-navigation.ts'),
+        'next/dynamic': path.resolve(__dirname, './src/shims/next-dynamic.tsx'),
       },
     },
     define: nextPublicEnvDefine(mode),
