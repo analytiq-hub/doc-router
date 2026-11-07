@@ -1,14 +1,14 @@
 'use client'
 
-import { use } from 'react';
 import TagList from '@/components/TagList';
+import { useRouteParams, type RouteParamsProps } from '@/utils/useRouteParams';
 import TagCreate from '@/components/TagCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
-export default function TagsPage({ params }: { params: Promise<{ organizationId: string }> }) {
-  const { organizationId } = use(params);
+export default function TagsPage(props: RouteParamsProps<{ organizationId: string }>) {
+  const { organizationId } = useRouteParams(props);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'tags';

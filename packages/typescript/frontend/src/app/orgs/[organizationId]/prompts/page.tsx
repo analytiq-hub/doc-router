@@ -1,14 +1,14 @@
 'use client'
 
-import { use } from 'react';
 import PromptList from '@/components/PromptList';
+import { useRouteParams, type RouteParamsProps } from '@/utils/useRouteParams';
 import PromptCreate from '@/components/PromptCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 
-export default function PromptsPage({ params }: { params: Promise<{ organizationId: string }> }) {
-  const { organizationId } = use(params);
+export default function PromptsPage(props: RouteParamsProps<{ organizationId: string }>) {
+  const { organizationId } = useRouteParams(props);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'prompts';

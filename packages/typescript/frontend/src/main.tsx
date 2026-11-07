@@ -3,7 +3,14 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import '@/vite/vite-shell.css';
+import '@/vite/tailwind-prelude.css';
+import '@/vite/formio-tailwind';
+import '@/styles/formio-custom.css';
+import '@/vite/tailwind-utilities.css';
+import { ensureFormioStyles } from '@/vite/ensureFormioStyles';
 import { AppProviders } from '@/vite/AppProviders';
+
+ensureFormioStyles();
 import { router } from './router';
 
 const root = document.getElementById('root');
