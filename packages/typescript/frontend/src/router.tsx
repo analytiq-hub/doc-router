@@ -11,15 +11,43 @@ import { OrgDocumentViewer } from '@/vite/OrgDocumentViewer';
 import { OrgDocuments } from '@/vite/OrgDocuments';
 import { OrgLayout } from '@/vite/OrgLayout';
 import {
+  OrgCaseDetail,
+  OrgCaseEdit,
   OrgCases,
   OrgFlowDetail,
   OrgFlows,
+  OrgFormByIdRedirect,
+  OrgFormEdit,
   OrgForms,
   OrgKnowledgeBases,
+  OrgModels,
+  OrgPromptByIdRedirect,
+  OrgPromptEdit,
   OrgPrompts,
+  OrgSchemaByIdRedirect,
+  OrgSchemaEdit,
   OrgSchemas,
+  OrgTagEdit,
   OrgTags,
+  OrgUpload,
 } from '@/vite/orgPages';
+import {
+  SettingsAccountDevelopment,
+  SettingsAccountLicense,
+  SettingsAccountUserDetail,
+  SettingsAccountUsers,
+  SettingsDeveloperAccountTokens,
+  SettingsDeveloperOrgTokens,
+  SettingsDeveloperOrgWebhooks,
+  SettingsIndex,
+  SettingsOrganizationEdit,
+  SettingsOrganizations,
+  SettingsOrganizationSubscription,
+  SettingsOrganizationWebhooks,
+  SettingsUserAccessTokens,
+  SettingsUserDeveloper,
+  SettingsUserProfile,
+} from '@/vite/settingsPages';
 import { RequireAuth } from '@/vite/RequireAuth';
 import { RouterProviders } from '@/vite/RouterProviders';
 
@@ -28,15 +56,45 @@ const orgChildRoutes: RouteObject[] = [
   { path: 'dashboard', element: <OrgDashboard /> },
   { path: 'docs', element: <OrgDocuments /> },
   { path: 'docs/:id', element: <OrgDocumentViewer /> },
+  { path: 'upload', element: <OrgUpload /> },
   { path: 'cases', element: <OrgCases /> },
+  { path: 'cases/:caseId', element: <OrgCaseDetail /> },
+  { path: 'cases/:caseId/edit', element: <OrgCaseEdit /> },
   { path: 'tags', element: <OrgTags /> },
+  { path: 'tags/:tagId', element: <OrgTagEdit /> },
   { path: 'schemas', element: <OrgSchemas /> },
+  { path: 'schemas/by-id/:schemaId', element: <OrgSchemaByIdRedirect /> },
+  { path: 'schemas/:schemaRevId', element: <OrgSchemaEdit /> },
   { path: 'prompts', element: <OrgPrompts /> },
+  { path: 'prompts/by-id/:promptId', element: <OrgPromptByIdRedirect /> },
+  { path: 'prompts/:promptRevId', element: <OrgPromptEdit /> },
   { path: 'forms', element: <OrgForms /> },
+  { path: 'forms/by-id/:formId', element: <OrgFormByIdRedirect /> },
+  { path: 'forms/:formId', element: <OrgFormEdit /> },
   { path: 'knowledge-bases', element: <OrgKnowledgeBases /> },
+  { path: 'models', element: <OrgModels /> },
   { path: 'flows', element: <OrgFlows /> },
   { path: 'flows/:flowId', element: <OrgFlowDetail /> },
   { path: '*', element: <OrgPlaceholderPage /> },
+];
+
+const settingsChildRoutes: RouteObject[] = [
+  { index: true, element: <SettingsIndex /> },
+  { path: 'organizations', element: <SettingsOrganizations /> },
+  { path: 'organizations/:organizationId', element: <SettingsOrganizationEdit /> },
+  { path: 'organizations/:organizationId/webhooks', element: <SettingsOrganizationWebhooks /> },
+  { path: 'organizations/:organizationId/subscription', element: <SettingsOrganizationSubscription /> },
+  { path: 'user/profile', element: <SettingsUserProfile /> },
+  { path: 'user/developer', element: <SettingsUserDeveloper /> },
+  { path: 'user/access-tokens', element: <SettingsUserAccessTokens /> },
+  { path: 'user/developer/account-access-tokens', element: <SettingsDeveloperAccountTokens /> },
+  { path: 'user/developer/organization-access-tokens', element: <SettingsDeveloperOrgTokens /> },
+  { path: 'user/developer/organization-webhooks', element: <SettingsDeveloperOrgWebhooks /> },
+  { path: 'account/users', element: <SettingsAccountUsers /> },
+  { path: 'account/users/:userId', element: <SettingsAccountUserDetail /> },
+  { path: 'account/license', element: <SettingsAccountLicense /> },
+  { path: 'account/development', element: <SettingsAccountDevelopment /> },
+  { path: 'account/development/*', element: <OrgPlaceholderPage /> },
 ];
 
 export const routes: RouteObject[] = [
@@ -58,6 +116,11 @@ export const routes: RouteObject[] = [
                 path: 'orgs/:organizationId',
                 element: <OrgLayout />,
                 children: orgChildRoutes,
+              },
+              {
+                path: 'settings',
+                element: <Outlet />,
+                children: settingsChildRoutes,
               },
               {
                 path: '*',
