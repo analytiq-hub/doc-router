@@ -18,6 +18,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make dev                     - Start FastAPI, Next.js, and Vite (./start-all.sh)"
+	@echo "                               DOCROUTER_DEV_NEXT=0 — Vite-only UI; DOCROUTER_DEV_VITE=0 — skip Vite"
 	@echo ""
 	@echo "Setup & Installation:"
 	@echo "  make setup                   - Interactive menu: Python, TypeScript, Dev (both), Kubernetes, or UI setup"

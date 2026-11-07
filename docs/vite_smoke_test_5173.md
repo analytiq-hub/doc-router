@@ -2,7 +2,10 @@
 
 Automated/browser pass on branch `vite`. Re-run after large router or auth changes.
 
-**Prereqs:** `make dev` (FastAPI :8000, Vite :5173), signed-in session.
+**Prereqs:** FastAPI :8000 + Vite :5173, signed-in session.
+
+- Full stack: `make dev`
+- **Vite-only (Next off):** `DOCROUTER_DEV_NEXT=0 make dev` — use **http://localhost:5173** only
 
 ## Session / API
 

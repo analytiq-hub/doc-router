@@ -26,3 +26,17 @@ css = css.replace(/url\s*\(\s*['"]?fonts\/fontawesome-webfont\.(eot|woff2|woff|t
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, css);
 console.log('patch-formio-css: wrote public/formio.full.css');
+
+// Vite dev tries to load bootstrap-grid.css.map referenced from @tsed/tailwind-formio grid.css (not shipped).
+const gridCss = path.join(
+  __dirname,
+  '../node_modules/@tsed/tailwind-formio/styles/grid.css',
+);
+if (fs.existsSync(gridCss)) {
+  const grid = fs.readFileSync(gridCss, 'utf8');
+  const stripped = grid.replace(/\/\*#\s*sourceMappingURL=[^*]+\*\//g, '');
+  if (stripped !== grid) {
+    fs.writeFileSync(gridCss, stripped);
+    console.log('patch-formio-css: removed broken sourceMappingURL from @tsed/tailwind-formio grid.css');
+  }
+}
