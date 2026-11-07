@@ -116,8 +116,10 @@ Then the SPA (Next or Vite) only needs **`credentials: 'include'`** on fetch and
 
 ### Phase 5 — Environment and deployment
 
-- [ ] Replace `NEXT_PUBLIC_*` with **`VITE_*`** (or keep a small compatibility layer in `src/config/env.ts`).
-- [ ] Update **Dockerfile / compose / K8s / `start-all.sh`** to build `vite build` and serve `dist/` (static server or nginx).
+- [x] **`vite.config.ts`** defines `NEXT_PUBLIC_*` from repo `.env` for shared modules (no rename required yet).
+- [x] **Docker optional target:** `docker build --target runner-vite -f deploy/shared/docker/Dockerfile .` serves **`dist-vite/`** via **`nginx-spa.conf`** (`try_files` → `index.html`). Compose edge **`deploy/compose/nginx.conf`** still proxies to Next until you swap the `frontend` service image.
+- [ ] Wire compose/K8s to **`runner-vite`** when cutting over; set OAuth/`return_to` for production origin.
+- [ ] Replace `NEXT_PUBLIC_*` with **`VITE_*`** (optional cleanup).
 - [ ] Remove **Next standalone** artifacts; align with doc-orchestrator’s static hosting pattern.
 - [ ] **ESLint:** Replace `eslint-config-next` with `@eslint/js` + `typescript-eslint` + `eslint-plugin-react-hooks` (or flat config mirroring orchestrator).
 

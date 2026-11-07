@@ -8,6 +8,7 @@ import '@/vite/formio-tailwind';
 import '@/styles/formio-custom.css';
 import '@/vite/tailwind-utilities.css';
 import '@/vite/app-theme.css';
+import '@/styles/markdown-prose.css';
 import { ensureFormioStyles } from '@/vite/ensureFormioStyles';
 import { AppProviders } from '@/vite/AppProviders';
 

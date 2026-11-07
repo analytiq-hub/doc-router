@@ -55,6 +55,41 @@ COPY --from=frontend /app/packages/typescript/frontend/public ./frontend/public
 EXPOSE 3000
 CMD ["node", "frontend/server.js"]
 
+# --- Vite static SPA (optional: docker build --target runner-vite) ---
+FROM node:24 AS frontend-vite
+WORKDIR /app
+COPY packages/typescript/sdk/ ./packages/typescript/sdk/
+RUN cd packages/typescript/sdk && npm install
+COPY packages/typescript/frontend/package*.json ./packages/typescript/frontend/
+COPY packages/typescript/frontend/scripts/ ./packages/typescript/frontend/scripts/
+RUN cd packages/typescript/frontend && npm install
+ARG NODE_ENV=production
+ARG PUBLIC_API_URL=/fastapi
+ARG APP_NAME="Smart Document Router"
+ARG APP_FAVICON=""
+ENV NODE_ENV=${NODE_ENV}
+ENV PUBLIC_API_URL=${PUBLIC_API_URL}
+ENV APP_NAME=${APP_NAME}
+ENV APP_FAVICON=${APP_FAVICON}
+ENV NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${PUBLIC_API_URL}
+COPY packages/typescript/frontend/ ./packages/typescript/frontend/
+COPY branding ./branding
+COPY scripts/sync-branding.sh ./scripts/sync-branding.sh
+ARG NODE_MAX_OLD_SPACE_MB=4096
+ENV NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE_MB}
+RUN chmod +x ./scripts/sync-branding.sh \
+    && printf 'APP_NAME=%s\n' "$APP_NAME" > .env \
+    && { [ -z "$APP_FAVICON" ] || printf 'APP_FAVICON=%s\n' "$APP_FAVICON" >> .env; } \
+    && printf 'NEXT_PUBLIC_FASTAPI_FRONTEND_URL=%s\n' "$PUBLIC_API_URL" >> .env \
+    && ./scripts/sync-branding.sh \
+    && cd packages/typescript/frontend && npm run build:vite
+
+FROM nginx:alpine AS runner-vite
+COPY packages/typescript/frontend/nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY --from=frontend-vite /app/packages/typescript/frontend/dist-vite /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
 # Use slim Python 3.12 as the base image
 FROM python:3.12-slim AS backend
 

@@ -319,6 +319,15 @@ clean:
 	rm -rf .venv
 
 # DockerHub targets
+dockerhub-build-frontend-vite:
+	@echo "Building Vite static frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)-vite"
+	@echo "Using PUBLIC_API_URL=$(PUBLIC_API_URL)"
+	docker build -t $(FRONTEND_IMAGE):$(IMAGE_TAG)-vite \
+		--target runner-vite \
+		--build-arg PUBLIC_API_URL=$(PUBLIC_API_URL) \
+		--build-arg NODE_ENV=$(NODE_ENV) \
+		-f $(DOCKERFILE) .
+
 dockerhub-build-frontend:
 	@echo "Building frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)"
 	@echo "Using PUBLIC_API_URL=$(PUBLIC_API_URL)"
