@@ -1,0 +1,4 @@
+/* Minimal Tailwind for the Vite migration shell (no Formio @import chain yet). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
