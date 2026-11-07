@@ -12,13 +12,7 @@ services:
         - NODE_MAX_OLD_SPACE_MB=${NODE_MAX_OLD_SPACE_MB:-2560}
         - APP_NAME=${APP_NAME:-Smart Document Router}
         - APP_FAVICON=${APP_FAVICON:-}
-    environment:
-      # Runtime environment
-      - ENV=${ENV:-dev}
-      - MONGODB_URI=${MONGODB_URI:-mongodb://YOUR_HOST_IP:27017}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - APP_SECRET=${APP_SECRET:-default_secret_for_development}
-    command: node frontend/server.js
+    # Vite SPA (nginx); session/OAuth env lives on backend/worker — public app URL is NEXTAUTH_URL on those services.
     restart: unless-stopped
     networks:
       - doc-router-network

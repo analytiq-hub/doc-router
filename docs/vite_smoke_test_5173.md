@@ -4,8 +4,8 @@ Automated/browser pass on branch `vite`. Re-run after large router or auth chang
 
 **Prereqs:** FastAPI :8000 + Vite :5173, signed-in session.
 
-- Full stack: `make dev`
-- **Vite-only (Next off):** `DOCROUTER_DEV_NEXT=0 make dev` — use **http://localhost:5173** only
+- **Default:** `make dev` → FastAPI + **http://localhost:5173** (Next off unless `DOCROUTER_DEV_NEXT=1`)
+- **Docker compose:** edge **http://localhost:3000** → Vite nginx frontend (see `deploy/compose/nginx.conf`)
 
 ## Session / API
 

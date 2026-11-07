@@ -160,7 +160,7 @@ If ports 3000 or 8000 are already in use:
 1. Modify the kind cluster configuration in `setup-kind.sh`
 2. Or use port forwarding:
    ```bash
-   kubectl port-forward service/frontend 3000:3000 -n doc-router
+   kubectl port-forward service/frontend 3000:80 -n doc-router
    kubectl port-forward service/backend 8000:8000 -n doc-router
    ```
 

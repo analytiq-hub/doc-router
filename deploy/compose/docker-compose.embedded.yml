@@ -12,17 +12,7 @@ services:
         - NODE_MAX_OLD_SPACE_MB=${NODE_MAX_OLD_SPACE_MB:-2560}
         - APP_NAME=${APP_NAME:-Smart Document Router}
         - APP_FAVICON=${APP_FAVICON:-}
-    environment:
-      # Runtime environment
-      - ENV=${ENV:-dev}
-      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - APP_SECRET=${APP_SECRET:-default_secret_for_development}
-      - AUTH_GITHUB_ID=${AUTH_GITHUB_ID}
-      - AUTH_GITHUB_SECRET=${AUTH_GITHUB_SECRET}
-      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
-      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
-    command: node frontend/server.js
+    # Vite SPA (nginx); auth secrets and NEXTAUTH_URL are on backend/worker.
     restart: unless-stopped
     networks:
       - doc-router-local-network

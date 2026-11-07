@@ -116,7 +116,7 @@ echo "Running database migrations..."
 "${PROJECT_ROOT}/scripts/sync-branding.sh"
 
 FRONTEND_DIR="${PROJECT_ROOT}/packages/typescript/frontend"
-if [ "${DOCROUTER_DEV_NEXT:-1}" != "0" ]; then
+if [ "${DOCROUTER_DEV_NEXT:-0}" != "0" ]; then
     # Stale .next client chunks can still call removed next-auth APIs after auth migrations.
     echo "Clearing Next.js build cache..."
     rm -rf "${FRONTEND_DIR}/.next"
@@ -129,12 +129,12 @@ FASTAPI_BIND="${FASTAPI_HOST}:${FASTAPI_PORT}"
 # Run all processes (workers run inside uvicorn via FastAPI lifespan)
 echo -e "${RED}[FASTAPI] Starting uvicorn on http://${FASTAPI_BIND}${NC}"
 run_with_color "uvicorn app.main:app --reload --host ${FASTAPI_HOST} --port ${FASTAPI_PORT}" "$RED" "FASTAPI" "packages/python"
-# Next (3000). Set DOCROUTER_DEV_NEXT=0 for Vite-only UI smoke (keeps FastAPI + Vite).
-if [ "${DOCROUTER_DEV_NEXT:-1}" != "0" ]; then
+# Next (3000). Opt in with DOCROUTER_DEV_NEXT=1 for comparison while migrating.
+if [ "${DOCROUTER_DEV_NEXT:-0}" != "0" ]; then
     echo -e "${MAGENTA}[NEXTJS] Starting Next.js on http://localhost:3000${NC}"
     run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"
 else
-    echo -e "${MAGENTA}[NEXTJS] Skipped (DOCROUTER_DEV_NEXT=0)${NC}"
+    echo -e "${MAGENTA}[NEXTJS] Skipped (set DOCROUTER_DEV_NEXT=1 to enable)${NC}"
 fi
 
 # Vite migration shell (parallel to Next). Set DOCROUTER_DEV_VITE=0 to skip.

@@ -18,7 +18,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make dev                     - Start FastAPI, Next.js, and Vite (./start-all.sh)"
-	@echo "                               DOCROUTER_DEV_NEXT=0 — Vite-only UI; DOCROUTER_DEV_VITE=0 — skip Vite"
+	@echo "                               UI default Vite-only; DOCROUTER_DEV_NEXT=1 — also start Next on :3000"
 	@echo ""
 	@echo "Setup & Installation:"
 	@echo "  make setup                   - Interactive menu: Python, TypeScript, Dev (both), Kubernetes, or UI setup"
@@ -332,9 +332,9 @@ dockerhub-build-frontend-vite:
 dockerhub-build-frontend:
 	@echo "Building frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)"
 	@echo "Using PUBLIC_API_URL=$(PUBLIC_API_URL)"
-	@echo "Note: This value is baked into the Next.js build. Override with: make dockerhub-build-frontend PUBLIC_API_URL=your-url"
+	@echo "Note: Vite SPA (nginx). Override with: make dockerhub-build-frontend PUBLIC_API_URL=your-url"
 	docker build -t $(FRONTEND_IMAGE):$(IMAGE_TAG) \
-		--target frontend \
+		--target runner \
 		--build-arg PUBLIC_API_URL=$(PUBLIC_API_URL) \
 		--build-arg NODE_ENV=$(NODE_ENV) \
 		-f $(DOCKERFILE) .

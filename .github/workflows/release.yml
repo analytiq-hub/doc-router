@@ -63,7 +63,7 @@ jobs:
         with:
           context: .
           file: deploy/shared/docker/Dockerfile
-          target: runner
+          target: runner # Vite SPA (nginx); legacy Next: runner-next
           push: true
           tags: ${{ steps.tags.outputs.frontend }}
           platforms: linux/amd64,linux/arm64
