@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useSearchParams } from '@/utils/appRouter';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { DocRouterAccountApi } from '@/utils/api';
 import SubscriptionPlans from './SubscriptionPlans';
@@ -165,7 +165,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
             {currentPlan === 'enterprise' ? 'Previous Plan Billing' : 'Manage Billing'}
           </a>
         )}
-        <Link href={orgSettingsHref} className={orgSettingsButtonClass}>
+        <Link to={orgSettingsHref} className={orgSettingsButtonClass}>
           <SettingsIcon className="w-4 h-4 mr-2" fontSize="small" />
           Org settings
         </Link>

@@ -7,7 +7,7 @@ import { KnowledgeBaseDocument, KBChunk } from '@docrouter/sdk';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import colors from 'tailwindcss/colors';
 import { toast } from 'react-toastify';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DraggablePanel from '@/components/DraggablePanel';
@@ -153,7 +153,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
       renderCell: (params) => (
         <div className="flex h-full w-full items-center">
           <Link
-            href={`/orgs/${organizationId}/docs/${params.row.document_id}`}
+            to={`/orgs/${organizationId}/docs/${params.row.document_id}`}
             className="text-blue-600 hover:underline"
           >
             {params.row.document_name}

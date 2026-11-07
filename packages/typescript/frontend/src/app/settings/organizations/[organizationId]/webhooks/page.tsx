@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 
 /**
  * Webhooks are now managed from Settings -> User -> Developer -> Organization Webhooks.

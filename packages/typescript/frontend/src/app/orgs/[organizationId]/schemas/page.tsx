@@ -3,7 +3,7 @@
 import SchemaList from '@/components/SchemaList';
 import { useRouteParams } from '@/utils/useRouteParams';
 import SchemaCreate from '@/components/SchemaCreate';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 

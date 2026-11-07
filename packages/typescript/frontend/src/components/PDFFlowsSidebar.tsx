@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -109,7 +109,7 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
     >
       <span className="text-sm text-gray-900">
         <Link
-          href={`/orgs/${organizationId}/flows/${flowId}`}
+          to={`/orgs/${organizationId}/flows/${flowId}`}
           onClick={(e) => e.stopPropagation()}
           className="font-medium text-blue-700 hover:underline"
           title={flowName}
@@ -424,7 +424,7 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
                   <div>
                     {resultRow.execution_id ? (
                       <Link
-                        href={`/orgs/${organizationId}/flows/${flowId}?tab=executions`}
+                        to={`/orgs/${organizationId}/flows/${flowId}?tab=executions`}
                         className="text-xs text-gray-500 hover:text-gray-800 hover:underline"
                       >
                         Last run {formatTimestamp(resultRow.updated_at)}

@@ -12,8 +12,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
 import { isColorLight } from '@/utils/colors';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from '@/utils/appRouter';
+import { Link } from 'react-router-dom';
 import TagInfoModal from '@/components/TagInfoModal';
 import { formatLocalDate } from '@/utils/date';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
@@ -219,7 +219,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
               <>
                 {' '}
                 If no tags are available,{' '}
-                <Link href={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-blue-600 font-medium hover:underline">
+                <Link to={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-blue-600 font-medium hover:underline">
                   click here
                 </Link>{' '}
                 or use the tab above to create a new tag.

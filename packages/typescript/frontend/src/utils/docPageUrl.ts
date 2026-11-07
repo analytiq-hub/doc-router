@@ -1,4 +1,3 @@
-import type { ReadonlyURLSearchParams } from 'next/navigation';
 
 export type DocSidebarTab = 'extraction' | 'flows' | 'forms';
 
@@ -11,7 +10,7 @@ export function sidebarTabFromQuery(value: string | null): DocSidebarTab {
 export function docPageHrefWithSearch(
   pathname: string,
   tab: DocSidebarTab,
-  searchParams: ReadonlyURLSearchParams | URLSearchParams,
+  searchParams: URLSearchParams,
 ): string {
   const params = new URLSearchParams(searchParams.toString());
   if (tab === 'extraction') {
@@ -28,7 +27,7 @@ export function docPageHref(
   organizationId: string,
   documentId: string,
   tab: DocSidebarTab,
-  searchParams: ReadonlyURLSearchParams | URLSearchParams,
+  searchParams: URLSearchParams,
 ): string {
   return docPageHrefWithSearch(
     `/orgs/${organizationId}/docs/${documentId}`,

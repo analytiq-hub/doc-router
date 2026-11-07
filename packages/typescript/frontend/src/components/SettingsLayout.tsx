@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isSysAdmin } from '@/utils/roles';
 import {
@@ -138,7 +138,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
                         className="mx-1"
                       >
                         <Link
-                          href={item.href}
+                          to={item.href}
                           className={[
                             'flex items-center justify-center h-10 rounded-md',
                             'text-sm font-medium transition-colors duration-200',
@@ -166,7 +166,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
                     return (
                       <Link
                         key={item.id}
-                        href={item.href}
+                        to={item.href}
                         className={[
                           settingsNavLinkClass,
                           'text-sm font-medium whitespace-nowrap transition-colors duration-200',

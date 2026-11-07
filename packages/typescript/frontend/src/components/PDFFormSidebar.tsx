@@ -9,7 +9,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import type { Form } from '@docrouter/sdk';
 import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { HighlightInfo } from '@/hooks/useOCRBlocks';
-import dynamic from 'next/dynamic';
+import dynamic from '@/utils/dynamicImport';
 import { documentHasMatchingForms, loadDocumentMatchingForms } from '@/utils/documentForms';
 
 const FormioRenderer = dynamic(() => import('./FormioRenderer'), {

@@ -9,7 +9,7 @@ import { DocRouterAccountApi } from '@/utils/api';
 import { Organization, CreateOrganizationRequest } from '@docrouter/sdk';
 import colors from 'tailwindcss/colors';
 import { isAxiosError } from 'axios';
-import { useRouter } from 'next/navigation'
+import { useRouter } from '@/utils/appRouter'
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import MoreVertIcon from '@mui/icons-material/MoreVert';

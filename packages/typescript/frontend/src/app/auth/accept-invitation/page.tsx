@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import UserAcceptInvitation from '@/components/UserAcceptInvitation';
 import { toast } from 'react-toastify';
 

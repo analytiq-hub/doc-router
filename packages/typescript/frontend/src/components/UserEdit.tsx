@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { DocRouterAccountApi } from '@/utils/api';
 import { User, UserUpdate } from '@docrouter/sdk';
 import { signOut } from '@/utils/signOut';

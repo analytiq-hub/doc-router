@@ -2,7 +2,7 @@
 
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { DocRouterAccountApi } from '@/utils/api';
 import { toast } from 'react-toastify';
 import { useAppSession } from '@/contexts/AppSessionContext';

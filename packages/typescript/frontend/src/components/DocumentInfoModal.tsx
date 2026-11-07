@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Document, Tag } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
@@ -127,7 +127,7 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
               {document.case_id ? (
                 <Link
-                  href={`/orgs/${organizationId}/cases/${encodeURIComponent(document.case_id)}`}
+                  to={`/orgs/${organizationId}/cases/${encodeURIComponent(document.case_id)}`}
                   className="text-blue-600 underline"
                 >
                   {document.case_id}

@@ -3,7 +3,7 @@
 import PromptList from '@/components/PromptList';
 import { useRouteParams } from '@/utils/useRouteParams';
 import PromptCreate from '@/components/PromptCreate';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 

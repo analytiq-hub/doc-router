@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppSession } from '@/contexts/AppSessionContext';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname } from '@/utils/appRouter';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { setHasSeenTour, hasSeenTour } from '@/utils/tourGuide';
 

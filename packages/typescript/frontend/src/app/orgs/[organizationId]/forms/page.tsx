@@ -3,7 +3,7 @@
 import FormList from '@/components/FormList';
 import { useRouteParams } from '@/utils/useRouteParams';
 import FormCreate from '@/components/FormCreate';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 

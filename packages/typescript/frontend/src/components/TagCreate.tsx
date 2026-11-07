@@ -9,7 +9,7 @@ import { Tag } from '@docrouter/sdk';
 type TagConfig = Omit<Tag, 'id' | 'created_at' | 'updated_at'>;
 import colors from 'tailwindcss/colors';
 import InfoTooltip from '@/components/InfoTooltip';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
 import BadgeIcon from '@mui/icons-material/Badge';
 import TagInfoModal from '@/components/TagInfoModal';

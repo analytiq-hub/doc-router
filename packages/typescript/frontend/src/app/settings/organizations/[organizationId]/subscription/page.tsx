@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import { useParams } from 'next/navigation';
+import { useParams } from '@/utils/appRouter';
 import SubscriptionManager from '@/components/SubscriptionManager';
 import { useAppSession } from '@/utils/useAppSession';
 import SettingsLayout from '@/components/SettingsLayout';

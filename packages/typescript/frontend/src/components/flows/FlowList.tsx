@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useRouter } from '@/utils/appRouter';
 import {
   BoltIcon,
   BoltSlashIcon,
@@ -166,7 +166,7 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                 <tr key={item.flow.flow_id} className="hover:bg-gray-50/80">
                   <td className={td}>
                     <Link
-                      href={`/orgs/${organizationId}/flows/${item.flow.flow_id}`}
+                      to={`/orgs/${organizationId}/flows/${item.flow.flow_id}`}
                       className="font-medium text-blue-700 hover:underline"
                     >
                       {item.flow.name}

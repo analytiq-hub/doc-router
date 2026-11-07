@@ -7,7 +7,7 @@ import { Box, IconButton, TextField, InputAdornment, Autocomplete, Menu, MenuIte
 import { isAxiosError } from 'axios';
 // All API calls now use docRouterOrgApi
 import { Tag, Document } from '@docrouter/sdk';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
@@ -315,7 +315,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       flex: 2,
       renderCell: (params) => {
         return (
-          <Link href={`/orgs/${organizationId}/docs/${params.row.id}`}
+          <Link to={`/orgs/${organizationId}/docs/${params.row.id}`}
             title={params.value}
             className="block truncate"
             style={{ color: 'blue', textDecoration: 'underline' }}>
@@ -365,7 +365,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         if (!cid) return <span className="text-gray-400">—</span>;
         return (
           <Link
-            href={`/orgs/${organizationId}/cases/${encodeURIComponent(cid)}`}
+            to={`/orgs/${organizationId}/cases/${encodeURIComponent(cid)}`}
             className="text-blue-600 underline truncate"
             title={cid}
           >
@@ -513,7 +513,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
           <p className="text-sm">
             Welcome! Upload your documents to begin transforming unstructured data into structured insights. 
-            If no documents are visible, <Link href={`/orgs/${organizationId}/docs?tab=upload`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to upload and start extracting key data fields effortlessly.
+            If no documents are visible, <Link to={`/orgs/${organizationId}/docs?tab=upload`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to upload and start extracting key data fields effortlessly.
           </p>
         </div>
       )}

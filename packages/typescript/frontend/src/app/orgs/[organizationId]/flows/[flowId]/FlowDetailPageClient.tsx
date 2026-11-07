@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useRouter, useSearchParams } from '@/utils/appRouter';
 import type {
   FlowExecution,
   FlowExecutionSummary,
@@ -967,9 +967,8 @@ export default function FlowDetailPageClient({
       <div className="mx-auto w-full max-w-[1920px]">
         <div className="mb-4">
           <Link
-            href={`/orgs/${organizationId}/flows`}
+            to={`/orgs/${organizationId}/flows`}
             className="text-sm text-blue-600 hover:text-blue-700"
-            prefetch={false}
           >
             ← Back to flows
           </Link>

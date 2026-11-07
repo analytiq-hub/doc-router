@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { useDropzone } from 'react-dropzone';
 import { DocRouterOrgApi } from '@/utils/api';
 import { isColorLight } from '@/utils/colors';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { 
   Description as DocumentIcon,
   DataObject as SchemaIcon,
@@ -245,7 +245,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
             }}
             className="min-w-[250px]"
           />
-          <Link href={`/orgs/${organizationId}/docs?tab=upload`}>
+          <Link to={`/orgs/${organizationId}/docs?tab=upload`}>
             <Button
               variant="contained"
               startIcon={<UploadIcon />}
@@ -303,7 +303,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
           return (
             <Link
               key={widget.title}
-              href={widget.href}
+              to={widget.href}
               className="flex items-center gap-2 min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 shadow-sm hover:border-gray-300 hover:shadow transition-colors"
             >
               <div className={`flex-shrink-0 p-1 rounded-md ${widget.color}`}>
@@ -330,7 +330,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                 Recent Documents
               </Typography>
               <Link
-                href={`/orgs/${organizationId}/docs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery)}` : ''}`}
+                to={`/orgs/${organizationId}/docs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery)}` : ''}`}
                 className="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 View All
@@ -343,7 +343,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                 filteredDocuments.map((doc) => (
                   <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <Link
-                      href={`/orgs/${organizationId}/docs/${doc.id}`}
+                      to={`/orgs/${organizationId}/docs/${doc.id}`}
                       className="flex items-center gap-3 min-w-0 flex-1 hover:bg-gray-100 rounded -m-1 p-1 transition-colors"
                     >
                       {getDocumentStatusIcon(doc.state)}
@@ -358,7 +358,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                         return tag ? (
                           <Link
                             key={tagId}
-                            href={`/orgs/${organizationId}/tags/${tag.id}`}
+                            to={`/orgs/${organizationId}/tags/${tag.id}`}
                             className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-90 ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
                             style={{ backgroundColor: tag.color }}
                             onClick={(e) => e.stopPropagation()}
@@ -393,42 +393,42 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-2">
                 <Link
-                  href={`/orgs/${organizationId}/docs?tab=upload`}
+                  to={`/orgs/${organizationId}/docs?tab=upload`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <UploadIcon className="h-4 w-4" />
                   Upload Document
                 </Link>
                 <Link
-                  href={`/orgs/${organizationId}/schemas?tab=schema-create`}
+                  to={`/orgs/${organizationId}/schemas?tab=schema-create`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <AddIcon className="h-4 w-4" />
                   Create Schema
                 </Link>
                 <Link
-                  href={`/orgs/${organizationId}/prompts?tab=prompt-create`}
+                  to={`/orgs/${organizationId}/prompts?tab=prompt-create`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <AddIcon className="h-4 w-4" />
                   Create Prompt
                 </Link>
                 <Link
-                  href={`/orgs/${organizationId}/tags?tab=tag-create`}
+                  to={`/orgs/${organizationId}/tags?tab=tag-create`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <AddIcon className="h-4 w-4" />
                   Create Tag
                 </Link>
                 <Link
-                  href={`/orgs/${organizationId}/forms?tab=form-create`}
+                  to={`/orgs/${organizationId}/forms?tab=form-create`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <AddIcon className="h-4 w-4" />
                   Create Form
                 </Link>
                 <Link
-                  href={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`}
+                  to={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <AddIcon className="h-4 w-4" />
@@ -447,7 +447,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                     Tag Usage
                   </Typography>
                   <Link
-                    href={`/orgs/${organizationId}/tags`}
+                    to={`/orgs/${organizationId}/tags`}
                     className="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Manage Tags
@@ -457,7 +457,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                   {availableTags.map((tag) => (
                     <Link
                       key={tag.id}
-                      href={`/orgs/${organizationId}/tags/${tag.id}`}
+                      to={`/orgs/${organizationId}/tags/${tag.id}`}
                       className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-90 ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
                       style={{ backgroundColor: tag.color }}
                     >

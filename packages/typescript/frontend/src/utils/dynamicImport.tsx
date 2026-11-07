@@ -5,7 +5,7 @@ type DynamicOptions<P = Record<string, never>> = {
   ssr?: boolean;
 };
 
-/** Vite stand-in for `next/dynamic` (React.lazy + Suspense). */
+/** React.lazy + Suspense wrapper (replaces `next/dynamic` in client code). */
 export default function dynamic<P = Record<string, never>>(
   loader: () => Promise<{ default: ComponentType<P> }>,
   options?: DynamicOptions<P>,

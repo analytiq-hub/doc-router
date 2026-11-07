@@ -11,8 +11,8 @@ import { Tag } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import TagSelector from './TagSelector';
 import { toast } from 'react-toastify';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useRouter } from '@/utils/appRouter';
+import dynamic from '@/utils/dynamicImport';
 
 const FormioBuilder = dynamic(() => import('./FormioBuilder'), {
   ssr: false,

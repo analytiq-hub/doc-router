@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { DocRouterAccountApi } from '@/utils/api';
 
 export default function VerifyEmailPage() {

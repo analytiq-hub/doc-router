@@ -9,7 +9,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { Divider, Menu, MenuItem } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import {
   CaseLlmResultsResponse,
   GetLLMResultResponse,
@@ -415,7 +415,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
                   <label className="mb-1 block text-sm font-semibold text-gray-700">Prompt</label>
                   <div className="break-words rounded border bg-gray-50 p-2 text-sm">
                     <Link
-                      href={`/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`}
+                      to={`/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`}
                       className="font-mono text-blue-600 hover:underline"
                     >
                       {runInfoResult.prompt_revid}
@@ -442,7 +442,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
                       {runInfoResult.run.document_ids.map((docId) => (
                         <li key={docId}>
                           <Link
-                            href={`/orgs/${organizationId}/docs/${docId}`}
+                            to={`/orgs/${organizationId}/docs/${docId}`}
                             className="text-blue-600 hover:underline font-mono text-xs"
                           >
                             {docId}

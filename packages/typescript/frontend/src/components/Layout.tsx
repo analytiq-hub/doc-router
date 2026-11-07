@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, ReactNode, useEffect, useLayoutEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useRouter, usePathname } from '@/utils/appRouter';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import AuthButton from '@/components/AuthButton';
 import UserMenu from '@/components/UserMenu';
@@ -215,9 +215,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         className="px-2 py-1"
       >
         <Link
-          href={item.href}
+          to={item.href}
           className="block"
-          prefetch={false}
         >
           {content}
         </Link>
@@ -239,7 +238,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <Bars3Icon className="h-6 w-6 text-white" />
             </button>
             <Link
-              href={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
+              to={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
               className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}
             >
               <span>{appName}</span>

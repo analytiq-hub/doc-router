@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isSysAdmin } from '@/utils/roles';
 import { Feedback as FeedbackIcon, AdminPanelSettings as AdminIcon } from '@mui/icons-material';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 
 interface FeedbackFormProps {
   onClose?: () => void;
@@ -81,7 +81,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
         {/* Admin link - only visible to admins */}
         {isAdmin && (
           <Link 
-            href="/admin/feedback" 
+            to="/admin/feedback" 
             className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
           >
             <AdminIcon className="mr-1" />

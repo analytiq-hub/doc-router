@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { NEW_FLOW_URL_SEGMENT } from './flowDefaultNames';
 import { flowInputClass, flowLabelClass } from './flowUiClasses';
 

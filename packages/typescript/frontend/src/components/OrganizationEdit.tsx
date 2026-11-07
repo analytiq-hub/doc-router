@@ -2,8 +2,8 @@
 
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { Link } from 'react-router-dom';
+import { useRouter } from '@/utils/appRouter'
 import type { LLMChatModel, OcrMode, OrgOcrConfig } from '@docrouter/sdk'
 import type { FlowLogLevel } from '@/types/organizations'
 import { OrganizationMember, OrganizationType } from '@/types/index'
@@ -658,7 +658,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               return (isUserOrgAdmin || isUserSysAdmin) ? (
                 <>
                   <Link
-                    href={`/settings/organizations/${organizationId}/subscription`}
+                    to={`/settings/organizations/${organizationId}/subscription`}
                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

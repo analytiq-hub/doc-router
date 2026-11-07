@@ -8,7 +8,7 @@ import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import colors from 'tailwindcss/colors';
 import Checkbox from '@mui/material/Checkbox';
 import Switch from '@mui/material/Switch';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { formatLocalDate } from '@/utils/date';
 
 const LLMManager: React.FC = () => {
@@ -157,7 +157,7 @@ const LLMManager: React.FC = () => {
       minWidth: 150,
       renderCell: (params: GridRenderCellParams) => (
         <Link
-          href={`/settings/account/development/llm-manager/providers/${params.row.name}`}
+          to={`/settings/account/development/llm-manager/providers/${params.row.name}`}
           className="text-blue-600 hover:text-blue-800"
         >
           {params.row.display_name}
@@ -320,7 +320,7 @@ const LLMManager: React.FC = () => {
       >
         <MenuItem
           component={Link}
-          href={`/settings/account/development/llm-manager/providers/${selectedProvider}`}
+          to={`/settings/account/development/llm-manager/providers/${selectedProvider}`}
           onClick={handleMenuClose}
           className="flex items-center gap-2"
         >

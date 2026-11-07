@@ -6,7 +6,7 @@ import { fetchOrgPermissionsMe } from '@/utils/orgPermissionsMe';
 import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import { AppSession } from '@/types/AppSession'
-import { usePathname } from 'next/navigation'
+import { usePathname } from '@/utils/appRouter'
 
 interface OrganizationContextType {
   organizations: Organization[]

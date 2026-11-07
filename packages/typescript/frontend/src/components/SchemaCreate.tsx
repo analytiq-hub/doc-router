@@ -16,7 +16,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import BadgeIcon from '@mui/icons-material/Badge';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { toast } from 'react-toastify';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import SchemaInfoModal from './SchemaInfoModal';
 import SchemaVersionSelector from './SchemaVersionSelector';
 import SchemaVersionCompareModal from './SchemaVersionCompareModal';

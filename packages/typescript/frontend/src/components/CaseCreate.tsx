@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Tag } from '@docrouter/sdk';
 import TagSelector from './TagSelector';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
 import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';

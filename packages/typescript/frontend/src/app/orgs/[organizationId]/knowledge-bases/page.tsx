@@ -7,7 +7,7 @@ import KnowledgeBaseCreate from '@/components/KnowledgeBaseCreate';
 import KnowledgeBaseSearch from '@/components/KnowledgeBaseSearch';
 import KnowledgeBaseDocuments from '@/components/KnowledgeBaseDocuments';
 import KnowledgeBaseChat from '@/components/KnowledgeBaseChat';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 

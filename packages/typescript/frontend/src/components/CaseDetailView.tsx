@@ -4,7 +4,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import DocumentList from './DocumentList';
 import CaseResultsSidebar from './CaseResultsSidebar';
@@ -15,7 +15,7 @@ import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 import CaseDeleteDialog from '@/components/CaseDeleteDialog';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 
 type CaseDetailViewProps = {
   organizationId: string;
@@ -78,7 +78,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
             ? `Could not load this case: ${loadError}`
             : 'Case not found or still being deleted.'}
         </p>
-        <Link href={`/orgs/${organizationId}/cases`} className="text-blue-600 underline">
+        <Link to={`/orgs/${organizationId}/cases`} className="text-blue-600 underline">
           Back to cases
         </Link>
       </div>
@@ -89,7 +89,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href={`/orgs/${organizationId}/cases`} className="text-sm text-blue-600 underline">
+          <Link to={`/orgs/${organizationId}/cases`} className="text-sm text-blue-600 underline">
             ← Cases
           </Link>
           <h1 className="text-2xl font-bold mt-1">{caseDisplayName(caseRow)}</h1>
@@ -103,7 +103,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
         {canWriteDocuments && (
           <div className="flex gap-2">
             <Link
-              href={`/orgs/${organizationId}/cases/${encodeURIComponent(decodedCaseId)}/edit`}
+              to={`/orgs/${organizationId}/cases/${encodeURIComponent(decodedCaseId)}/edit`}
               className="px-3 py-2 border rounded text-sm hover:bg-gray-50"
             >
               Edit case

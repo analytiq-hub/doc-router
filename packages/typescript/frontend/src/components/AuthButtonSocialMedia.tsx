@@ -4,7 +4,7 @@ import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { Typography, Box, Button } from '@mui/material';
 import { ExitToApp as LogoutIcon, Login as LoginIcon } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 
 function AuthButtonSocialMediaOnly() {
   const { session } = useAppSession();

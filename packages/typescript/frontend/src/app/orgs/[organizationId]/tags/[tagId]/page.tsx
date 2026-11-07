@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from '@/utils/appRouter';
 import TagCreate from '@/components/TagCreate';
 import { useOrgCapabilityRouteGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';

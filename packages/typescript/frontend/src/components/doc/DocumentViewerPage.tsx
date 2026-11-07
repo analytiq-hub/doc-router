@@ -1,7 +1,7 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
+import dynamic from '@/utils/dynamicImport';
+import { useSearchParams } from '@/utils/appRouter';
 import { Box } from '@mui/material';
 import {
   Panel,

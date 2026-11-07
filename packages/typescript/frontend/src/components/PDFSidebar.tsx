@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import dynamic from 'next/dynamic';
-import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import dynamic from '@/utils/dynamicImport';
+import { Link } from 'react-router-dom';
+import { usePathname, useRouter, useSearchParams } from '@/utils/appRouter';
 import { PDFFormsTabProbe } from './PDFFormsTabProbe';
 import { docPageHrefWithSearch, sidebarTabFromQuery, type DocSidebarTab } from '@/utils/docPageUrl';
 
@@ -124,16 +124,16 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
 
       <div className="h-12 min-h-[48px] flex items-center px-4 bg-gray-100 text-black font-bold border-b border-black/10">
         <div className="flex bg-gray-200 rounded-md p-1">
-          <Link href={tabHref('extraction')} replace scroll={false} className={tabLinkClass('extraction')}>
+          <Link to={tabHref('extraction')} replace preventScrollReset className={tabLinkClass('extraction')}>
             Extraction
           </Link>
           {showFlowsTab ? (
-            <Link href={tabHref('flows')} replace scroll={false} className={tabLinkClass('flows')}>
+            <Link to={tabHref('flows')} replace preventScrollReset className={tabLinkClass('flows')}>
               Flows
             </Link>
           ) : null}
           {showFormsTab ? (
-            <Link href={tabHref('forms')} replace scroll={false} className={tabLinkClass('forms')}>
+            <Link to={tabHref('forms')} replace preventScrollReset className={tabLinkClass('forms')}>
               Forms
             </Link>
           ) : null}

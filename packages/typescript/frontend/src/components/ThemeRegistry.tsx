@@ -2,7 +2,9 @@
 
 import React from 'react';
 import createCache from '@emotion/cache';
-import { useServerInsertedHTML } from 'next/navigation';
+
+/** CSR-only: no SSR style injection (Vite SPA). */
+function useServerInsertedHTML(_fn: () => React.ReactNode) {}
 import { CacheProvider } from '@emotion/react';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';

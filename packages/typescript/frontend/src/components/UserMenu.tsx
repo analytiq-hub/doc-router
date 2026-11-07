@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import { Settings as SettingsIcon, ExitToApp as SignoutIcon, Help as HelpIcon, Info as InfoIcon, Feedback as FeedbackIcon, Payment as PaymentIcon } from '@mui/icons-material';
 import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
-import Link from 'next/link';
-import Image from 'next/image';
+import { Link } from 'react-router-dom';
+import AppImage from '@/components/AppImage';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { isSysAdmin, isOrgAdmin } from '@/utils/roles';
 // Add this interface at the top of your file
@@ -73,7 +73,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
         title={user?.name || 'User'}
       >
         {user?.image ? (
-          <Image
+          <AppImage
             src={user.image}
             alt={user.name || 'User'}
             width={32}
@@ -112,7 +112,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
             {/* Billing Link - Only show for admins */}
             {isAdmin() && currentOrganization && (
               <Link
-                href={`/settings/organizations/${currentOrganization.id}/subscription`}
+                to={`/settings/organizations/${currentOrganization.id}/subscription`}
                 className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 onClick={() => setIsOpen(false)}
               >
@@ -123,7 +123,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
 
             {/* Settings Link */}
             <Link
-              href="/settings"
+              to="/settings"
               className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
               onClick={() => setIsOpen(false)}
             >
@@ -142,7 +142,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
 
             {/* Feedback Link */}
             <Link
-              href="/feedback"
+              to="/feedback"
               className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
               onClick={() => setIsOpen(false)}
             >
@@ -152,7 +152,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
 
             {/* About Link */}
             <Link
-              href="/"
+              to="/"
               className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
               onClick={() => setIsOpen(false)}
             >

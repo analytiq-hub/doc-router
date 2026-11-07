@@ -21,7 +21,7 @@ import { getApiErrorMsg } from '@/utils/api';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from './TagSelector';
 import { toast } from 'react-toastify';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import Editor from "@monaco-editor/react";
 import BadgeIcon from '@mui/icons-material/Badge';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';

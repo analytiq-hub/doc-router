@@ -13,7 +13,7 @@ import {
   chunkingPreprocessForPreset,
   LLMEmbeddingModel,
 } from '@docrouter/sdk';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from '@/components/TagSelector';

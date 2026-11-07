@@ -16,9 +16,9 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import FolderIcon from '@mui/icons-material/Folder';
 import SyncIcon from '@mui/icons-material/Sync';
 import colors from 'tailwindcss/colors';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
@@ -430,7 +430,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             {canConfigWrite ? (
               <>
                 If none are available,{' '}
-                <Link href={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-blue-600 font-medium hover:underline">
+                <Link to={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-blue-600 font-medium hover:underline">
                   click here
                 </Link>{' '}
                 or use the tab above to create a new knowledge base.

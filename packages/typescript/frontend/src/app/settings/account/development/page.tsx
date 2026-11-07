@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Button, Divider } from '@mui/material';
 import SettingsLayout, { settingsSectionTitleClass, settingsDescriptionClass } from '@/components/SettingsLayout';
 
@@ -16,7 +16,7 @@ const DevelopmentSettingsPage: React.FC = () => {
               Manage your Large Language Models and their API tokens.
             </p>
           </div>
-          <Link href="/settings/account/development/llm-manager" passHref>
+          <Link to="/settings/account/development/llm-manager">
             <Button variant="contained" color="primary">
               Manage
             </Button>
@@ -32,7 +32,7 @@ const DevelopmentSettingsPage: React.FC = () => {
               Configure AWS access key ID, secret access key, and S3 bucket name.
             </p>
           </div>
-          <Link href="/settings/account/development/aws-config" passHref>
+          <Link to="/settings/account/development/aws-config">
             <Button variant="contained" color="primary">
               Manage
             </Button>
@@ -48,7 +48,7 @@ const DevelopmentSettingsPage: React.FC = () => {
               Upload the Google Cloud service account JSON key for Vertex AI.
             </p>
           </div>
-          <Link href="/settings/account/development/gcp-config" passHref>
+          <Link to="/settings/account/development/gcp-config">
             <Button variant="contained" color="primary">
               Manage
             </Button>
@@ -64,7 +64,7 @@ const DevelopmentSettingsPage: React.FC = () => {
               Configure Microsoft Entra service principal (tenant, client ID, client secret) and Microsoft Foundry service API base.
             </p>
           </div>
-          <Link href="/settings/account/development/azure-config" passHref>
+          <Link to="/settings/account/development/azure-config">
             <Button variant="contained" color="primary">
               Manage
             </Button>
@@ -80,7 +80,7 @@ const DevelopmentSettingsPage: React.FC = () => {
               Configure deployment-wide OCR concurrency limits for queue workers.
             </p>
           </div>
-          <Link href="/settings/account/development/worker-settings" passHref>
+          <Link to="/settings/account/development/worker-settings">
             <Button variant="contained" color="primary">
               Manage
             </Button>

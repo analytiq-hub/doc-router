@@ -9,7 +9,7 @@ import { DocRouterAccountApi } from '@/utils/api';
 import { User, UserCreate } from '@docrouter/sdk';
 import { isAxiosError } from 'axios';
 import colors from 'tailwindcss/colors';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/utils/useAppSession';
 import UserInviteModal from './UserInviteModal';

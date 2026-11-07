@@ -2,7 +2,7 @@
 
 import React from 'react';
 import SettingsLayout, { settingsSectionTitleClass, settingsDescriptionClass } from '@/components/SettingsLayout';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Button } from '@mui/material';
 
 const DeveloperPage: React.FC = () => {
@@ -18,7 +18,7 @@ const DeveloperPage: React.FC = () => {
               Use Acccess Tokens to authenticate with our account API.
             </p>
           </div>
-          <Link href="/settings/user/developer/account-access-tokens" passHref>
+          <Link to="/settings/user/developer/account-access-tokens">
             <Button variant="contained" color="primary">
               Manage
             </Button>
@@ -32,7 +32,7 @@ const DeveloperPage: React.FC = () => {
               Use Organization Tokens to authenticate with our organization API.
             </p>
           </div>
-          <Link href="/settings/user/developer/organization-access-tokens" passHref>
+          <Link to="/settings/user/developer/organization-access-tokens">
             <Button variant="contained" color="primary">
               Manage
             </Button>
@@ -46,7 +46,7 @@ const DeveloperPage: React.FC = () => {
               Configure a per-organization webhook and view delivery history.
             </p>
           </div>
-          <Link href="/settings/user/developer/organization-webhooks" passHref>
+          <Link to="/settings/user/developer/organization-webhooks">
             <Button variant="contained" color="primary">
               Manage
             </Button>

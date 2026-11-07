@@ -3,7 +3,7 @@
 import TagList from '@/components/TagList';
 import { useRouteParams } from '@/utils/useRouteParams';
 import TagCreate from '@/components/TagCreate';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
 

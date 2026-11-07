@@ -2,7 +2,7 @@
 
 import DocumentList from '@/components/DocumentList';
 import DocumentUpload from '@/components/DocumentUpload';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 

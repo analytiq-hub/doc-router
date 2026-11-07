@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from '@/utils/appRouter';
 import PromptCreate from '@/components/PromptCreate';
 import { useOrgCapabilityRouteGuard } from '@/hooks/useOrgPermissions';
 import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';

@@ -18,7 +18,7 @@ import {
   type BulkFlowRerunMode,
 } from '@/utils/bulkFlowRerunMode';
 import { toast } from 'react-hot-toast';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
 
@@ -827,7 +827,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                         className="flex items-center justify-between text-xs"
                       >
                         <Link
-                          href={`/orgs/${organizationId}/docs/${execution.documentId}`}
+                          to={`/orgs/${organizationId}/docs/${execution.documentId}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="min-w-0 truncate max-w-[200px] text-gray-700 hover:text-blue-700 hover:underline"

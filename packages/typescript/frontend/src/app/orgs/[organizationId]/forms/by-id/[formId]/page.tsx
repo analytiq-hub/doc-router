@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouteParams } from '@/utils/useRouteParams';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { DocRouterOrgApi } from '@/utils/api';
 import { useMemo } from 'react';
 

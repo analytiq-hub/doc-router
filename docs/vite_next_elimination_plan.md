@@ -1,7 +1,7 @@
 # Eliminating Next.js: where we are and cutover plan
 
 Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_route_manifest.md`](./vite_route_manifest.md).  
-**Branch:** `vite`. **Phase A–B complete** (ops + Docker/compose/K8s packaging); **`next` still in `package.json`** for optional local dev until Phase E.
+**Branch:** `vite`. **Phase A–B complete**; **Phase C in progress** (client code off `next/*` shims); **`next` still in `package.json`** for server layouts + optional `DOCROUTER_DEV_NEXT` until Phase E.
 
 ---
 
@@ -17,7 +17,7 @@ Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_rou
 | **Compose / K8s** | **Vite SPA only** | Frontend container nginx :80; compose edge **localhost:3000** → edge nginx → frontend:80 |
 | **Vite production path** | **`runner`** | `Dockerfile` stages `frontend` (vite build) → `runner` (nginx + `dist-vite/`) |
 | **`next` npm package** | **Still installed** | Required for `npm run dev` / `npm run build` (Next) until removal |
-| **Source imports `next/*`** | **~90 files** | Mostly `next/link`, `next/navigation`; Vite **aliases** these to `src/shims/*` at build time |
+| **Source imports `next/*`** | **Client migrated** | `react-router-dom` + `@/utils/appRouter`; **7** server-only files still use `next/navigation` / `next/headers` |
 | **Next-only server code** | **Small but real** | `layout.tsx` files use `getAppServerSession` / `redirect` / `cookies()` from `next/headers`; **Vite does not run these layouts** (CSR + `RequireAuth` instead) |
 | **File layout** | **Still App Router** | **55** `page.tsx` under `src/app/`; Vite **imports them as components**, not as Next routes |
 
@@ -114,19 +114,19 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 ---
 
-### Phase C — Remove **shims** by fixing imports (source, not ops)
+### Phase C — Remove **shims** by fixing imports (source, not ops) — **mostly done**
 
-**Goal:** Shared code uses React Router and web APIs directly; `vite.config.ts` has **no** `next/*` aliases.
+**Goal:** Shared client code uses React Router; `vite.config.ts` has **no** `next/*` aliases.
 
-| # | Task | Exit criterion |
-|---|------|----------------|
-| C1 | Codemod `next/link` → `react-router-dom` `Link` (`to` prop) | `grep next/link` → 0 in `src/` |
-| C2 | Codemod `next/navigation` → `react-router-dom` hooks (+ small `useAppRouter()` if needed) | `grep next/navigation` → 0 |
-| C3 | Replace `next/dynamic` with `React.lazy` + `Suspense` at call sites | Delete `next-dynamic` shim |
-| C4 | Replace `next/image` usages (already shimmed; 1–2 files) | Plain `<img>` or shared `AppImage` |
-| C5 | Remove **`redirect()`** from client pages; use `<Navigate>` or `useNavigate` | No `redirect` from `next/navigation` in client bundles |
+| # | Task | Status |
+|---|------|--------|
+| C1 | `next/link` → `react-router-dom` `Link` (`to`) | ✅ client |
+| C2 | `next/navigation` → `@/utils/appRouter` | ✅ client |
+| C3 | `next/dynamic` → `@/utils/dynamicImport` | ✅ |
+| C4 | `next/image` → `@/components/AppImage` | ✅ |
+| C5 | Server `redirect()` / layouts | 🔶 **7** Next server files (Phase D) |
 
-**~90 files** — do in batches (components → app pages → settings).
+**Remaining for C/D:** convert server `layout.tsx` + `feedback/page.tsx` to client `RequireAuth` or drop when `src/app/` moves.
 
 ---
 
@@ -182,6 +182,6 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 - Dev smoke: [`vite_smoke_test_5173.md`](./vite_smoke_test_5173.md)
 - Route parity: [`vite_route_manifest.md`](./vite_route_manifest.md)
 - Docker Vite target: `deploy/shared/docker/Dockerfile` (`frontend` → `runner`), `packages/typescript/frontend/nginx-spa.conf`
-- Shims: `packages/typescript/frontend/src/shims/`, aliases in `vite.config.ts`
+- Navigation: `packages/typescript/frontend/src/utils/appRouter.ts`, `dynamicImport.tsx`, `AppImage.tsx`
 
-*Last updated: Phase B — Docker/compose/K8s/release Vite-only packaging.*
+*Last updated: Phase C batch 1 — client imports off `next/*` shims.*

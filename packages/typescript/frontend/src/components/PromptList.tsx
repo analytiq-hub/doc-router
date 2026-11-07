@@ -14,8 +14,8 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
 import { isColorLight } from '@/utils/colors';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from '@/utils/appRouter';
+import { Link } from 'react-router-dom';
 import PromptNameModal from './PromptNameModal';
 import PromptInfoModal from './PromptInfoModal';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
@@ -452,7 +452,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           {canConfigWrite ? (
             <>
               If none are available,{' '}
-              <Link href={`/orgs/${organizationId}/prompts?tab=prompt-create`} className="text-blue-600 font-medium hover:underline">
+              <Link to={`/orgs/${organizationId}/prompts?tab=prompt-create`} className="text-blue-600 font-medium hover:underline">
                 click here
               </Link>{' '}
               or use the tab above to create a new prompt.

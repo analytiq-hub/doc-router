@@ -11,8 +11,8 @@ type ImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt'> & {
   quality?: number;
 };
 
-/** Vite stand-in for `next/image` (vite.config.ts alias). */
-export default function Image({
+/** Lightweight stand-in for `next/image` in the Vite SPA. */
+export default function AppImage({
   src,
   alt,
   width,
@@ -30,7 +30,6 @@ export default function Image({
     : { ...style };
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { AppSession } from '@/types/AppSession';
 import { fetchOrgPermissionsMe } from '@/utils/orgPermissionsMe';

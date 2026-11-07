@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useRouter } from '@/utils/appRouter';
 import type { FlowExecutionSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
@@ -136,7 +136,7 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
                 >
                   <td className={td}>
                     <Link
-                      href={`/orgs/${organizationId}/flows/${e.flow_id}?tab=executions`}
+                      to={`/orgs/${organizationId}/flows/${e.flow_id}?tab=executions`}
                       className="font-medium text-blue-700 hover:underline"
                       onClick={(ev) => ev.stopPropagation()}
                     >

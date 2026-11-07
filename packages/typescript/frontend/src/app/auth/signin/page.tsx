@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from '@/utils/appRouter';
 import { loginWithPassword, oauthStartUrl, persistSessionToken, registerWithPassword } from '@/utils/backendAuth';
 import { useAppSession } from '@/contexts/AppSessionContext';
 

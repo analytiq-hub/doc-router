@@ -15,8 +15,8 @@ import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutli
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from '@/utils/appRouter';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { formatLocalDate } from '@/utils/date';
 import SchemaNameModal from './SchemaNameModal';
@@ -380,7 +380,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             <>
               {' '}
               If none are available,{' '}
-              <Link href={`/orgs/${organizationId}/schemas?tab=schema-create`} className="text-blue-600 font-medium hover:underline">
+              <Link to={`/orgs/${organizationId}/schemas?tab=schema-create`} className="text-blue-600 font-medium hover:underline">
                 click here
               </Link>{' '}
               or use the tab above to create a new schema.

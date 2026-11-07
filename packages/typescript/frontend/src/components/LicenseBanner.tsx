@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import type { LicenseStatus } from '@docrouter/sdk';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { DocRouterAccountApi } from '@/utils/api';
@@ -98,7 +98,7 @@ const LicenseBanner: React.FC = () => {
       {isAdmin ? (
         <>
           {' '}
-          <Link href="/settings/account/license" className={linkClass}>
+          <Link to="/settings/account/license" className={linkClass}>
             Open License settings
           </Link>
         </>

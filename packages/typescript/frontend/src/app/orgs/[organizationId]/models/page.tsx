@@ -3,7 +3,7 @@
 import SchemaList from '@/components/SchemaList';
 import { useRouteParams } from '@/utils/useRouteParams';
 import PromptList from '@/components/PromptList';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '@/utils/appRouter';
 
 export default function ModelsPage(props: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = useRouteParams(props);

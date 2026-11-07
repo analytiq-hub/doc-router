@@ -4,7 +4,7 @@ import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { Typography, Button, Box } from '@mui/material';
 import { ExitToApp as LogoutIcon } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/utils/appRouter';
 
 function AuthButton() {
   const { session } = useAppSession();

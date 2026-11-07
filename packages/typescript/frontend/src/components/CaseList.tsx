@@ -26,8 +26,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { isColorLight } from '@/utils/colors';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from '@/utils/appRouter';
+import { Link } from 'react-router-dom';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 import CaseDeleteDialog from '@/components/CaseDeleteDialog';
@@ -160,7 +160,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           const name = caseDisplayName(params.row);
           return (
             <Link
-              href={caseDetailHref(organizationId, params.row.case_id)}
+              to={caseDetailHref(organizationId, params.row.case_id)}
               className="text-blue-600 underline truncate font-medium"
               title={name}
             >
