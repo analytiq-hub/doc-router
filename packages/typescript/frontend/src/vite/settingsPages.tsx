@@ -13,6 +13,14 @@ import AccountUsersPage from '@/app/settings/account/users/page';
 import AccountUserDetailPage from '@/app/settings/account/users/[userId]/page';
 import AccountLicensePage from '@/app/settings/account/license/page';
 import AccountDevelopmentPage from '@/app/settings/account/development/page';
+import DevelopmentAwsConfigPage from '@/app/settings/account/development/aws-config/page';
+import DevelopmentAwsCredentialsPage from '@/app/settings/account/development/aws-credentials/page';
+import DevelopmentAzureConfigPage from '@/app/settings/account/development/azure-config/page';
+import DevelopmentGcpConfigPage from '@/app/settings/account/development/gcp-config/page';
+import DevelopmentWorkerSettingsPage from '@/app/settings/account/development/worker-settings/page';
+import DevelopmentLlmManagerPage from '@/app/settings/account/development/llm-manager/page';
+import DevelopmentLlmManagerModelsPage from '@/app/settings/account/development/llm-manager/models/page';
+import DevelopmentLlmProviderPage from '@/app/settings/account/development/llm-manager/providers/[providerName]/page';
 
 import { withRouteParams } from './withRouteParams';
 
@@ -34,3 +42,11 @@ export const SettingsAccountUsers = AccountUsersPage;
 export const SettingsAccountUserDetail = withRouteParams(['userId'], AccountUserDetailPage);
 export const SettingsAccountLicense = AccountLicensePage;
 export const SettingsAccountDevelopment = AccountDevelopmentPage;
+export const SettingsDevelopmentAwsConfig = DevelopmentAwsConfigPage;
+export const SettingsDevelopmentAwsCredentials = DevelopmentAwsCredentialsPage;
+export const SettingsDevelopmentAzureConfig = DevelopmentAzureConfigPage;
+export const SettingsDevelopmentGcpConfig = DevelopmentGcpConfigPage;
+export const SettingsDevelopmentWorkerSettings = DevelopmentWorkerSettingsPage;
+export const SettingsDevelopmentLlmManager = DevelopmentLlmManagerPage;
+export const SettingsDevelopmentLlmManagerModels = DevelopmentLlmManagerModelsPage;
+export const SettingsDevelopmentLlmProvider = DevelopmentLlmProviderPage;

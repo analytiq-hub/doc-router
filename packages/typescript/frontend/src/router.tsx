@@ -1,8 +1,10 @@
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
 
 import Layout from '@/components/Layout';
+import { AdminFeedbackPage } from '@/vite/pages/AdminFeedback';
 import { AuthCompletePage } from '@/vite/pages/AuthComplete';
 import { DashboardPage } from '@/vite/pages/Dashboard';
+import { FeedbackPage } from '@/vite/pages/Feedback';
 import { HomePage } from '@/vite/pages/Home';
 import { OrgPlaceholderPage } from '@/vite/pages/OrgPlaceholder';
 import { SignInPage } from '@/vite/pages/SignIn';
@@ -33,6 +35,14 @@ import {
 } from '@/vite/orgPages';
 import {
   SettingsAccountDevelopment,
+  SettingsDevelopmentAwsConfig,
+  SettingsDevelopmentAwsCredentials,
+  SettingsDevelopmentAzureConfig,
+  SettingsDevelopmentGcpConfig,
+  SettingsDevelopmentLlmManager,
+  SettingsDevelopmentLlmManagerModels,
+  SettingsDevelopmentLlmProvider,
+  SettingsDevelopmentWorkerSettings,
   SettingsAccountLicense,
   SettingsAccountUserDetail,
   SettingsAccountUsers,
@@ -95,7 +105,17 @@ const settingsChildRoutes: RouteObject[] = [
   { path: 'account/users/:userId', element: <SettingsAccountUserDetail /> },
   { path: 'account/license', element: <SettingsAccountLicense /> },
   { path: 'account/development', element: <SettingsAccountDevelopment /> },
-  { path: 'account/development/*', element: <OrgPlaceholderPage /> },
+  { path: 'account/development/aws-config', element: <SettingsDevelopmentAwsConfig /> },
+  { path: 'account/development/aws-credentials', element: <SettingsDevelopmentAwsCredentials /> },
+  { path: 'account/development/azure-config', element: <SettingsDevelopmentAzureConfig /> },
+  { path: 'account/development/gcp-config', element: <SettingsDevelopmentGcpConfig /> },
+  { path: 'account/development/worker-settings', element: <SettingsDevelopmentWorkerSettings /> },
+  { path: 'account/development/llm-manager', element: <SettingsDevelopmentLlmManager /> },
+  { path: 'account/development/llm-manager/models', element: <SettingsDevelopmentLlmManagerModels /> },
+  {
+    path: 'account/development/llm-manager/providers/:providerName',
+    element: <SettingsDevelopmentLlmProvider />,
+  },
 ];
 
 export const routes: RouteObject[] = [
@@ -113,6 +133,8 @@ export const routes: RouteObject[] = [
             element: <RequireAuth />,
             children: [
               { path: 'dashboard', element: <DashboardPage /> },
+              { path: 'feedback', element: <FeedbackPage /> },
+              { path: 'admin/feedback', element: <AdminFeedbackPage /> },
               {
                 path: 'orgs/:organizationId',
                 element: <OrgLayout />,
