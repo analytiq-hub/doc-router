@@ -60,6 +60,7 @@ help:
 	@echo "  make tests-ui-debug          - Run UI tests in debug mode"
 	@echo "  make tests-ts                - Run TypeScript SDK and MCP tests"
 	@echo "  make vitest                  - Run frontend Vitest unit tests (flows schema helpers, etc.)"
+	@echo "  make build-vite              - Typecheck and production-build the Vite SPA (dist-vite/)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean                   - Remove Python virtual environment"
@@ -310,6 +311,9 @@ tests-ts:
 
 vitest:
 	cd packages/typescript/frontend && npm install && npm test
+
+build-vite:
+	cd packages/typescript/frontend && npm run typecheck && npm run build:vite
 
 clean:
 	rm -rf .venv

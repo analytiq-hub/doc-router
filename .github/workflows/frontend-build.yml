@@ -29,4 +29,11 @@ jobs:
       working-directory: ./packages/typescript/frontend
       env:
         PUBLIC_API_URL: 'http://localhost:8000'
+      timeout-minutes: 15
+
+    - name: Typecheck and build Vite SPA
+      run: npm run typecheck && npm run build:vite
+      working-directory: ./packages/typescript/frontend
+      env:
+        PUBLIC_API_URL: 'http://localhost:8000'
       timeout-minutes: 15 

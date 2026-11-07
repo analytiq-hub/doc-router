@@ -9,6 +9,7 @@
     "dev:vite": "vite",
     "build": "next build --webpack",
     "build:vite": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "preview:vite": "vite preview",
     "start": "next start",
     "lint": "eslint src/",

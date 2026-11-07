@@ -1,0 +1,18 @@
+/* App chrome from globals.css (no Formio @import chain). */
+:root {
+  --background: #ecf0f1;
+  --foreground: #2c3e50;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
