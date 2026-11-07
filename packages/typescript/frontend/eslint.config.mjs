@@ -1,14 +1,47 @@
-import nextConfig from 'eslint-config-next/core-web-vitals';
-import tsConfig from 'eslint-config-next/typescript';
+import js from '@eslint/js';
+import globals from 'globals';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
-  ...nextConfig,
-  ...tsConfig,
   {
-    // Downgrade new strict rules that flag pre-existing patterns
+    ignores: [
+      'dist/**',
+      'dist-vite/**',
+      'node_modules/**',
+      '.next/**',
+      '**/*.cjs',
+    ],
+  },
+  js.configs.recommended,
+  ...tseslint.configs['flat/recommended'],
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: { jsx: true },
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
+      },
+    },
+    plugins: {
+      'react-hooks': reactHooks,
+    },
     rules: {
-      // setState in useEffect is a common pattern for SSR hydration and data fetching
-      'react-hooks/set-state-in-effect': 'warn',
+      ...reactHooks.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'no-unused-vars': 'off',
+      'no-case-declarations': 'off',
+      'no-useless-catch': 'off',
+      'no-extra-boolean-cast': 'warn',
+      'no-useless-escape': 'off',
     },
   },
 ];

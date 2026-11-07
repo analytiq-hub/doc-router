@@ -52,12 +52,12 @@ export const FlowInputUpstreamList: React.FC<{
   flowBlobDownloadContext = null,
   flowRevisionPinBlobContext = null,
 }) => {
-  if (slots.length === 0) return null;
-
   const showBinaryAggregate = useMemo(
     () => slots.some((s) => (s.itemsBinaries ?? []).some((b) => b && typeof b === 'object' && Object.keys(b).length > 0)),
     [slots],
   );
+
+  if (slots.length === 0) return null;
 
   return (
     <div className="min-w-0">

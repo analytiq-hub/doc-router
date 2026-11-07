@@ -429,7 +429,6 @@ function IoBinaryPreviewOverlay({
       <div className="min-h-0 flex-1 overflow-auto p-2">
         {preview.variant === 'image' ? (
           <div className="flex justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={preview.blobUrl} alt="" className="max-h-[min(70vh,520px)] max-w-full object-contain" />
           </div>
         ) : null}

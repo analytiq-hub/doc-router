@@ -11,12 +11,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make tests` - Run Python tests in packages/python/tests/
 - `make clean` - Remove virtual environment
 
-### Frontend (NextJS)
+### Frontend (Vite SPA)
 Navigate to `packages/typescript/frontend/` directory:
-- `npm run dev` - Start development server on port 3000
-- `npm run build` - Build production bundle
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
+- `npm run dev` - Vite dev server on http://localhost:5173
+- `npm run build` - Production bundle (`dist-vite/`)
+- `npm run preview` - Serve production build locally
+- `npm run typecheck` - TypeScript check
+- `npm run lint` - ESLint
 
 ### Backend (FastAPI)
 From `packages/` directory with activated virtual environment:
@@ -33,10 +34,10 @@ The Smart Document Router is a full-stack document processing platform with huma
 
 ### Core Components
 
-**Frontend (NextJS + TypeScript)**
+**Frontend (Vite + React + TypeScript)**
 - Located in `packages/typescript/frontend/src/`
-- Next.js 14 with App Router architecture
-- NextAuth.js for authentication with MongoDB adapter
+- React Router SPA; routes in `src/router.tsx`, screens in `src/pages/`
+- Auth/session via FastAPI cookies (`AppSessionContext`)
 - Material-UI and TailwindCSS for styling
 - React Flow for visual workflow builder
 - Monaco Editor for code editing
@@ -74,8 +75,7 @@ The Smart Document Router is a full-stack document processing platform with huma
 - Tag-based categorization and routing
 
 **Authentication & Authorization**
-- NextAuth.js with email/password and social providers
-- JWT tokens with MongoDB session storage
+- FastAPI-owned browser session (httpOnly cookie) + OAuth
 - Organization invitation system
 
 ## Development Workflow
@@ -88,7 +88,7 @@ The Smart Document Router is a full-stack document processing platform with huma
 
 ### Services Running
 - FastAPI backend: http://localhost:8000 (API docs at /docs)
-- Vite SPA (primary UI): http://localhost:5173 — `make dev` starts FastAPI + Vite by default (`DOCROUTER_DEV_VITE=0` to skip; `DOCROUTER_DEV_NEXT=1` for legacy Next on :3000). Public env: `VITE_*` (see `src/config/publicEnv.ts`).
+- Vite SPA: http://localhost:5173 — `make dev` starts FastAPI + Vite (`DOCROUTER_DEV_VITE=0` to skip UI only). Public env: `VITE_*` (see `src/config/publicEnv.ts`).
 - Compose/K8s/release frontend image: **Vite** only (`Dockerfile` targets `frontend` + `runner` nginx, `dist-vite/`)
 - Background worker: processes queue tasks
 - Static file server: http://localhost:8080 (for public assets)
@@ -99,13 +99,12 @@ The Smart Document Router is a full-stack document processing platform with huma
 - MongoDB Compass recommended for database management
 
 ### Environment Configuration
-- Single `.env` file at project root (MongoDB, AWS, LLM API keys, NextAuth, API URLs)
-- Next.js automatically reads from the top-level `.env` file
+- Single `.env` file at project root (MongoDB, AWS, LLM API keys, `NEXTAUTH_URL`, API URLs)
+- Vite reads `VITE_*` from repo root via `vite.config.ts` `loadEnv`
 - Log level controlled via `LOG_LEVEL` environment variable
 
 ### Code Organization
-- Frontend pages follow Next.js App Router structure in `src/app/`
-- API routes in `src/app/api/`
+- Frontend routes: `src/router.tsx`; page components: `src/pages/`
 - React components in `src/components/`
 - Backend models in `packages/python/app/models.py`
 - Shared utilities in `packages/python/analytiq_data/common/`

@@ -17,11 +17,6 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "paths": {
       "@/*": [
         "./src/*"
@@ -30,13 +25,10 @@
     "target": "ES2020"
   },
   "include": [
-    "next-env.d.ts",
     "src/vite-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    "node_modules/monaco-editor/monaco.d.ts",
-    ".next/dev/types/**/*.ts"
+    "node_modules/monaco-editor/monaco.d.ts"
   ],
   "exclude": [
     "node_modules",

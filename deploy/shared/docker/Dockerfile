@@ -26,7 +26,7 @@ RUN chmod +x ./scripts/sync-branding.sh \
     && { [ -z "$APP_FAVICON" ] || printf 'APP_FAVICON=%s\n' "$APP_FAVICON" >> .env; } \
     && printf 'VITE_FASTAPI_FRONTEND_URL=/fastapi\n' >> .env \
     && ./scripts/sync-branding.sh \
-    && cd packages/typescript/frontend && npm run build:vite
+    && cd packages/typescript/frontend && npm run build
 
 FROM nginx:alpine AS runner
 COPY packages/typescript/frontend/nginx-mjs-types.conf /etc/nginx/conf.d/00-mjs-types.conf

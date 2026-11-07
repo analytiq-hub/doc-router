@@ -1,7 +1,7 @@
 # Vite SPA route manifest
 
-Tracks parity between Next App Router (`src/app/**/page.tsx`) and Vite (`src/router.tsx`).  
-**Last updated:** branch `vite`.
+Tracks SPA route coverage in `src/router.tsx` (page components under `src/pages/**`).  
+**Last updated:** Phase E — branch `vite`, Next App Router tree removed.
 
 ## Legend
 
@@ -13,7 +13,7 @@ Tracks parity between Next App Router (`src/app/**/page.tsx`) and Vite (`src/rou
 
 ## Auth & marketing
 
-| Next path | Vite | Notes |
+| Path | Vite | Notes |
 |-----------|------|-------|
 | `/` | ✅ | Marketing home in `Layout` |
 | `/auth/signin` | ✅ | |
@@ -44,8 +44,10 @@ Tracks parity between Next App Router (`src/app/**/page.tsx`) and Vite (`src/rou
 
 ## Settings (`/settings/…`)
 
-All listed `src/app/settings/**/page.tsx` routes are ✅ (including `account/development/**`).
+All listed `src/pages/settings/**` routes are ✅ (including `account/development/**`).
+
+| `/oauth/flow-callback` | ✅ | Flow credential OAuth popup (`BroadcastChannel`) |
 
 ## Maintenance
 
-When adding a Next `page.tsx`, register the same path in `router.tsx` (or `orgPages.tsx` / `settingsPages.tsx`) and update this file.
+When adding a page, create it under `src/pages/`, register the path in `router.tsx` (or lazy org/settings modules), and update this file.

@@ -6,7 +6,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 
 **Route coverage:** see [`vite_route_manifest.md`](./vite_route_manifest.md).
 
-**Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phases A–D complete** for Vite. **Next: Phase E** (drop `next` package).
+**Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phases A–E complete** — Vite SPA only; `next` removed from `package.json`.
 
 ### Implemented on `vite` (backend-first, partial)
 
@@ -135,14 +135,14 @@ Then the SPA (Next or Vite) only needs **`credentials: 'include'`** on fetch and
 - [ ] **Local Vite:** register **Google + GitHub** redirect URIs for **`http://localhost:5173`** (see [Don't forget: OAuth callbacks (localhost:5173)](#dont-forget-oauth-callbacks-localhost5173)).
 - [x] Replace `NEXT_PUBLIC_*` with **`VITE_*`** (`publicEnv.ts` + vite `define`; legacy compat).
 - [x] Remove **Next standalone** from Docker/compose/K8s paths (`Dockerfile` Vite + nginx only).
-- [ ] **ESLint:** Replace `eslint-config-next` with `@eslint/js` + `typescript-eslint` + `eslint-plugin-react-hooks` (or flat config mirroring orchestrator).
+- [x] **ESLint:** Flat config `@eslint/js` + `typescript-eslint` + `eslint-plugin-react-hooks` (`eslint.config.mjs`).
 
 ### Phase 6 — Cutover and cleanup
 
-- [ ] Delete `next.config.mjs`, App Router tree migration complete → remove `src/app/` structure or leave only non-Next assets if any.
-- [ ] Remove `next` dependency; shrink `package.json` scripts.
+- [x] Delete `next.config.mjs`; remove `src/app/` (pages live in `src/pages/**`).
+- [x] Remove `next` dependency; Vite-only `package.json` scripts.
 - [ ] Full regression: auth, org switcher, flows editor, PDF viewer, uploads, settings.
-- [ ] Update **CLAUDE.md** / README dev instructions.
+- [x] Update **CLAUDE.md** / frontend **README** dev instructions.
 
 ## Risks and mitigations
 
@@ -168,4 +168,4 @@ Successful spike de-risks the rest of Phase 2–4.
 
 ---
 
-*Last updated: migration planning on branch `vite`.*
+*Last updated: Phase E complete on branch `vite` (Next removed).*

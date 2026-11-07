@@ -10,8 +10,8 @@ export function AnalytiqHubIcon({ className }: { className?: string }): React.Re
       className={['inline-block shrink-0', className].filter(Boolean).join(' ')}
       style={{
         backgroundColor: 'currentColor',
-        WebkitMaskImage: `url(${analytiqHubLogoMask.src})`,
-        maskImage: `url(${analytiqHubLogoMask.src})`,
+        WebkitMaskImage: `url(${analytiqHubLogoMask})`,
+        maskImage: `url(${analytiqHubLogoMask})`,
         WebkitMaskRepeat: 'no-repeat',
         maskRepeat: 'no-repeat',
         WebkitMaskPosition: 'center',

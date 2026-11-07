@@ -72,6 +72,7 @@ export const routes: RouteObject[] = [
       { path: '/auth/accept-invitation', element: lazyRoute(() => import('@/pages/auth/accept-invitation')) },
       { path: '/auth/verify-email', element: lazyRoute(() => import('@/pages/auth/verify-email')) },
       { path: '/verify-email', element: lazyRoute(() => import('@/pages/verify-email')) },
+      { path: '/oauth/flow-callback', element: lazyRoute(() => import('@/pages/oauth/flow-callback')) },
       {
         path: '/',
         element: <Outlet />,

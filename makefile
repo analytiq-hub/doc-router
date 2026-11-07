@@ -17,8 +17,7 @@ help:
 	@echo "  make help                    - Show this help message"
 	@echo ""
 	@echo "Development:"
-	@echo "  make dev                     - Start FastAPI, Next.js, and Vite (./start-all.sh)"
-	@echo "                               UI default Vite-only; DOCROUTER_DEV_NEXT=1 — also start Next on :3000"
+	@echo "  make dev                     - Start FastAPI + Vite SPA (./start-all.sh)"
 	@echo ""
 	@echo "Setup & Installation:"
 	@echo "  make setup                   - Interactive menu: Python, TypeScript, Dev (both), Kubernetes, or UI setup"
@@ -314,7 +313,7 @@ vitest:
 	cd packages/typescript/frontend && npm install && npm test
 
 build-vite:
-	cd packages/typescript/frontend && npm run typecheck && npm run build:vite
+	cd packages/typescript/frontend && npm run typecheck && npm run build
 
 clean:
 	rm -rf .venv

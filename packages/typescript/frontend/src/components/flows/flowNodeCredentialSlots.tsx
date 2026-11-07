@@ -18,7 +18,7 @@ function formatCredentialLoadError(e: unknown): string {
     if (e.code === 'ERR_NETWORK' || e.message === 'Network Error') {
       return (
         'Could not reach the API. If you use local dev, run the FastAPI backend on port 8000 and open the app via ' +
-        'the Next.js dev server so requests to /fastapi are proxied (see next.config.mjs rewrites).'
+        'the Vite dev server (port 5173) so requests to /fastapi are proxied (see vite.config.ts).'
       );
     }
     const detail = (e.response?.data as { detail?: unknown } | undefined)?.detail;

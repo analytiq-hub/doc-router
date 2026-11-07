@@ -17,7 +17,7 @@ DocRouter is a **multi-service** app (Vite SPA frontend in nginx, FastAPI backen
 
 | Item | Location / detail |
 |------|-------------------|
-| Multi-stage build | `deploy/shared/docker/Dockerfile` — `frontend` (`npm run build:vite`), `runner` (nginx alpine, port 80), `backend` (Python 3.12 slim, LibreOffice, uv-installed deps, port 8000) |
+| Multi-stage build | `deploy/shared/docker/Dockerfile` — `frontend` (`npm run build`), `runner` (nginx alpine, port 80), `backend` (Python 3.12 slim, LibreOffice, uv-installed deps, port 8000) |
 | Published tags (typical) | `ghcr.io/analytiq-hub/doc-router-frontend:${IMAGE_TAG}` and `doc-router-backend:${IMAGE_TAG}` (see repo `makefile` `REGISTRY` / `IMAGE_TAG`) |
 
 ### Compose: external MongoDB
