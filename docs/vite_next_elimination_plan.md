@@ -1,7 +1,7 @@
 # Eliminating Next.js: where we are and cutover plan
 
 Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_route_manifest.md`](./vite_route_manifest.md).  
-**Branch:** `vite` (Vite is **parallel**, not yet **authoritative** in deploy).
+**Branch:** `vite`. **Phase A (ops cutover): complete** for local dev + compose + release/Helm wiring; **`next` still in `package.json`** until Phase E.
 
 ---
 
@@ -27,7 +27,7 @@ Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_rou
 flowchart LR
   subgraph today [Today]
     Browser --> Vite5173[Vite dev / future prod SPA]
-    Browser --> Next3000[Next dev / current prod]
+    Browser --> Next3000[Next dev optional DOCROUTER_DEV_NEXT=1]
     Vite5173 --> Shims[next/* shims]
     Shims --> Shared[Shared React: components + app/page.tsx]
     Next3000 --> Shared
@@ -37,7 +37,24 @@ flowchart LR
   end
 ```
 
-**Vite does not bundle the Next framework** for production SPA builds; it bundles **shared React code** and **replaces** `next/*` imports via `vite.config.ts` aliases. The **`next` dependency** remains for the **second** dev server and **default** Docker image.
+**Vite does not bundle the Next framework** for production SPA builds; it bundles **shared React code** and **replaces** `next/*` imports via `vite.config.ts` aliases. The **`next` dependency** remains for optional local comparison and Phase B–E cleanup.
+
+---
+
+## Phase A — complete (sign-off)
+
+| # | Task | Status |
+|---|------|--------|
+| A1 | Compose on Vite `runner` | ✅ login, dashboard, PDF ([smoke doc](./vite_smoke_test_5173.md#docker-compose-deploycompose-edge-3000)) |
+| A2 | Release + compose `runner` = Vite | ✅ |
+| A3 | Helm frontend :80 / nginx | ✅ |
+| A4 | `make dev` Vite-first | ✅ |
+| A5 | OAuth / `NEXTAUTH_URL` | ✅ local compose (`http://localhost:3000`); **repeat IdP URLs per prod/staging host** |
+| A6 | Regression matrix | ✅ manual smoke (5173 + compose) |
+
+**Before first prod deploy:** rebuild/push frontend image from `vite`, smoke on target URL, confirm IdP redirect URIs match **`{NEXTAUTH_URL}/fastapi/v0/account/auth/.../callback`**.
+
+**Next:** [Phase B](#phase-b--ci-and-packaging-only-know-vite) — drop Next from Docker build graph where safe.
 
 ---
 
@@ -50,20 +67,18 @@ flowchart LR
 
 ---
 
-## Production still on Next (checklist)
+## Deploy artifact checklist (post–Phase A)
 
-| Artifact | Next today | Change for Vite |
-|----------|------------|-----------------|
-| `deploy/shared/docker/Dockerfile` default `runner` | `npm run build` + standalone | Make **`runner-vite`** default **or** swap `runner` implementation |
-| `.github/workflows/release.yml` | `target: runner` | `target: runner-vite` (+ tag naming if needed) |
-| `deploy/compose/docker-compose.yml` | `command: node frontend/server.js` | nginx image, port **80**, drop `NEXTAUTH_URL` on frontend if unused |
-| `deploy/compose/nginx.conf` | `proxy_pass http://frontend:3000/` | `frontend:80` (SPA); keep `/fastapi/` → backend |
-| `deploy/charts/.../frontend/deployment.yaml` | port 3000, `node server.js` | port 80, nginx CMD, probe `/` |
-| OAuth IdP callbacks | prod host + `/fastapi/.../callback` | Same URIs if origin unchanged; update **`app_origin`** / `NEXTAUTH_URL` / docs for single SPA origin |
-| `tools/run-doc-router-docker.sh`, `docs/env.md` | `localhost:3000` | Document single UI URL |
-| UI / E2E tests | may target 3000 | Retarget 5173 / compose URL |
-
-Edge nginx already terminates **`/fastapi`**; the Vite **`nginx-spa.conf`** only needs to **`try_files`** for the SPA (no API proxy inside the frontend container).
+| Artifact | Status |
+|----------|--------|
+| `Dockerfile` `runner` | ✅ Vite + nginx; legacy `runner-next` for rollback |
+| `release.yml` `target: runner` | ✅ |
+| Compose / edge nginx → `frontend:80` | ✅ |
+| Helm frontend :80 | ✅ |
+| `nginx-spa.conf` `.mjs` for pdf.js worker | ✅ |
+| `FRONTEND_PUBLIC_API_URL` / `fastApiBrowserBase()` | ✅ same-origin `/fastapi` in compose |
+| Prod/staging IdP + `NEXTAUTH_URL` | Per environment (before cloud deploy) |
+| UI / E2E tests retargeted | Phase B / follow-up |
 
 ---
 
@@ -77,14 +92,14 @@ Ordered so you can **ship Vite in prod** before **deleting** `next` from `packag
 
 | # | Task | Exit criterion |
 |---|------|----------------|
-| A1 | Staging compose/K8s on `runner-vite` | Login, org workflows, settings, PDF, flows on staging URL — **verify on your staging host** |
-| A2 | Switch `release.yml` + default compose **`build.target`** to `runner-vite` | ✅ `runner` = Vite SPA in Dockerfile + release |
-| A3 | Helm chart: container port 80, drop `node server.js` | ✅ deployment/service/ingress → :80 |
-| A4 | `start-all.sh` / `make dev`: default **`DOCROUTER_DEV_NEXT=0`** or remove Next from `start-all` | ✅ default Vite-only; `DOCROUTER_DEV_NEXT=1` opts into Next |
-| A5 | Production OAuth: single **app origin** (no 3000) | IdP + `NEXTAUTH_URL` = **public** URL (compose: `http://localhost:3000` edge is fine) |
-| A6 | Full regression matrix (copy smoke doc + customer-critical paths) | Signed-off checklist — **manual** |
+| A1 | Compose / staging on Vite `runner` | ✅ compose; staging/K8s before first cloud push |
+| A2 | Release + compose `runner` = Vite SPA | ✅ |
+| A3 | Helm :80 / nginx | ✅ |
+| A4 | `make dev` Vite-first | ✅ |
+| A5 | OAuth / `NEXTAUTH_URL` | ✅ local; per-host for prod |
+| A6 | Regression matrix | ✅ ([smoke doc](./vite_smoke_test_5173.md)) |
 
-**Do not** remove `next` from `package.json` yet — reduces risk.
+Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 ---
 
@@ -154,12 +169,12 @@ Ordered so you can **ship Vite in prod** before **deleting** `next` from `packag
 
 ---
 
-## Immediate next actions (from current branch)
+## Immediate next actions
 
-1. **Phase A1** — Compose experiment: `docker-compose` `frontend.build.target: runner-vite`, nginx upstream **:80**, regression on compose URL.
-2. **Wire remaining 🔶 org routes** (if any found in daily use) — see route manifest.
-3. **`preview:vite` + edge proxy** — confirm `PUBLIC_API_URL=/fastapi` in built `index.html` / env define for prod same-origin.
-4. **Open tracking PR** — “Ops: switch frontend image to runner-vite” separate from “Remove next dependency” (Phase E).
+1. **Phase B** — Remove Next `frontend` build stage from release path; deprecate `runner-next`.
+2. **Merge `vite` → `main`** after review; cut a release so GHCR frontend image matches compose smoke.
+3. **Staging/K8s smoke** once per environment (login, PDF, flows).
+4. **Phase C** (optional in parallel) — codemod `next/*` imports; wire any remaining 🔶 org routes.
 
 ---
 
@@ -170,4 +185,4 @@ Ordered so you can **ship Vite in prod** before **deleting** `next` from `packag
 - Docker Vite target: `deploy/shared/docker/Dockerfile` (`runner-vite`), `packages/typescript/frontend/nginx-spa.conf`
 - Shims: `packages/typescript/frontend/src/shims/`, aliases in `vite.config.ts`
 
-*Last updated: branch `vite`, after Vite-only dev + production build smoke.*
+*Last updated: Phase A sign-off — compose login, dashboard, PDF on branch `vite`.*

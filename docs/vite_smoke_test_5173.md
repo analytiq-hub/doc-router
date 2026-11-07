@@ -1,6 +1,6 @@
-# Vite dev smoke test (localhost:5173)
+# Vite smoke test (dev :5173 and compose :3000)
 
-Automated/browser pass on branch `vite`. Re-run after large router or auth changes.
+Manual regression on branch `vite`. Re-run after large router, auth, or deploy changes.
 
 **Prereqs:** FastAPI :8000 + Vite :5173, signed-in session.
 
@@ -44,8 +44,22 @@ Register in Google/GitHub OAuth apps when using Vite:
 
 Build notes (non-blocking): esbuild CSS nesting warnings from Formio styles; main chunk &gt;500 kB (code-split later).
 
+## Docker Compose (`deploy/compose`, edge :3000)
+
+Verified **Phase A** on branch `vite` (rebuild `frontend` + `backend` from this branch).
+
+| Check | Result |
+|-------|--------|
+| Login + session cookie via `/fastapi` (not direct :8000) | ✅ |
+| Org dashboard | ✅ |
+| PDF document viewer + pdf.js worker (`.mjs` assets) | ✅ |
+| `FRONTEND_PUBLIC_API_URL=/fastapi` baked in SPA | ✅ (see compose build args) |
+
+**Gotchas:** stale GHCR backend → `404` on `/v0/account/auth/session`; rebuild backend. Wrong `PUBLIC_API_URL` in frontend build → login hits :8000 and cookies break on :3000.
+
 ## Known gaps
 
 - **Org `*` catch-all:** rare nested URLs → `OrgPlaceholderPage` (see route manifest).
-- **OAuth providers:** must allow 5173 callback URLs in IdP console (in addition to 3000).
-- **Manual (browser):** optional `preview:vite` pass after build; chunk-size optimization deferred.
+- **OAuth providers:** must allow 5173 callback URLs in IdP console (in addition to 3000 / compose edge).
+- **Staging/K8s:** repeat compose checks after first deploy of new frontend image (Phase A sign-off for cloud is per environment).
+- **Deferred:** `preview:vite` spot-check; chunk-size optimization.

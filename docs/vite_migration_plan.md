@@ -6,7 +6,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 
 **Route coverage:** see [`vite_route_manifest.md`](./vite_route_manifest.md).
 
-**Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phase A (ops):** compose/K8s/release `runner` = Vite nginx; local `make dev` defaults to Vite-only.
+**Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phase A (ops): complete** — Vite `runner` in compose/release/Helm; smoke: [`vite_smoke_test_5173.md`](./vite_smoke_test_5173.md). **Next: Phase B** (packaging).
 
 ### Implemented on `vite` (backend-first, partial)
 
@@ -130,7 +130,7 @@ Then the SPA (Next or Vite) only needs **`credentials: 'include'`** on fetch and
 ### Phase 5 — Environment and deployment
 
 - [x] **`vite.config.ts`** defines `NEXT_PUBLIC_*` from repo `.env` for shared modules (no rename required yet).
-- [x] **Docker optional target:** `docker build --target runner-vite -f deploy/shared/docker/Dockerfile .` serves **`dist-vite/`** via **`nginx-spa.conf`** (`try_files` → `index.html`). Compose edge **`deploy/compose/nginx.conf`** still proxies to Next until you swap the `frontend` service image.
+- [x] **Docker frontend:** `runner` = **`dist-vite/`** + **`nginx-spa.conf`**; compose edge proxies to **frontend:80** (Vite SPA).
 - [x] Wire compose/K8s to **Vite `runner`** (`runner-vite`); edge nginx → frontend:**80**. Set OAuth/`return_to` per environment (`NEXTAUTH_URL` on backend/worker).
 - [ ] **Local Vite:** register **Google + GitHub** redirect URIs for **`http://localhost:5173`** (see [Don't forget: OAuth callbacks (localhost:5173)](#dont-forget-oauth-callbacks-localhost5173)).
 - [ ] Replace `NEXT_PUBLIC_*` with **`VITE_*`** (optional cleanup).
