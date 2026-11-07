@@ -14,7 +14,8 @@ export function withRouteParams<P extends Record<string, string>>(
       if (!value) return null;
       resolved[key as string] = value;
     }
-    return <Page params={Promise.resolve(resolved as P)} />;
+    const p = resolved as P;
+    return <Page {...p} params={Promise.resolve(p)} />;
   }
   return Wrapped;
 }
