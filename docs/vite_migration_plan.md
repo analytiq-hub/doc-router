@@ -17,6 +17,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **`make dev` / `start-all.sh`:** starts FastAPI + Next (**3000**) + Vite (**5173**) together; **`DOCROUTER_DEV_VITE=0`** skips Vite.
 - **Vite routes:** **`createBrowserRouter`** in **`src/router.tsx`**; **`/orgs/:id/dashboard`** renders shared **`Dashboard`** inside **`Layout`** via **`OrgLayout`**. Unmigrated org paths → placeholder.
 - **Next shims (Vite only):** **`src/shims/next-link.tsx`** and **`next-navigation.ts`** aliased in **`vite.config.ts`** so shared components keep `next/link` and `next/navigation` imports.
+- **Org routes in Vite:** **`dashboard`**, **`docs`** (list/upload tabs); other org paths still use placeholder until ported. **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**).
 - **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 
 ## Current state (inventory)

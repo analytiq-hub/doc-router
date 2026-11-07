@@ -7,6 +7,7 @@ import { HomePage } from '@/vite/pages/Home';
 import { OrgPlaceholderPage } from '@/vite/pages/OrgPlaceholder';
 import { SignInPage } from '@/vite/pages/SignIn';
 import { OrgDashboard } from '@/vite/OrgDashboard';
+import { OrgDocuments } from '@/vite/OrgDocuments';
 import { OrgLayout } from '@/vite/OrgLayout';
 import { RequireAuth } from '@/vite/RequireAuth';
 import { RouterProviders } from '@/vite/RouterProviders';
@@ -32,6 +33,7 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, element: <Navigate to="dashboard" replace /> },
                   { path: 'dashboard', element: <OrgDashboard /> },
+                  { path: 'docs', element: <OrgDocuments /> },
                   { path: '*', element: <OrgPlaceholderPage /> },
                 ],
               },
