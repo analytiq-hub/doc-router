@@ -17,8 +17,8 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - OAuth success redirects to **`return_to`** with the cookie set (no longer depends on `/auth/complete?token=` for happy path).
 - **Browser API clients:** axios + `@docrouter/sdk` use **`withCredentials`**; Bearer is added only when **`AppSessionContext`** already has `apiAccessToken`, otherwise the **cookie** authenticates (matches doc-orchestrator “no token in JS” for the common path).
 - **`/auth/complete`**: `?token=` optional; refreshes session after OAuth redirect when cookie is already set.
-- **Vite spike (parallel to Next):** `index.html`, `vite.config.ts` (`/fastapi` → backend), `npm run dev:vite` on port **5173**, `npm run build:vite` → **`dist-vite/`**. CSS: **`main.tsx`** loads Tailwind prelude → **`formio-tailwind.ts`** → **`formio-custom.css`** → utilities → **`app-theme.css`**; **`formio.full.css`** via `index.html`. Pin **`cookie@1.1.1`** in npm overrides so React Router’s ESM build resolves `parse` (avoid accidental `cookie@2`).
-- **`make dev` / `start-all.sh`:** starts FastAPI + Next (**3000**) + Vite (**5173**) together; **`DOCROUTER_DEV_VITE=0`** skips Vite.
+- **Vite SPA (only UI path):** `index.html`, `vite.config.ts` (`/fastapi` → backend), `npm run dev` on port **5173**, `npm run build` → **`dist-vite/`**. CSS: **`main.tsx`** loads Tailwind prelude → **`formio-tailwind.ts`** → **`formio-custom.css`** → utilities → **`app-theme.css`**; **`formio.full.css`** via `index.html`. Pin **`cookie@1.1.1`** in npm overrides so React Router’s ESM build resolves `parse` (avoid accidental `cookie@2`).
+- **`make dev` / `start-all.sh`:** starts FastAPI + **Vite (:5173)**; compose/K8s edge **:3000** serves the built SPA via nginx.
 - **Vite routes:** **`createBrowserRouter`** in **`src/router.tsx`**; **`/orgs/:id/dashboard`** renders shared **`Dashboard`** inside **`Layout`** via **`OrgLayout`**. Unmigrated org paths → placeholder.
 - **Next client APIs:** **`@/utils/appRouter`**, **`AppImage`**, **`dynamicImport`** (no `next/*` packages or Vite aliases).
 - **Org routes in Vite:** hub lists + **detail/edit** (`cases/:id`, `tags/:id`, schema/prompt/form rev routes, `by-id` redirects), **`upload`**, **`models`**, flows editor.
@@ -26,11 +26,11 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **`/feedback`**, **`/admin/feedback`** (CSR auth/admin checks, FastAPI APIs).
 - **`withRouteParams`** spreads resolved segments and passes **`params={Promise.resolve(...)}`** for legacy Next page typings; **`useRouteParams`** reads sync fields on Vite (never **`use(Promise)`** there). Pages that only call **`useParams()`** mount directly. Lazy routes use **`dynamicImport`** / **`lazyRoute`**.
 - **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**). **`FormioProvider`** only under **`OrgLayout`** (not settings/home).
-- **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
+- **`/dashboard`** uses shared **`useDashboardRedirect`**. **`AppProviders`** wraps the SPA root. **`vite.config`** injects **`VITE_*`** from repo **`.env`** (`PUBLIC_API_URL` / `APP_NAME` aliases supported).
 
 ### Don't forget: OAuth callbacks (localhost:5173)
 
-While both Next (**3000**) and Vite (**5173**) run in parallel, **Google and GitHub OAuth apps must also allow the 5173 callback URLs** (in addition to any 3000 URLs). Without this, social sign-in from the Vite app fails at the IdP redirect step.
+For **Vite dev**, **Google and GitHub OAuth apps must allow 5173 callback URLs** (in addition to compose/production URLs on **3000** or your domain). Without this, social sign-in from `npm run dev` fails at the IdP redirect step.
 
 - [ ] **Google Cloud Console** → OAuth client → Authorized redirect URIs:
   - `http://localhost:5173/fastapi/v0/account/auth/google/callback`
@@ -39,17 +39,16 @@ While both Next (**3000**) and Vite (**5173**) run in parallel, **Google and Git
 
 Backend start URLs already send **`app_origin=http://localhost:5173`** from Vite (`oauthStartUrl`, `frontend_origins.py`) so, after the callback, the user returns to the **5173** SPA (e.g. `/auth/complete` → dashboard). Details and smoke checks: [`vite_smoke_test_5173.md`](./vite_smoke_test_5173.md).
 
-## Current state (inventory)
+## Current state (post-migration)
 
 | Area | Notes |
 |------|--------|
-| **Routing** | App Router under `src/app/` — on the order of **50+ `page.tsx` files**, nested dynamic segments (`orgs/[organizationId]/…`). |
-| **Layouts** | Nested `layout.tsx` under `settings/`, `orgs/`, etc. |
-| **Next-specific APIs** | Broad use of `next/navigation`, `next/image`, etc. across **many** `src/` files (grep: `next/` imports). |
-| **Route handlers** | ~~Next `src/app/api/…`~~ **removed** for session + feedback; use FastAPI routes above. |
-| **Auth** | **Not NextAuth in code:** login/OAuth and browser session live in FastAPI. **SSR layouts** may still use `getAppServerSession` / **`appSessionFromApiToken`** in Node until migrated. |
-| **Build / deploy** | `next.config.mjs`: standalone output, webpack tweaks, `rewrites` for `/fastapi` in dev, monorepo `file:` SDK alias. |
-| **Middleware** | No `middleware.ts` in frontend (good — one less Next-only layer). |
+| **Routing** | `src/router.tsx` + `src/pages/**`; see [`vite_route_manifest.md`](./vite_route_manifest.md). |
+| **Layouts** | React layout components (`Layout`, `OrgLayout`, `SettingsAppLayout`, …). |
+| **Navigation** | `@/utils/appRouter`, React Router `Link`, `AppImage`, `dynamicImport` — no `next/*` imports. |
+| **API routes** | Session + feedback on FastAPI only. |
+| **Auth** | FastAPI cookie + OAuth; SPA uses `GET /v0/account/auth/session`. |
+| **Build / deploy** | Vite → `dist-vite/` → nginx in Docker/K8s. |
 
 ## Target architecture
 
@@ -129,11 +128,11 @@ Then the SPA (Next or Vite) only needs **`credentials: 'include'`** on fetch and
 
 ### Phase 5 — Environment and deployment
 
-- [x] **`vite.config.ts`** defines `NEXT_PUBLIC_*` from repo `.env` for shared modules (no rename required yet).
+- [x] **`vite.config.ts`** defines **`VITE_*`** from repo `.env` (`PUBLIC_API_URL` / `APP_*` aliases).
 - [x] **Docker frontend:** `runner` = **`dist-vite/`** + **`nginx-spa.conf`**; compose edge proxies to **frontend:80** (Vite SPA).
 - [x] Wire compose/K8s to **Vite `runner`** (`runner-vite`); edge nginx → frontend:**80**. Set OAuth/`return_to` per environment (`NEXTAUTH_URL` on backend/worker).
 - [ ] **Local Vite:** register **Google + GitHub** redirect URIs for **`http://localhost:5173`** (see [Don't forget: OAuth callbacks (localhost:5173)](#dont-forget-oauth-callbacks-localhost5173)).
-- [x] Replace `NEXT_PUBLIC_*` with **`VITE_*`** (`publicEnv.ts` + vite `define`; legacy compat).
+- [x] **`VITE_*` only** in `publicEnv.ts` + vite `define` (no `NEXT_PUBLIC_*`).
 - [x] Remove **Next standalone** from Docker/compose/K8s paths (`Dockerfile` Vite + nginx only).
 - [x] **ESLint:** Flat config `@eslint/js` + `typescript-eslint` + `eslint-plugin-react-hooks` (`eslint.config.mjs`).
 

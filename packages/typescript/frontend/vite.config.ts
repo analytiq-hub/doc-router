@@ -29,38 +29,25 @@ function stripBrokenFormioCssSourcemaps(): Plugin {
   };
 }
 
-function pick(
-  env: Record<string, string>,
-  primary: string,
-  ...legacy: string[]
-): string {
-  for (const key of [primary, ...legacy]) {
+function pick(env: Record<string, string>, ...keys: string[]): string {
+  for (const key of keys) {
     const v = env[key];
     if (typeof v === 'string' && v.trim()) return v.trim();
   }
   return '';
 }
 
-/** Inject VITE_* (and legacy NEXT_PUBLIC_* compat) from repo root `.env`. */
+/** Inject `VITE_*` from repo root `.env` (operator aliases: `PUBLIC_API_URL`, `APP_NAME`, `APP_FAVICON`). */
 function publicEnvDefine(mode: string): Record<string, string> {
   const env = loadEnv(mode, repoRoot, '');
-  const fastApi = pick(
-    env,
-    'VITE_FASTAPI_FRONTEND_URL',
-    'NEXT_PUBLIC_FASTAPI_FRONTEND_URL',
-    'PUBLIC_API_URL',
-  ) || '/fastapi';
-  const appName = pick(env, 'VITE_APP_NAME', 'NEXT_PUBLIC_APP_NAME', 'APP_NAME');
-  const appFavicon = pick(env, 'VITE_APP_FAVICON', 'NEXT_PUBLIC_APP_FAVICON', 'APP_FAVICON');
+  const fastApi = pick(env, 'VITE_FASTAPI_FRONTEND_URL', 'PUBLIC_API_URL') || '/fastapi';
+  const appName = pick(env, 'VITE_APP_NAME', 'APP_NAME');
+  const appFavicon = pick(env, 'VITE_APP_FAVICON', 'APP_FAVICON');
 
   const pairs: Record<string, string> = {
     VITE_FASTAPI_FRONTEND_URL: fastApi,
     VITE_APP_NAME: appName,
     VITE_APP_FAVICON: appFavicon,
-    // Legacy until Phase E / Next removal
-    NEXT_PUBLIC_FASTAPI_FRONTEND_URL: fastApi,
-    NEXT_PUBLIC_APP_NAME: appName,
-    NEXT_PUBLIC_APP_FAVICON: appFavicon,
   };
 
   const define: Record<string, string> = {};
@@ -69,9 +56,6 @@ function publicEnvDefine(mode: string): Record<string, string> {
     define[`process.env.${key}`] = JSON.stringify(value);
   }
   for (const [key, value] of Object.entries(env)) {
-    if (key.startsWith('NEXT_PUBLIC_') && !(key in pairs)) {
-      define[`process.env.${key}`] = JSON.stringify(value);
-    }
     if (key.startsWith('VITE_') && !(key in pairs)) {
       define[`import.meta.env.${key}`] = JSON.stringify(value);
       define[`process.env.${key}`] = JSON.stringify(value);

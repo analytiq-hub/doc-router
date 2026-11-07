@@ -85,7 +85,12 @@ See historical table in git history; ops cutover closed earlier. Local/prod UI p
 
 1. **Merge `vite` → `main`** after review; cut a release so GHCR frontend image matches compose/Kind smoke.
 2. **Staging/K8s smoke** once per environment (login, PDF, flows, flow OAuth popup).
-3. **Follow-up (optional):** trim legacy `NEXT_PUBLIC_*` from `vite.config.ts` `define` once docs/env only document `VITE_*`; retarget stale paths in historical docs (`env.md`, `simple_license.md`).
+
+## Follow-up (env & docs cleanup) — **complete**
+
+- `NEXT_PUBLIC_*` removed from `vite.config.ts` / `publicEnv.ts`; operator docs use **`VITE_*`** (`env.md`, `.env.example.*`, `INSTALL.nextauth.md`).
+- Tooling: dropped `/.next` ignores, removed historical `phase-c-codemod.mjs`, simplified `ThemeRegistry` (CSR-only).
+- Optional later: rename `NEXTAUTH_URL` → `APP_URL` across Python/Helm (name only; behavior unchanged).
 
 ---
 

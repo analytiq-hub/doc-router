@@ -673,7 +673,7 @@ Use a temporary Ed25519 keypair in tests.
 ## Security notes
 
 - Private key never in customer artifacts or CI images for customer builds.
-- Do not put license tokens in `NEXT_PUBLIC_*`.
+- Do not put license tokens in `VITE_*` or other client-exposed build vars.
 - Status endpoints must not echo the full `license_key`.
 - Audit admin `PUT` (user id + `license_id` + features, not full token).
 - Treat Mongo `license_key` like other secrets at rest.

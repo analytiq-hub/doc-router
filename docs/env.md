@@ -4,7 +4,7 @@ This document explains all environment variables used in the DocRouter project, 
 
 ## Overview
 
-The DocRouter project uses a single `.env` file at the project root that is shared between the FastAPI backend, Next.js frontend, and worker processes. The environment variables are loaded using `python-dotenv` and are accessible to all components of the system.
+The DocRouter project uses a single `.env` file at the project root that is shared between the FastAPI backend, Vite SPA frontend build, and worker processes. Python loads variables with `python-dotenv`; Vite reads the same file from the repo root (`vite.config.ts` `envDir` and `define` for `VITE_*`).
 
 ## Core Application Variables
 
@@ -50,22 +50,22 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Default**: `"/"`
 - **Usage**: Used in FastAPI app configuration (`packages/python/app/main.py`)
 
-## Authentication & NextAuth Variables
+## Authentication & browser app URL
 
 ### `NEXTAUTH_URL`
-- **Purpose**: Public URL of the Next.js app (login links, OAuth redirects, CORS)
+- **Purpose**: Public URL of the Vite SPA as seen by browsers (OAuth `return_to`, login links, CORS). Legacy name from the pre–FastAPI-auth era; not NextAuth.js.
 - **Usage**:
   - Used in FastAPI backend for CORS configuration
   - Used in payments module for webhook URLs
   - Added to CORS allowed origins if present
-- **Format**: `https://yourdomain.com` or `http://localhost:3000`
+- **Format**: `https://yourdomain.com`, `http://localhost:3000` (compose edge), or `http://localhost:5173` (pure Vite dev)
+- **Vite dev note**: Register OAuth redirect URIs for **5173** even when this variable points at **3000**; the SPA passes `app_origin` on OAuth start (see `vite_smoke_test_5173.md`).
 
 ### `APP_SECRET`
 - **Purpose**: Shared symmetric key for browser session JWTs (HS256) and default at-rest encryption of stored credentials/API tokens
-- **Required**: Yes (same value on FastAPI backend and Next.js server)
+- **Required**: Yes (same value on FastAPI backend and workers)
 - **Usage**:
   - Session JWT mint/verify (`packages/python/app/session_jwt.py`, `packages/python/app/auth.py`)
-  - Next.js cookie session verify (`packages/typescript/frontend/src/utils/sessionFromToken.ts`)
   - Token encryption/decryption (`packages/python/analytiq_data/crypto/encryption.py`)
 - **Local dev / compose deploy**: `scripts/check-app-secret-env.sh` runs from `start-all.sh` and `make deploy-compose` if `.env` still defines `NEXTAUTH_SECRET` or omits `APP_SECRET`.
 
@@ -85,16 +85,27 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Purpose**: Google OAuth application client secret
 - **Usage**: FastAPI Google/GitHub login (`packages/python/app/routes/account_auth.py`)
 
-## Frontend Configuration
+## Frontend configuration (Vite)
+
+### `VITE_FASTAPI_FRONTEND_URL`
+- **Purpose**: API path or URL baked into the SPA for browser requests (`publicEnv.ts`, `packages/typescript/frontend/src/utils/api.ts`)
+- **Default**: `/fastapi` (same-origin via dev proxy or compose nginx)
+- **Host dev**: usually `/fastapi` with Vite proxy to `VITE_BACKEND_URL` / `http://127.0.0.1:8000`
+- **Docker production build**: often `/fastapi` when the edge nginx forwards `/fastapi` to FastAPI
+
+### `VITE_APP_NAME` / `VITE_APP_FAVICON`
+- **Purpose**: Product name and favicon path in the UI (`src/config/branding.ts`)
+- **Aliases at build time**: `APP_NAME` → `VITE_APP_NAME`, `APP_FAVICON` → `VITE_APP_FAVICON` (`vite.config.ts`)
 
 ### `PUBLIC_API_URL`
-- **Purpose**: Public URL for the FastAPI backend as seen by browsers and OAuth providers
-- **Default**: `"http://localhost:8000"` (host dev); `/fastapi` for same-origin Docker frontend builds
+- **Purpose**: Operator-facing URL for the FastAPI **runtime** (OAuth redirect URIs, flow credentials) and optional alias for `VITE_FASTAPI_FRONTEND_URL` at Vite build time
+- **Default**: `"http://localhost:8000"` (host dev); `/fastapi` or `https://<domain>/fastapi` in Docker/production
 - **Usage**:
-  - API client configuration (`packages/typescript/frontend/src/utils/api.ts`)
-  - Developer settings page (`packages/typescript/frontend/src/app/settings/user/developer/page.tsx`)
   - Flow OAuth redirect URIs (`packages/python/analytiq_data/flows/credential_runtime.py`)
-- **Note**: Mapped to `NEXT_PUBLIC_FASTAPI_FRONTEND_URL` at Next.js build time via `next.config.mjs`. Must be a full absolute URL in backend/worker runtime (e.g. `https://<domain>/fastapi` in production).
+  - Backend/worker must receive a **full absolute URL** in production (not only a path prefix)
+
+### `VITE_BACKEND_URL`
+- **Purpose**: Vite dev-server proxy target for `/fastapi` (defaults to `http://127.0.0.1:8000` in `vite.config.ts`)
 
 ## AWS Configuration
 
@@ -408,8 +419,7 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://host.docker.inte
 
 The environment variables are loaded from the top-level `.env` file using:
 - Python: `python-dotenv` in `packages/python/analytiq_data/common/setup.py`
-- Next.js: Automatic loading from project root
-- The `.env` file is copied to `packages/typescript/frontend/.env.local` during build process
+- Vite: `loadEnv` + `define` in `packages/typescript/frontend/vite.config.ts` (`envDir` = repo root)
 
 ## Example .env File Structure
 

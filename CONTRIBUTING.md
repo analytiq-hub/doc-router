@@ -26,7 +26,7 @@ Thank you for your interest in contributing to Smart Document Router! This docum
 
 ## Code Style Guidelines
 
-### Frontend (Next.js/React)
+### Frontend (Vite/React)
 - Use TypeScript for all new code
 - Follow the existing component structure in `packages/typescript/frontend/src/components/`
 - Use Tailwind CSS for styling (Material-UI for complex components)

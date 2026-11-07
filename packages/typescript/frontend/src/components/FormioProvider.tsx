@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useAppSession } from '@/contexts/AppSessionContext';
+import { publicFastApiFrontendUrl } from '@/config/publicEnv';
 
 // Global type declarations for the proxy helper
 declare global {
@@ -35,15 +36,9 @@ export default function FormioProvider({
       Templates.framework = "tailwind";
     };
 
-    // Initialize global helpers for FormIO calculated values
-    const initializeGlobalHelpers = () => {
-      // Make FASTAPI URL available globally for FormIO
-      // for example:
-      // window.FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || "http://localhost:8000";
-    };
+    window.FASTAPI_URL = publicFastApiFrontendUrl();
 
     initializeFormio();
-    initializeGlobalHelpers();
   }, [session]);
 
   return <>{children}</>;

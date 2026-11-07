@@ -1,5 +1,7 @@
 # Plan: Consolidate FastAPI URL Environment Variables
 
+> **Superseded (2026):** The UI is a Vite SPA. Use `VITE_FASTAPI_FRONTEND_URL` (and operator alias `PUBLIC_API_URL` at build time) in `vite.config.ts` / `publicEnv.ts`. This document predates that cutover; keep it for backend/container `PUBLIC_API_URL` rollout notes only.
+
 ## Problem
 
 `NEXT_PUBLIC_FASTAPI_FRONTEND_URL` is the single `.env` variable operators set to point at the FastAPI server. The name is a Next.js build-time artifact (`NEXT_PUBLIC_*`) that has leaked into operator-facing config. It is also never passed to the Python backend, so `credential_runtime.py` — which builds OAuth `redirect_uri` — falls back to the hardcoded default `http://127.0.0.1:8000` because `PUBLIC_API_URL` is never injected into the backend/worker runtime. This produces redirect URIs that OAuth providers reject in production.

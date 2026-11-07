@@ -15,8 +15,9 @@ DocRouter — On-Prem Installation Architecture
 
 ┌──────────── Customer infrastructure (Docker Compose / K8s) ─────────────┐
 │       ┌───────┐ ┌───────┐ ┌─────────────┐ ┌────────────────────┐        │
-│       │Next.js│ │FastAPI│ │   Workers   │ │      MongoDB       │        │
-│       │ :3000 │ │ :8000 │ │OCR/LLM/flows│ │Embedded/Atlas/DocDB│        │
+│       │Vite   │ │FastAPI│ │   Workers   │ │      MongoDB       │        │
+│       │ SPA   │ │ :8000 │ │OCR/LLM/flows│ │Embedded/Atlas/DocDB│        │
+│       │ :3000 │ │       │ │             │ │                    │        │
 │       └───────┘ └───────┘ └─────────────┘ └────────────────────┘        │
 │                    ┌──────────────────────────────┐                     │
 │                    │nginx reverse proxy (optional)│                     │
@@ -42,7 +43,7 @@ DocRouter — On-Prem Installation Architecture
 
 | Component            | Where it runs                  | Notes                                              |
 | -------------------- | ------------------------------ | -------------------------------------------------- |
-| Frontend (Next.js)   | Docker Compose / K8s           | Port 3000                                          |
+| Frontend (Vite SPA)  | Docker Compose / K8s (nginx)   | Port 3000 edge; static `dist-vite/`                |
 | Backend (FastAPI)    | Docker Compose / K8s           | Port 8000                                          |
 | Workers              | Docker Compose / K8s           | OCR, LLMs, and flows (queue-based processing)      |
 | MongoDB              | Embedded, Atlas, or DocumentDB | App state, encrypted credentials, login passwords  |

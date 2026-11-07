@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy optional APP_FAVICON from repo .env into the Next.js public dir for /branded-favicon.ico.
+# Copy optional APP_FAVICON from repo .env into the frontend public dir for /branded-favicon.ico.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

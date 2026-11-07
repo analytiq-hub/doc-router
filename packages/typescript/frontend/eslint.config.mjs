@@ -10,7 +10,6 @@ export default [
       'dist/**',
       'dist-vite/**',
       'node_modules/**',
-      '.next/**',
       '**/*.cjs',
     ],
   },
