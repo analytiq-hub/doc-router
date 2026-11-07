@@ -1,12 +1,15 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet } from 'react-router-dom';
 
-import Layout from '@/components/Layout'
+import Layout from '@/components/Layout';
+import FormioProvider from '@/components/FormioProvider';
 
-/** Org chrome with nested routes (doc-orchestrator Layout + Outlet pattern). */
+/** Org chrome; Formio only under org routes (not settings/home). */
 export function OrgLayout() {
   return (
-    <Layout>
-      <Outlet />
-    </Layout>
-  )
+    <FormioProvider>
+      <Layout>
+        <Outlet />
+      </Layout>
+    </FormioProvider>
+  );
 }

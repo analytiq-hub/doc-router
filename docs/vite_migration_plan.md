@@ -4,6 +4,8 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 
 **Branch for experimentation:** `vite` (create PRs from this branch when implementation starts.)
 
+**Route coverage:** see [`vite_route_manifest.md`](./vite_route_manifest.md).
+
 ### Implemented on `vite` (backend-first, partial)
 
 - FastAPI sets and clears the **`dr.api-token` httpOnly cookie** on login, OAuth completion, `POST/DELETE /v0/account/auth/session`.
@@ -21,7 +23,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **Settings in Vite:** **`/settings/**`** inside **`SettingsAppLayout`**; **account/development/** subtree fully wired (AWS/Azure/GCP, worker, LLM manager + provider).
 - **`/feedback`**, **`/admin/feedback`** (CSR auth/admin checks, FastAPI APIs).
 - **`withRouteParams`** bridges App Router **`use(params)`** pages; pages that call **`useParams()`** mount directly. **`next/dynamic`** shim for lazy chunks.
-- **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**).
+- **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**). **`FormioProvider`** only under **`OrgLayout`** (not settings/home).
 - **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 
 ## Current state (inventory)

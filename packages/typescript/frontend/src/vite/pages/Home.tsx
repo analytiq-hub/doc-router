@@ -1,34 +1,33 @@
 import { Link } from 'react-router-dom';
+import Layout from '@/components/Layout';
+import MarketingHome from '@/app/page';
 import { useAppSession } from '@/contexts/AppSessionContext';
 
 export function HomePage() {
   const { session, status } = useAppSession();
 
   return (
-    <main className="max-w-lg mx-auto mt-16 p-6 space-y-4">
-      <h1 className="text-2xl font-semibold text-gray-900">Doc Router (Vite preview)</h1>
-      <p className="text-gray-600 text-sm">
-        Experimental SPA shell for the Next → Vite migration. Use Next on port 3000 for the full app.
-      </p>
-      <div className="rounded-md border border-gray-200 p-4 bg-white text-sm">
-        <div>
-          Session: <strong>{status}</strong>
-        </div>
-        {session?.user?.email && (
-          <div className="mt-1 text-gray-700">Signed in as {session.user.email}</div>
+    <Layout>
+      <div className="relative">
+        {status === 'authenticated' && (
+          <div className="absolute top-4 right-4 z-10 flex gap-3 text-sm">
+            <Link className="text-blue-600 hover:underline" to="/dashboard">
+              Open dashboard
+            </Link>
+            {session?.user?.email && (
+              <span className="text-gray-600 hidden sm:inline">{session.user.email}</span>
+            )}
+          </div>
         )}
-      </div>
-      <div className="flex flex-col gap-2 text-sm">
-        {status === 'authenticated' ? (
-          <Link className="text-blue-600 hover:underline" to="/dashboard">
-            Open dashboard
-          </Link>
-        ) : (
-          <Link className="text-blue-600 hover:underline" to="/auth/signin">
-            Sign in
-          </Link>
+        {status !== 'authenticated' && status !== 'loading' && (
+          <div className="absolute top-4 right-4 z-10 text-sm">
+            <Link className="text-blue-600 hover:underline" to="/auth/signin">
+              Sign in
+            </Link>
+          </div>
         )}
+        <MarketingHome />
       </div>
-    </main>
+    </Layout>
   );
 }

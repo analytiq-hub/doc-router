@@ -8,6 +8,10 @@ import { FeedbackPage } from '@/vite/pages/Feedback';
 import { HomePage } from '@/vite/pages/Home';
 import { OrgPlaceholderPage } from '@/vite/pages/OrgPlaceholder';
 import { SignInPage } from '@/vite/pages/SignIn';
+import { SystemPage } from '@/vite/pages/System';
+import AcceptInvitationPage from '@/app/auth/accept-invitation/page';
+import AuthVerifyEmailPage from '@/app/auth/verify-email/page';
+import VerifyEmailPage from '@/app/verify-email/page';
 import { OrgDashboard } from '@/vite/OrgDashboard';
 import { OrgDocumentViewer } from '@/vite/OrgDocumentViewer';
 import { OrgDocuments } from '@/vite/OrgDocuments';
@@ -124,11 +128,15 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/auth/signin', element: <SignInPage /> },
       { path: '/auth/complete', element: <AuthCompletePage /> },
+      { path: '/auth/accept-invitation', element: <AcceptInvitationPage /> },
+      { path: '/auth/verify-email', element: <AuthVerifyEmailPage /> },
+      { path: '/verify-email', element: <VerifyEmailPage /> },
       {
         path: '/',
         element: <Outlet />,
         children: [
           { index: true, element: <HomePage /> },
+          { path: 'system', element: <SystemPage /> },
           {
             element: <RequireAuth />,
             children: [
