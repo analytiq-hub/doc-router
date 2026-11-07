@@ -1,60 +1,5 @@
+# Production UI: Vite static SPA (build) + nginx (runtime).
 FROM node:24 AS frontend
-
-WORKDIR /app
-
-# Copy SDK source first (needed for frontend dependency)
-COPY packages/typescript/sdk/ ./packages/typescript/sdk/
-# Install SDK dependencies first
-RUN cd packages/typescript/sdk && npm install
-# Copy frontend package.json and scripts (postinstall runs patch-formio-css.js)
-COPY packages/typescript/frontend/package*.json ./packages/typescript/frontend/
-COPY packages/typescript/frontend/scripts/ ./packages/typescript/frontend/scripts/
-# Install frontend dependencies (this will build the SDK via the prepare script)
-RUN cd packages/typescript/frontend && npm install
-
-# Build-time arguments
-ARG NODE_ENV=production
-ARG PUBLIC_API_URL=/fastapi
-ARG APP_NAME="Smart Document Router"
-ARG APP_FAVICON=""
-
-# Set build-time environment variables
-ENV NODE_ENV=${NODE_ENV}
-ENV PUBLIC_API_URL=${PUBLIC_API_URL}
-ENV APP_NAME=${APP_NAME}
-ENV APP_FAVICON=${APP_FAVICON}
-
-RUN echo "NODE_ENV=${NODE_ENV}"
-# Now copy the rest of the frontend files
-COPY packages/typescript/frontend/ ./packages/typescript/frontend/
-COPY branding ./branding
-COPY scripts/sync-branding.sh ./scripts/sync-branding.sh
-ARG NODE_MAX_OLD_SPACE_MB=4096
-ENV NODE_OPTIONS=--max-old-space-size=${NODE_MAX_OLD_SPACE_MB}
-RUN chmod +x ./scripts/sync-branding.sh \
-    && printf 'APP_NAME=%s\n' "$APP_NAME" > .env \
-    && { [ -z "$APP_FAVICON" ] || printf 'APP_FAVICON=%s\n' "$APP_FAVICON" >> .env; } \
-    && ./scripts/sync-branding.sh \
-    && cd packages/typescript/frontend && npm run build
-
-EXPOSE 3000
-
-# --- Legacy Next.js standalone (comparison / rollback; not used by compose or release) ---
-FROM node:24-slim AS runner-next
-WORKDIR /app
-ENV NODE_ENV=production
-ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
-
-COPY --from=frontend /app/packages/typescript/frontend/.next/standalone ./
-COPY --from=frontend /app/packages/typescript/frontend/.next/static ./frontend/.next/static
-COPY --from=frontend /app/packages/typescript/frontend/public ./frontend/public
-
-EXPOSE 3000
-CMD ["node", "frontend/server.js"]
-
-# --- Production UI: Vite static SPA ---
-FROM node:24 AS frontend-vite
 WORKDIR /app
 COPY packages/typescript/sdk/ ./packages/typescript/sdk/
 RUN cd packages/typescript/sdk && npm install
@@ -83,15 +28,12 @@ RUN chmod +x ./scripts/sync-branding.sh \
     && ./scripts/sync-branding.sh \
     && cd packages/typescript/frontend && npm run build:vite
 
-FROM nginx:alpine AS runner-vite
+FROM nginx:alpine AS runner
 COPY packages/typescript/frontend/nginx-mjs-types.conf /etc/nginx/conf.d/00-mjs-types.conf
 COPY packages/typescript/frontend/nginx-spa.conf /etc/nginx/conf.d/default.conf
-COPY --from=frontend-vite /app/packages/typescript/frontend/dist-vite /usr/share/nginx/html
+COPY --from=frontend /app/packages/typescript/frontend/dist-vite /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
-
-# Default `runner` target for compose, release, and `make dockerhub-build-frontend`
-FROM runner-vite AS runner
 
 # Use slim Python 3.12 as the base image
 FROM python:3.12-slim AS backend

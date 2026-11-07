@@ -63,11 +63,13 @@ jobs:
         with:
           context: .
           file: deploy/shared/docker/Dockerfile
-          target: runner # Vite SPA (nginx); legacy Next: runner-next
+          target: runner
           push: true
           tags: ${{ steps.tags.outputs.frontend }}
           platforms: linux/amd64,linux/arm64
-          build-args: NODE_ENV=production
+          build-args: |
+            NODE_ENV=production
+            PUBLIC_API_URL=/fastapi
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

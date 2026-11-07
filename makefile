@@ -7,7 +7,7 @@ BACKEND_IMAGE = $(REGISTRY)/doc-router-backend
 IMAGE_TAG ?= latest
 export IMAGE_TAG
 DOCKERFILE = deploy/shared/docker/Dockerfile
-# Build args for frontend (PUBLIC_API_URL is baked into Next.js build at build time)
+# Build args for frontend (PUBLIC_API_URL is baked into the Vite SPA at build time)
 PUBLIC_API_URL ?= http://localhost:8000
 NODE_ENV ?= production
 
@@ -320,15 +320,6 @@ clean:
 	rm -rf .venv
 
 # DockerHub targets
-dockerhub-build-frontend-vite:
-	@echo "Building Vite static frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)-vite"
-	@echo "Using PUBLIC_API_URL=$(PUBLIC_API_URL)"
-	docker build -t $(FRONTEND_IMAGE):$(IMAGE_TAG)-vite \
-		--target runner-vite \
-		--build-arg PUBLIC_API_URL=$(PUBLIC_API_URL) \
-		--build-arg NODE_ENV=$(NODE_ENV) \
-		-f $(DOCKERFILE) .
-
 dockerhub-build-frontend:
 	@echo "Building frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)"
 	@echo "Using PUBLIC_API_URL=$(PUBLIC_API_URL)"

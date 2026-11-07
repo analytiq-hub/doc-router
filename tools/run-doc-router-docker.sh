@@ -63,12 +63,7 @@ write_compose_yaml() {
 services:
   frontend:
     image: ghcr.io/analytiq-hub/doc-router-frontend:${IMAGE_TAG:-latest}
-    environment:
-      - ENV=${ENV:-dev}
-      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - APP_SECRET=${APP_SECRET:-default_secret_for_development}
-    command: node frontend/server.js
+    # Vite SPA (nginx :80); session/OAuth env lives on backend/worker.
     restart: unless-stopped
     networks:
       - doc-router-local-network

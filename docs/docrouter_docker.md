@@ -9,7 +9,7 @@ Rough parity with:
 1. **Ephemeral / try-it**: one short command from a clean checkout, teardown removes containers (optional: discard DB data too).
 2. **Persistent**: same stack with durable MongoDB data (and documented host paths or named volumes).
 
-DocRouter is a **multi-service** app (Next.js frontend, FastAPI backend, nginx, migrations, MongoDB). A literal single-container `docker run` is possible only with a deliberately designed “fat” image (process supervisor + all services)—**not what we ship today**. The practical analogue to n8n’s one-liners is **`docker compose`** with predictable files, ports, and copy-paste commands (optionally backed by `-f`/`--env-file` and make targets).
+DocRouter is a **multi-service** app (Vite SPA frontend in nginx, FastAPI backend, edge nginx, migrations, MongoDB). A literal single-container `docker run` is possible only with a deliberately designed “fat” image (process supervisor + all services)—**not what we ship today**. The practical analogue to n8n’s one-liners is **`docker compose`** with predictable files, ports, and copy-paste commands (optionally backed by `-f`/`--env-file` and make targets).
 
 ## What we already support
 
@@ -17,13 +17,13 @@ DocRouter is a **multi-service** app (Next.js frontend, FastAPI backend, nginx, 
 
 | Item | Location / detail |
 |------|-------------------|
-| Multi-stage build | `deploy/shared/docker/Dockerfile` — `runner` (Node 24, Next standalone on port 3000), `backend` (Python 3.12 slim, LibreOffice, uv-installed deps, port 8000) |
+| Multi-stage build | `deploy/shared/docker/Dockerfile` — `frontend` (`npm run build:vite`), `runner` (nginx alpine, port 80), `backend` (Python 3.12 slim, LibreOffice, uv-installed deps, port 8000) |
 | Published tags (typical) | `ghcr.io/analytiq-hub/doc-router-frontend:${IMAGE_TAG}` and `doc-router-backend:${IMAGE_TAG}` (see repo `makefile` `REGISTRY` / `IMAGE_TAG`) |
 
 ### Compose: external MongoDB
 
 - **File**: `deploy/compose/docker-compose.yml`
-- **Services**: `migrate` (one-shot `migrate.py`), `backend` (uvicorn `:8000`), `frontend` (Next standalone), `nginx` (maps host **3000 → 80**).
+- **Services**: `migrate` (one-shot `migrate.py`), `backend` (uvicorn `:8000`), `frontend` (Vite static + nginx `:80`), edge `nginx` (maps host **3000 → 80**).
 - **MongoDB**: not included; **`MONGODB_URI`** defaults to `mongodb://YOUR_HOST_IP:27017`—you must supply a reachable server.
 
 ### Compose: embedded MongoDB (Atlas Local + mongot)

@@ -72,7 +72,7 @@ If you prefer to deploy manually:
 
 ```bash
 # Build images
-docker build -t analytiq-hub/doc-router-frontend:latest --target frontend -f deploy/shared/docker/Dockerfile .
+docker build -t analytiq-hub/doc-router-frontend:latest --target runner -f deploy/shared/docker/Dockerfile .
 docker build -t analytiq-hub/doc-router-backend:latest --target backend -f deploy/shared/docker/Dockerfile .
 
 # Load into kind
@@ -88,7 +88,7 @@ kubectl apply -k .
 
 After deployment, access the application:
 
-- **Frontend**: http://localhost:3000
+- **Frontend (via ingress or edge)**: http://localhost:3000 or http://localhost (ingress)
 - **Backend API**: http://localhost:8000
 - **Ingress**: http://localhost (if configured)
 
@@ -170,7 +170,7 @@ After making changes:
 
 ```bash
 # Rebuild images
-docker build -t analytiq-hub/doc-router-frontend:latest --target frontend -f deploy/shared/docker/Dockerfile .
+docker build -t analytiq-hub/doc-router-frontend:latest --target runner -f deploy/shared/docker/Dockerfile .
 docker build -t analytiq-hub/doc-router-backend:latest --target backend -f deploy/shared/docker/Dockerfile .
 
 # Reload into kind

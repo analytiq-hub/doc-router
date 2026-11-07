@@ -1,7 +1,7 @@
 # Eliminating Next.js: where we are and cutover plan
 
 Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_route_manifest.md`](./vite_route_manifest.md).  
-**Branch:** `vite`. **Phase A (ops cutover): complete** for local dev + compose + release/Helm wiring; **`next` still in `package.json`** until Phase E.
+**Branch:** `vite`. **Phase A–B complete** (ops + Docker/compose/K8s packaging); **`next` still in `package.json`** for optional local dev until Phase E.
 
 ---
 
@@ -13,9 +13,9 @@ Companion to [`vite_migration_plan.md`](./vite_migration_plan.md) and [`vite_rou
 | **Auth / session** | **Backend-owned** | FastAPI cookie + OAuth; Next API routes for session/feedback **removed** |
 | **Local dev default** | **Vite-first** | `make dev` → FastAPI + **Vite :5173**; Next :3000 only if **`DOCROUTER_DEV_NEXT=1`** |
 | **CI** | **Hybrid** | `frontend-build.yml`: `typecheck` + **`build:vite`** (Next **`build`** not in CI) |
-| **Release images** | **Vite SPA** | `release.yml` `target: **runner**` → `build:vite` + nginx (:80); legacy Next: `runner-next` |
-| **Compose / K8s** | **Vite SPA** | Frontend container nginx :80; compose edge still **localhost:3000** → nginx → frontend:80 |
-| **Vite production path** | **Default `runner`** | `Dockerfile` **`runner`** = `runner-vite` → `dist-vite/` + `nginx-spa.conf` |
+| **Release images** | **Vite SPA only** | `release.yml` `target: runner` → `build:vite` + nginx (:80) |
+| **Compose / K8s** | **Vite SPA only** | Frontend container nginx :80; compose edge **localhost:3000** → edge nginx → frontend:80 |
+| **Vite production path** | **`runner`** | `Dockerfile` stages `frontend` (vite build) → `runner` (nginx + `dist-vite/`) |
 | **`next` npm package** | **Still installed** | Required for `npm run dev` / `npm run build` (Next) until removal |
 | **Source imports `next/*`** | **~90 files** | Mostly `next/link`, `next/navigation`; Vite **aliases** these to `src/shims/*` at build time |
 | **Next-only server code** | **Small but real** | `layout.tsx` files use `getAppServerSession` / `redirect` / `cookies()` from `next/headers`; **Vite does not run these layouts** (CSR + `RequireAuth` instead) |
@@ -54,7 +54,7 @@ flowchart LR
 
 **Before first prod deploy:** rebuild/push frontend image from `vite`, smoke on target URL, confirm IdP redirect URIs match **`{NEXTAUTH_URL}/fastapi/v0/account/auth/.../callback`**.
 
-**Next:** [Phase B](#phase-b--ci-and-packaging-only-know-vite) — drop Next from Docker build graph where safe.
+**Next:** [Phase C](#phase-c--remove-shims-by-fixing-imports-source-not-ops) — replace `next/*` imports in source.
 
 ---
 
@@ -71,14 +71,14 @@ flowchart LR
 
 | Artifact | Status |
 |----------|--------|
-| `Dockerfile` `runner` | ✅ Vite + nginx; legacy `runner-next` for rollback |
+| `Dockerfile` `runner` | ✅ Vite + nginx only (no Next build stages) |
 | `release.yml` `target: runner` | ✅ |
 | Compose / edge nginx → `frontend:80` | ✅ |
 | Helm frontend :80 | ✅ |
 | `nginx-spa.conf` `.mjs` for pdf.js worker | ✅ |
 | `FRONTEND_PUBLIC_API_URL` / `fastApiBrowserBase()` | ✅ same-origin `/fastapi` in compose |
 | Prod/staging IdP + `NEXTAUTH_URL` | Per environment (before cloud deploy) |
-| UI / E2E tests retargeted | Phase B / follow-up |
+| UI / E2E tests retargeted | Follow-up (optional preview smoke in CI) |
 
 ---
 
@@ -103,14 +103,14 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 ---
 
-### Phase B — CI and packaging only know Vite
+### Phase B — CI and packaging only know Vite — **complete**
 
-| # | Task | Exit criterion |
-|---|------|----------------|
-| B1 | Remove `npm run build` / `next build` from Docker **frontend** stage used in releases | Dockerfile has one frontend build: `build:vite` |
-| B2 | Delete **`runner`** (Node standalone) target or keep as deprecated one release | No production doc references `runner` |
-| B3 | Optional: publish **`runner-vite`** as `doc-router-frontend` without rename | Same image name, new contents |
-| B4 | `make build-vite` remains gate; add smoke job that serves `preview:vite` + curl | CI green |
+| # | Task | Status |
+|---|------|--------|
+| B1 | Dockerfile frontend stage runs **`build:vite` only** (no `next build`) | ✅ |
+| B2 | Removed **`runner-next`** Node standalone target | ✅ |
+| B3 | **`doc-router-frontend`** image = nginx `runner` (unchanged name) | ✅ |
+| B4 | `make build-vite` + `frontend-build.yml`; release bakes **`PUBLIC_API_URL=/fastapi`** | ✅ |
 
 ---
 
@@ -171,10 +171,9 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 ## Immediate next actions
 
-1. **Phase B** — Remove Next `frontend` build stage from release path; deprecate `runner-next`.
-2. **Merge `vite` → `main`** after review; cut a release so GHCR frontend image matches compose smoke.
-3. **Staging/K8s smoke** once per environment (login, PDF, flows).
-4. **Phase C** (optional in parallel) — codemod `next/*` imports; wire any remaining 🔶 org routes.
+1. **Merge `vite` → `main`** after review; cut a release so GHCR frontend image matches compose/Kind smoke.
+2. **Staging/K8s smoke** once per environment (login, PDF, flows).
+3. **Phase C** — codemod `next/*` imports; wire any remaining 🔶 org routes.
 
 ---
 
@@ -182,7 +181,7 @@ Phase A **closed** — do not remove `next` from `package.json` until Phase E.
 
 - Dev smoke: [`vite_smoke_test_5173.md`](./vite_smoke_test_5173.md)
 - Route parity: [`vite_route_manifest.md`](./vite_route_manifest.md)
-- Docker Vite target: `deploy/shared/docker/Dockerfile` (`runner-vite`), `packages/typescript/frontend/nginx-spa.conf`
+- Docker Vite target: `deploy/shared/docker/Dockerfile` (`frontend` → `runner`), `packages/typescript/frontend/nginx-spa.conf`
 - Shims: `packages/typescript/frontend/src/shims/`, aliases in `vite.config.ts`
 
-*Last updated: Phase A sign-off — compose login, dashboard, PDF on branch `vite`.*
+*Last updated: Phase B — Docker/compose/K8s/release Vite-only packaging.*
