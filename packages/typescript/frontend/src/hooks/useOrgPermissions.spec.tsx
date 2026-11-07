@@ -6,7 +6,7 @@ import { CAP_CONFIG_WRITE, CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 const replaceMock = vi.fn();
 const fetchOrgPermissionsMeMock = vi.fn();
 
-vi.mock('next/navigation', () => ({
+vi.mock('@/utils/appRouter', () => ({
   useRouter: () => ({
     replace: replaceMock,
     push: vi.fn(),

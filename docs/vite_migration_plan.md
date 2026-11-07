@@ -20,11 +20,11 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **Vite spike (parallel to Next):** `index.html`, `vite.config.ts` (`/fastapi` → backend), `npm run dev:vite` on port **5173**, `npm run build:vite` → **`dist-vite/`**. CSS: **`main.tsx`** loads Tailwind prelude → **`formio-tailwind.ts`** → **`formio-custom.css`** → utilities → **`app-theme.css`**; **`formio.full.css`** via `index.html`. Pin **`cookie@1.1.1`** in npm overrides so React Router’s ESM build resolves `parse` (avoid accidental `cookie@2`).
 - **`make dev` / `start-all.sh`:** starts FastAPI + Next (**3000**) + Vite (**5173**) together; **`DOCROUTER_DEV_VITE=0`** skips Vite.
 - **Vite routes:** **`createBrowserRouter`** in **`src/router.tsx`**; **`/orgs/:id/dashboard`** renders shared **`Dashboard`** inside **`Layout`** via **`OrgLayout`**. Unmigrated org paths → placeholder.
-- **Next shims (Vite only):** **`src/shims/next-link.tsx`** and **`next-navigation.ts`** aliased in **`vite.config.ts`** so shared components keep `next/link` and `next/navigation` imports.
+- **Next client APIs:** **`@/utils/appRouter`**, **`AppImage`**, **`dynamicImport`** (no `next/*` packages or Vite aliases).
 - **Org routes in Vite:** hub lists + **detail/edit** (`cases/:id`, `tags/:id`, schema/prompt/form rev routes, `by-id` redirects), **`upload`**, **`models`**, flows editor.
 - **Settings in Vite:** **`/settings/**`** inside **`SettingsAppLayout`**; **account/development/** subtree fully wired (AWS/Azure/GCP, worker, LLM manager + provider).
 - **`/feedback`**, **`/admin/feedback`** (CSR auth/admin checks, FastAPI APIs).
-- **`withRouteParams`** spreads resolved segments and passes **`params={Promise.resolve(...)}`** for Next typing; **`useRouteParams`** reads sync fields on Vite (never **`use(Promise)`** there). Pages that only call **`useParams()`** mount directly. **`next/dynamic`** shim for lazy chunks.
+- **`withRouteParams`** spreads resolved segments and passes **`params={Promise.resolve(...)}`** for legacy Next page typings; **`useRouteParams`** reads sync fields on Vite (never **`use(Promise)`** there). Pages that only call **`useParams()`** mount directly. Lazy routes use **`dynamicImport`** / **`lazyRoute`**.
 - **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**). **`FormioProvider`** only under **`OrgLayout`** (not settings/home).
 - **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 

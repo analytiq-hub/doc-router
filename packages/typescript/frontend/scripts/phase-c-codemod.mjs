@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Phase C: replace next/link, next/navigation, next/dynamic, next/image in client/shared src.
- * Skips Next.js server layouts/pages that still use real next/navigation.
+ * Historical Phase C one-shot: replace next/link, next/navigation, next/dynamic, next/image in client src.
+ * Next is removed; keep for reference only — do not re-run unless restoring an old branch.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,10 +11,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.resolve(__dirname, '../src');
 
 const SKIP_REL = new Set([
-  'shims/next-link.tsx',
-  'shims/next-navigation.ts',
-  'shims/next-dynamic.tsx',
-  'shims/next-image.tsx',
   'app/feedback/page.tsx',
   'app/admin/feedback/page.tsx',
   'app/settings/layout.tsx',
