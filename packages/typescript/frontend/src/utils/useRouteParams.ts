@@ -7,8 +7,19 @@ export type RouteParamsProps<P extends Record<string, string>> =
   | ({ params: Promise<P> } & Partial<Record<never, never>>)
   | P;
 
+function hasPromiseParams<P extends Record<string, string>>(
+  props: RouteParamsProps<P>,
+): props is { params: Promise<P> } {
+  return (
+    typeof props === 'object' &&
+    props !== null &&
+    'params' in props &&
+    props.params instanceof Promise
+  );
+}
+
 export function useRouteParams<P extends Record<string, string>>(props: RouteParamsProps<P>): P {
-  if (typeof props === 'object' && props !== null && 'params' in props && props.params) {
+  if (hasPromiseParams(props)) {
     return use(props.params);
   }
   return props as P;
