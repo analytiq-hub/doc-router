@@ -5,7 +5,7 @@ Automated/browser pass on branch `vite`. Re-run after large router or auth chang
 **Prereqs:** FastAPI :8000 + Vite :5173, signed-in session.
 
 - **Default:** `make dev` → FastAPI + **http://localhost:5173** (Next off unless `DOCROUTER_DEV_NEXT=1`)
-- **Docker compose:** edge **http://localhost:3000** → Vite nginx frontend (see `deploy/compose/nginx.conf`)
+- **Docker compose:** edge **http://localhost:3000** → Vite nginx frontend (see `deploy/compose/nginx.conf`). Rebuild **both** `frontend` and `backend` on branch `vite` (`docker compose build --no-cache frontend backend`). SPA must use **`/fastapi`** (not `http://localhost:8000`) so session cookies work.
 
 ## Session / API
 

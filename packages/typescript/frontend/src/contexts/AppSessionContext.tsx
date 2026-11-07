@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react'
 import { AppSession } from '@/types/AppSession'
-import { invalidateSessionCache, setGlobalSession } from '@/utils/api'
+import { fastApiBrowserBase, invalidateSessionCache, setGlobalSession } from '@/utils/api'
 
 interface AppSessionContextType {
   session: AppSession | null
@@ -46,7 +46,7 @@ export const AppSessionProvider: React.FC<{
   const refreshSession = useCallback(async () => {
     setStatus('loading')
     invalidateSessionCache()
-    const response = await fetch('/fastapi/v0/account/auth/session', { credentials: 'include' })
+    const response = await fetch(`${fastApiBrowserBase()}/v0/account/auth/session`, { credentials: 'include' })
     if (!response.ok) {
       applySession(null)
       return

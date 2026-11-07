@@ -56,10 +56,17 @@ export function invalidateSessionCache(): void {
 
 import { toast } from 'react-toastify';
 
-// These APIs execute from the frontend
-const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || "/fastapi";
-/** Browser session fetches must stay same-origin (`/fastapi` proxy) so httpOnly cookie applies to Next. */
-const FASTAPI_SESSION_FETCH_PREFIX = "/fastapi";
+/** Same-origin API prefix for browser calls (compose/nginx proxy at `/fastapi`). */
+export function fastApiBrowserBase(): string {
+  const raw = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return '/fastapi';
+  }
+  return raw.replace(/\/$/, '') || '/fastapi';
+}
+
+const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = fastApiBrowserBase();
+const FASTAPI_SESSION_FETCH_PREFIX = fastApiBrowserBase();
 
 function authFromGlobalSessionOnly(config: InternalAxiosRequestConfig): void {
   const token = getGlobalSession()?.apiAccessToken;

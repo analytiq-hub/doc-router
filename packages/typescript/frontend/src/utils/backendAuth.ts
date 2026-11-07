@@ -1,9 +1,7 @@
-import { apiClient, getApiErrorMsg } from '@/utils/api';
+import { apiClient, fastApiBrowserBase, getApiErrorMsg } from '@/utils/api';
 
-const FASTAPI_BASE = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
-
-/** Session cookie must be set/read on the Next origin; dev proxies `/fastapi` → backend. */
-const FASTAPI_SESSION_PREFIX = '/fastapi';
+const FASTAPI_BASE = fastApiBrowserBase();
+const FASTAPI_SESSION_PREFIX = fastApiBrowserBase();
 
 export type LoginResponse = {
   token: string;
