@@ -21,8 +21,6 @@ spec:
       labels:
         app: frontend
     spec:
-      securityContext:
-        fsGroup: 1000
       containers:
       - name: frontend
         image: {{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag | default .Chart.AppVersion }}
@@ -31,12 +29,9 @@ spec:
         - containerPort: 80
           name: http
           protocol: TCP
+        # Official nginx:alpine chowns /var/cache/nginx to user 101 at startup (needs caps).
         securityContext:
-          runAsNonRoot: false
           allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
         resources:
           {{- toYaml .Values.resources.frontend | nindent 10 }}
         livenessProbe:
