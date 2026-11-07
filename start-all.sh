@@ -53,6 +53,7 @@ cleanup() {
     
     # Cleanup specific servers as fallback
     cleanup_next_server
+    cleanup_vite_dev
     cleanup_uvicorn
     cleanup_stripe_listen
     
@@ -88,6 +89,10 @@ run_with_color() {
 cleanup_next_server() {
     pkill -f "next-server" >/dev/null 2>&1
 }
+cleanup_vite_dev() {
+    pkill -f "vite.*5173" >/dev/null 2>&1
+    pkill -f "node_modules/.bin/vite" >/dev/null 2>&1
+}
 cleanup_uvicorn() {
     pkill -f "uvicorn.*app" >/dev/null 2>&1
 }
@@ -96,6 +101,7 @@ cleanup_stripe_listen() {
 }
 # Clean up old processes
 cleanup_next_server
+cleanup_vite_dev
 cleanup_uvicorn
 cleanup_stripe_listen
 
@@ -121,7 +127,14 @@ FASTAPI_BIND="${FASTAPI_HOST}:${FASTAPI_PORT}"
 # Run all processes (workers run inside uvicorn via FastAPI lifespan)
 echo -e "${RED}[FASTAPI] Starting uvicorn on http://${FASTAPI_BIND}${NC}"
 run_with_color "uvicorn app.main:app --reload --host ${FASTAPI_HOST} --port ${FASTAPI_PORT}" "$RED" "FASTAPI" "packages/python"
+echo -e "${MAGENTA}[NEXTJS] Starting Next.js on http://localhost:3000${NC}"
 run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"
+
+# Vite migration shell (parallel to Next). Set DOCROUTER_DEV_VITE=0 to skip.
+if [ "${DOCROUTER_DEV_VITE:-1}" != "0" ]; then
+    echo -e "${GREEN}[VITE] Starting Vite on http://localhost:5173 (set DOCROUTER_DEV_VITE=0 to disable)${NC}"
+    run_with_color "npm run dev:vite" "$GREEN" "VITE" "packages/typescript/frontend"
+fi
 
 # Start Stripe webhook listener if configured
 if [ -n "$STRIPE_WEBHOOK_SECRET_SET" ]; then

@@ -14,6 +14,7 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **Browser API clients:** axios + `@docrouter/sdk` use **`withCredentials`**; Bearer is added only when **`AppSessionContext`** already has `apiAccessToken`, otherwise the **cookie** authenticates (matches doc-orchestrator “no token in JS” for the common path).
 - **`/auth/complete`**: `?token=` optional; refreshes session after OAuth redirect when cookie is already set.
 - **Vite spike (parallel to Next):** `index.html`, `vite.config.ts` (`/fastapi` → backend), `npm run dev:vite` on port **5173**, routes **`/`**, **`/auth/signin`**, **`/auth/complete`** under `src/vite/` (output `dist-vite/`). Uses **`src/vite/vite-shell.css`** (Tailwind only) until Formio styles are ported for Vite. Pin **`cookie@1.1.1`** in npm overrides so React Router’s ESM build resolves `parse` (avoid accidental `cookie@2`).
+- **`make dev` / `start-all.sh`:** starts FastAPI + Next (**3000**) + Vite (**5173**) together; **`DOCROUTER_DEV_VITE=0`** skips Vite.
 
 ## Current state (inventory)
 
