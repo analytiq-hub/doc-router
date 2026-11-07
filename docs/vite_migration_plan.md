@@ -26,6 +26,17 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 - **`RouterProviders`** must sit under **`RouterProvider`** (org context uses **`usePathname`**). **`FormioProvider`** only under **`OrgLayout`** (not settings/home).
 - **`/dashboard`** uses shared **`useDashboardRedirect`** with Next. **`AppProviders`** mirrors root layout providers (minus SSR session). **`vite.config`** loads **`NEXT_PUBLIC_*`** from repo **`.env`**.
 
+### Don't forget: OAuth callbacks (localhost:5173)
+
+While both Next (**3000**) and Vite (**5173**) run in parallel, **Google and GitHub OAuth apps must also allow the 5173 callback URLs** (in addition to any 3000 URLs). Without this, social sign-in from the Vite app fails at the IdP redirect step.
+
+- [ ] **Google Cloud Console** → OAuth client → Authorized redirect URIs:
+  - `http://localhost:5173/fastapi/v0/account/auth/google/callback`
+- [ ] **GitHub** → OAuth App → Authorization callback URL (add a second app or allow multiple callbacks if your IdP setup requires it):
+  - `http://localhost:5173/fastapi/v0/account/auth/github/callback`
+
+Backend start URLs already send **`app_origin=http://localhost:5173`** from Vite (`oauthStartUrl`, `frontend_origins.py`) so, after the callback, the user returns to the **5173** SPA (e.g. `/auth/complete` → dashboard). Details and smoke checks: [`vite_smoke_test_5173.md`](./vite_smoke_test_5173.md).
+
 ## Current state (inventory)
 
 | Area | Notes |
@@ -119,6 +130,7 @@ Then the SPA (Next or Vite) only needs **`credentials: 'include'`** on fetch and
 - [x] **`vite.config.ts`** defines `NEXT_PUBLIC_*` from repo `.env` for shared modules (no rename required yet).
 - [x] **Docker optional target:** `docker build --target runner-vite -f deploy/shared/docker/Dockerfile .` serves **`dist-vite/`** via **`nginx-spa.conf`** (`try_files` → `index.html`). Compose edge **`deploy/compose/nginx.conf`** still proxies to Next until you swap the `frontend` service image.
 - [ ] Wire compose/K8s to **`runner-vite`** when cutting over; set OAuth/`return_to` for production origin.
+- [ ] **Local Vite:** register **Google + GitHub** redirect URIs for **`http://localhost:5173`** (see [Don't forget: OAuth callbacks (localhost:5173)](#dont-forget-oauth-callbacks-localhost5173)).
 - [ ] Replace `NEXT_PUBLIC_*` with **`VITE_*`** (optional cleanup).
 - [ ] Remove **Next standalone** artifacts; align with doc-orchestrator’s static hosting pattern.
 - [ ] **ESLint:** Replace `eslint-config-next` with `@eslint/js` + `typescript-eslint` + `eslint-plugin-react-hooks` (or flat config mirroring orchestrator).
