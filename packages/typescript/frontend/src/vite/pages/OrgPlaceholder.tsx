@@ -25,7 +25,7 @@ export function OrgPlaceholderPage() {
         This path is not registered in the Vite router. Check{' '}
         <code className="text-xs">src/router.tsx</code> or file a bug if a screen is missing.
       </p>
-      <Link className="text-sm text-blue-600 hover:underline" to={`/orgs/${organizationId}/dashboard`}>
+      <Link className="text-sm text-primary-600 hover:underline" to={`/orgs/${organizationId}/dashboard`}>
         Go to org dashboard
       </Link>
     </main>

@@ -161,10 +161,10 @@ const SubscriptionPurchase: React.FC<SubscriptionPurchaseProps> = ({
 
         {/* Purchase Section */}
         {canPurchaseCredits() && creditConfig && !isAdmin && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
+          <div className="bg-primary-50 border border-primary-200 rounded-md p-2">
             <div className="flex items-center justify-between mb-1">
-              <h4 className="text-sm font-medium text-blue-900">Purchase Credits</h4>
-              <span className="text-xs text-blue-600">${creditConfig.price_per_credit} each</span>
+              <h4 className="text-sm font-medium text-primary-900">Purchase Credits</h4>
+              <span className="text-xs text-primary-600">${creditConfig.price_per_credit} each</span>
             </div>
             {(() => {
               const totalCost = purchaseAmount * creditConfig.price_per_credit;
@@ -198,7 +198,7 @@ const SubscriptionPurchase: React.FC<SubscriptionPurchaseProps> = ({
                   const value = e.target.value;
                   setPurchaseAmount(value === '' ? 0 : parseInt(value) || 0);
                 }}
-                className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="flex-1 px-2 py-1 text-sm border border-primary-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 placeholder="Amount"
                 disabled={purchaseLoading || disabled}
               />
@@ -206,12 +206,12 @@ const SubscriptionPurchase: React.FC<SubscriptionPurchaseProps> = ({
                 onClick={handlePurchaseCredits}
                 disabled={buttonDisabled}
                 title={buttonDisabled ? disabledReason : ''}
-                className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded font-medium disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm bg-primary-600 hover:bg-primary-700 disabled:bg-primary-300 text-white rounded font-medium disabled:cursor-not-allowed"
               >
                 {purchaseLoading ? 'Processing...' : 'Buy'}
               </button>
             </div>
-            <div className="text-xs text-blue-600">
+            <div className="text-xs text-primary-600">
               Total: ${purchaseAmount > 0 ? (totalCost).toFixed(2) : '0.00'}
             </div>
             {(underMin || overMax) && (

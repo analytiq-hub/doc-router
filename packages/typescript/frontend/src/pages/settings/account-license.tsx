@@ -163,7 +163,7 @@ const LicensePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => void copyInstallationId()}
-                    className="text-xs text-blue-700 hover:underline"
+                    className="text-xs text-primary-700 hover:underline"
                   >
                     Copy
                   </button>

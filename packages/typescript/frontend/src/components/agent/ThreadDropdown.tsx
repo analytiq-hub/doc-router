@@ -126,7 +126,7 @@ export default function ThreadDropdown({
             <button
               type="button"
               onClick={() => { onNewChat(); setOpen(false); }}
-              className="flex items-center gap-2 w-full px-2 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded"
+              className="flex items-center gap-2 w-full px-2 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded"
             >
               <AddIcon fontSize="small" />
               {newChatLabel}
@@ -157,7 +157,7 @@ export default function ThreadDropdown({
                         }
                       }}
                       className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm group cursor-pointer ${
-                        t.id === threadId ? 'bg-blue-50 text-blue-900' : 'hover:bg-gray-50 text-gray-700'
+                        t.id === threadId ? 'bg-primary-50 text-primary-900' : 'hover:bg-gray-50 text-gray-700'
                       }`}
                     >
                       <span className="flex-1 min-w-0 truncate">{t.title || newChatLabel}</span>

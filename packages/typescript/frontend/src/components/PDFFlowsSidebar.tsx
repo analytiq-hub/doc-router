@@ -111,7 +111,7 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
         <Link
           to={`/orgs/${organizationId}/flows/${flowId}`}
           onClick={(e) => e.stopPropagation()}
-          className="font-medium text-blue-700 hover:underline"
+          className="font-medium text-primary-700 hover:underline"
           title={flowName}
         >
           {flowName}

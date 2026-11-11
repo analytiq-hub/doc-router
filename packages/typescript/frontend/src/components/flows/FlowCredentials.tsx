@@ -33,7 +33,7 @@ import { credentialKindShowsTestButton, formatCredentialTestDetail } from './flo
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 const btnPrimary =
-  'rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50';
 const btnDanger =
   'rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -352,7 +352,7 @@ const FlowCredentials: React.FC<{
                       type="button"
                       onClick={() => openEdit(row)}
                       title="Edit credential"
-                      className="m-0 max-w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left font-medium text-blue-700 hover:underline"
+                      className="m-0 max-w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left font-medium text-primary-700 hover:underline"
                     >
                       {row.name}
                     </button>
@@ -577,7 +577,7 @@ const FlowCredentials: React.FC<{
                         aria-selected={selected}
                         className={`flex w-full border-0 px-3 py-2.5 text-left text-sm transition ${
                           selected
-                            ? 'bg-blue-50 font-medium text-blue-900 ring-1 ring-inset ring-blue-200'
+                            ? 'bg-primary-50 font-medium text-primary-900 ring-1 ring-inset ring-primary-200'
                             : 'bg-white text-gray-800 hover:bg-gray-100'
                         }`}
                         onClick={() => setCreatePickKindKey(k.key)}

@@ -158,7 +158,7 @@ const LLMManager: React.FC = () => {
       renderCell: (params: GridRenderCellParams) => (
         <Link
           to={`/settings/account/development/llm-manager/providers/${params.row.name}`}
-          className="text-blue-600 hover:text-blue-800"
+          className="text-primary-600 hover:text-primary-800"
         >
           {params.row.display_name}
         </Link>
@@ -230,7 +230,7 @@ const LLMManager: React.FC = () => {
       <div className="mb-4">
         <input
           type="text"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
           placeholder="Search providers..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -290,7 +290,7 @@ const LLMManager: React.FC = () => {
                 value={editTokenValue}
                 onChange={(e) => setEditTokenValue(e.target.value)}
                 placeholder="Enter your token"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 autoFocus
               />
             </div>
@@ -298,13 +298,13 @@ const LLMManager: React.FC = () => {
             <div className="flex justify-end space-x-2 mt-6">
               <button
                 onClick={() => setEditModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveLLMToken}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 Save
               </button>
@@ -324,7 +324,7 @@ const LLMManager: React.FC = () => {
           onClick={handleMenuClose}
           className="flex items-center gap-2"
         >
-          <SettingsIcon fontSize="small" className="text-blue-600" />
+          <SettingsIcon fontSize="small" className="text-primary-600" />
           <span>Configure Models</span>
         </MenuItem>
         <MenuItem
@@ -334,7 +334,7 @@ const LLMManager: React.FC = () => {
           }}
           className="flex items-center gap-2"
         >
-          <EditIcon fontSize="small" className="text-blue-600" />
+          <EditIcon fontSize="small" className="text-primary-600" />
           <span>Edit Token</span>
         </MenuItem>
         {selectedProvider && llmProviders.find(p => p.name === selectedProvider) && (

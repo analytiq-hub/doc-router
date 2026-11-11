@@ -17,7 +17,7 @@ const ProviderConfigPage: React.FC = () => {
         <div className="flex items-center gap-4">
           <Link 
             to="/settings/account/development/llm-manager"
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
           >
             <ArrowBackIcon className="w-5 h-5" />
             Back to Providers

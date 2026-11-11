@@ -97,7 +97,7 @@ export default function SigninPage() {
             placeholder="Name"
             value={formData.name}
             onChange={handleInputChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400"
             required
           />
         )}
@@ -110,7 +110,7 @@ export default function SigninPage() {
           value={formData.email}
           onChange={handleInputChange}
           autoComplete={isLoginMode ? "username" : "email"}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400"
           required
         />
 
@@ -122,14 +122,14 @@ export default function SigninPage() {
             value={formData.password}
             onChange={handleInputChange}
             placeholder="Password"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400"
             required
           />
         </div>
 
         <button
           type="submit"
-          className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
         >
           {isLoginMode ? 'Sign In' : 'Register'}
         </button>
@@ -138,7 +138,7 @@ export default function SigninPage() {
           <button
             type="button"
             onClick={() => setIsLoginMode(!isLoginMode)}
-            className="text-blue-600 hover:text-blue-800 focus:outline-none"
+            className="text-primary-600 hover:text-primary-800 focus:outline-none"
           >
             {isLoginMode ? "Don't have an account? Register" : 'Already have an account? Sign in'}
           </button>
@@ -154,7 +154,7 @@ export default function SigninPage() {
       <div className={`flex flex-col gap-3 ${formWidthClass}`}>
         <button
           onClick={() => handleSocialLogin('google')}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+          className="flex items-center justify-center gap-2 w-full px-4 py-2 text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors"
         >
           Sign in with Google
         </button>

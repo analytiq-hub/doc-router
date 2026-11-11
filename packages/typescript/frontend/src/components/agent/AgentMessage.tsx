@@ -30,7 +30,7 @@ function DiffBlock({ content }: { content: string }) {
                 : isRemove
                   ? 'bg-red-100/70 text-red-900'
                   : isMeta
-                    ? 'bg-blue-50/60 text-blue-700 text-[11px]'
+                    ? 'bg-primary-50/60 text-primary-700 text-[11px]'
                     : 'text-gray-700'
             }`}
           >
@@ -97,7 +97,7 @@ function createMarkdownComponents(organizationId: string): Record<string, React.
       return <pre {...props}>{children}</pre>;
     },
     a({ href, children, className, ...props }: { href?: string; children?: React.ReactNode; className?: string }) {
-      const linkClass = [className, 'text-blue-600 underline'].filter(Boolean).join(' ');
+      const linkClass = [className, 'text-primary-600 underline'].filter(Boolean).join(' ');
       const match = href ? RESOURCE_URI_RE.exec(href) : null;
       if (match) {
         const [, scheme, id] = match;

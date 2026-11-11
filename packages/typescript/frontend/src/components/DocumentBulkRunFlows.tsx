@@ -560,7 +560,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
       switch (status) {
         case 'running':
           return (
-            <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-3 h-3 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
           );
         case 'completed':
           return <div className="w-3 h-3 bg-green-500 rounded-full" />;
@@ -610,7 +610,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                         checked={selectedFlowIds.includes(item.flow.flow_id)}
                         onChange={() => toggleFlowSelection(item.flow.flow_id)}
                         disabled={disabled || isExecuting || isAnalyzing}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       />
                       <span className="text-gray-900 truncate">{item.flow.name}</span>
                       <span className="text-xs text-gray-400 ml-auto">
@@ -661,7 +661,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                       checked={executionMode === opt.value}
                       onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
                       disabled={disabled || isExecuting || isAnalyzing}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 mt-0.5"
                     />
                     <label htmlFor={opt.id} className="ml-2 block text-sm text-gray-900">
                       <span className="font-medium">{opt.title}</span>
@@ -706,7 +706,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                         persistBulkFlowRerunModeToSession(next);
                       }}
                       disabled={disabled || isExecuting || isAnalyzing}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 mt-0.5"
                     />
                     <label htmlFor={opt.id} className="ml-2 block text-sm text-gray-900">
                       <span className="font-medium">{opt.title}</span>
@@ -736,7 +736,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                 if (e.key === 'Enter') handleParallelRunsCommit();
               }}
               disabled={disabled || isExecuting || isAnalyzing}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
             />
             <p className="text-xs text-gray-500 mt-1">
               Default {DEFAULT_PARALLEL_RUNS} ({MIN_PARALLEL_RUNS}–{MAX_PARALLEL_RUNS}).
@@ -745,11 +745,11 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
         )}
 
         {isAnalyzing && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="bg-primary-50 border border-primary-200 rounded-md p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm font-medium text-blue-900">Analyzing required executions…</span>
+                <div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm font-medium text-primary-900">Analyzing required executions…</span>
               </div>
               <button
                 type="button"
@@ -791,7 +791,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
                     style={{
                       width: `${totalExecutions > 0 ? (completedExecutions / totalExecutions) * 100 : 0}%`,
                     }}
@@ -830,7 +830,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                           to={`/orgs/${organizationId}/docs/${execution.documentId}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="min-w-0 truncate max-w-[200px] text-gray-700 hover:text-blue-700 hover:underline"
+                          className="min-w-0 truncate max-w-[200px] text-gray-700 hover:text-primary-700 hover:underline"
                           title={execution.documentName}
                         >
                           {execution.documentName}
@@ -847,7 +847,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                                 : execution.status === 'error'
                                   ? 'text-red-600'
                                   : execution.status === 'running'
-                                    ? 'text-blue-600'
+                                    ? 'text-primary-600'
                                     : execution.status === 'cancelled'
                                       ? 'text-orange-600'
                                       : 'text-gray-500'

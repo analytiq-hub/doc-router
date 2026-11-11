@@ -154,7 +154,7 @@ const UserManager: React.FC = () => {
       renderCell: (params: GridRenderCellParams) => (
         <button
           onClick={() => router.push(`/settings/account/users/${params.row.id}`)}
-          className="text-left hover:text-blue-600 focus:outline-none"
+          className="text-left hover:text-primary-600 focus:outline-none"
         >
           <span className="font-medium">{params.value || 'Unnamed User'}</span>
           <span className="text-gray-500 ml-2">({params.row.email})</span>
@@ -166,7 +166,7 @@ const UserManager: React.FC = () => {
       headerName: 'Sysadmin',
       width: 120,
       renderCell: (params) => (
-        <span className={params.value ? 'text-blue-600' : ''}>
+        <span className={params.value ? 'text-primary-600' : ''}>
           {params.value ? 'Yes' : 'No'}
         </span>
       ),
@@ -217,7 +217,7 @@ const UserManager: React.FC = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
           >
             Add User
           </button>
@@ -234,7 +234,7 @@ const UserManager: React.FC = () => {
       <div className="mb-4">
         <input
           type="text"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
           placeholder="Search users by name or email..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -309,7 +309,7 @@ const UserManager: React.FC = () => {
           }}
           className="flex items-center gap-2"
         >
-          <EditIcon fontSize="small" className="text-blue-600" />
+          <EditIcon fontSize="small" className="text-primary-600" />
           <span>Edit</span>
         </MenuItem>
         <MenuItem

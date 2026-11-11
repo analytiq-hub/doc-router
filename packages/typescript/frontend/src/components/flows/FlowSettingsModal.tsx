@@ -17,7 +17,7 @@ import {
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 const btnPrimary =
-  'rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50';
 
 export type FlowSettingsValue = {
   timezone?: string;
@@ -131,7 +131,7 @@ const FlowSettingsModal: React.FC<FlowSettingsModalProps> = ({
                         <button
                           type="button"
                           className={`block w-full px-3 py-2 text-left hover:bg-gray-100 ${
-                            opt.key === draftTimezone ? 'bg-blue-50 font-medium text-blue-900' : 'text-gray-900'
+                            opt.key === draftTimezone ? 'bg-primary-50 font-medium text-primary-900' : 'text-gray-900'
                           }`}
                           role="option"
                           aria-selected={opt.key === draftTimezone}
@@ -155,7 +155,7 @@ const FlowSettingsModal: React.FC<FlowSettingsModalProps> = ({
               <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   checked={draftResumeOnRestart}
                   disabled={readOnly}
                   onChange={(e) => setDraftResumeOnRestart(e.target.checked)}

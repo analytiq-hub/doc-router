@@ -194,7 +194,7 @@ function FlowFlowPickerField({
                 <button
                   type="button"
                   className={`block w-full px-3 py-2 text-left hover:bg-gray-100 ${
-                    flow.flow_id === value ? 'bg-blue-50 font-medium text-blue-900' : 'text-gray-900'
+                    flow.flow_id === value ? 'bg-primary-50 font-medium text-primary-900' : 'text-gray-900'
                   }`}
                   role="option"
                   aria-selected={flow.flow_id === value}

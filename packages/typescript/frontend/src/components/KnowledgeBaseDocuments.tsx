@@ -154,7 +154,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
         <div className="flex h-full w-full items-center">
           <Link
             to={`/orgs/${organizationId}/docs/${params.row.document_id}`}
-            className="text-blue-600 hover:underline"
+            className="text-primary-600 hover:underline"
           >
             {params.row.document_name}
           </Link>
@@ -167,7 +167,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
       width: 120,
       renderCell: (params) => (
         <div 
-          className="flex items-center h-full w-full cursor-pointer text-blue-600 hover:text-blue-800 hover:underline"
+          className="flex items-center h-full w-full cursor-pointer text-primary-600 hover:text-primary-800 hover:underline"
           onClick={(e) => handleChunksClick(e, params.row)}
         >
           {params.row.chunk_count.toLocaleString()}
@@ -253,7 +253,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
             title={
               <>
                 <svg
-                  className="h-5 w-5 shrink-0 text-blue-600"
+                  className="h-5 w-5 shrink-0 text-primary-600"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -272,7 +272,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
               <button
                 type="button"
                 onClick={() => setChunksDialogOpen(false)}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-700"
+                className="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-700"
               >
                 Close
               </button>
@@ -360,7 +360,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                 {isLoadingChunk && !displayChunk ? (
                   <div className="flex min-h-[220px] items-center justify-center">
                     <div
-                      className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600"
+                      className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600"
                       aria-hidden
                     />
                   </div>
@@ -371,7 +371,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                     {isLoadingChunk ? (
                       <div className="pointer-events-none absolute left-1/2 top-1/3 z-[1] -translate-x-1/2 -translate-y-1/2">
                         <div
-                          className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600"
+                          className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600"
                           aria-hidden
                         />
                       </div>
@@ -380,8 +380,8 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                     {/* ── Metadata badges row ───────────────────────────── */}
                     <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
                       {/* Index */}
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100">
-                        <span className="text-blue-400">Chunk Index #</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 ring-1 ring-primary-100">
+                        <span className="text-primary-400">Chunk Index #</span>
                         {displayChunk.chunk_index}
                       </span>
 

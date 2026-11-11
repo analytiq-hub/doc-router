@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
-const primary = "hsla(208, 100%, 43%, 1)";
+import { brandPalette } from "./src/styles/brandPalette";
+
 const secondary = "hsla(190, 81%, 42%, 1)";
 
 const config: Config = {
@@ -12,17 +13,8 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: primary,
-          50: "hsla(208, 100%, 91%, 1)",
-          100: "hsla(208, 100%, 83%, 1)",
-          200: "hsla(208, 100%, 75%, 1)",
-          300: "hsla(208, 100%, 67%, 1)",
-          400: "hsla(208, 100%, 59%, 1)",
-          500: "hsla(208, 100%, 51%, 1)",
-          600: primary,
-          700: "hsla(208, 100%, 35%, 1)",
-          800: "hsla(208, 100%, 27%, 1)",
-          900: "hsla(208, 100%, 19%, 1)"
+          ...brandPalette,
+          DEFAULT: brandPalette[600],
         },
         secondary: {
           DEFAULT: secondary,

@@ -433,7 +433,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
   return (
     <div className="flex flex-col h-full w-full sm:max-w-6xl sm:mx-auto bg-white sm:rounded-lg sm:shadow-lg">
       {/* Header */}
-      <div className="bg-gradient-to-r bg-blue-600 px-3 sm:px-6 py-2 sm:py-4 sm:rounded-t-lg">
+      <div className="bg-gradient-to-r bg-primary-600 px-3 sm:px-6 py-2 sm:py-4 sm:rounded-t-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
             <h2 className="text-base sm:text-xl font-semibold text-white truncate min-w-0">
@@ -457,7 +457,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isStreaming}
-                className="flex-1 sm:flex-none min-w-0 sm:max-w-[18rem] truncate px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="flex-1 sm:flex-none min-w-0 sm:max-w-[18rem] truncate px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-300"
               >
                 {availableModels.map(model => (
                   <option key={model} value={model}>{model}</option>
@@ -512,7 +512,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               <button
                 type="button"
                 onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
-                className="w-full px-3 py-2 text-left border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between"
+                className="w-full px-3 py-2 text-left border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent flex items-center justify-between"
               >
                 <span className="text-gray-500">
                   {selectedTags.length > 0 ? `${selectedTags.length} selected` : 'Select tags'}
@@ -586,7 +586,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 type="date"
                 value={uploadDateFrom}
                 onChange={(e) => setUploadDateFrom(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
             <div>
@@ -595,7 +595,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 type="date"
                 value={uploadDateTo}
                 onChange={(e) => setUploadDateTo(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -621,7 +621,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
             <div
               className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 ${
                 message.role === 'user'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-primary-600 text-white'
                   : 'bg-white text-gray-800 border border-gray-200'
               }`}
             >
@@ -643,7 +643,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                     <div key={toolCall.id} className="mb-1 sm:mb-2 text-xs">
                       <button
                         onClick={() => toggleToolCallExpansion(toolCall.id)}
-                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 w-full text-left"
+                        className="flex items-center gap-1 text-primary-600 hover:text-primary-800 w-full text-left"
                       >
                         {expandedToolCalls.has(toolCall.id) ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                         <SearchIcon fontSize="small" />
@@ -692,7 +692,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 </ReactMarkdown>
               </div>
               {isStreaming && (
-                <span className="inline-block w-2 h-4 bg-blue-600 ml-1 animate-pulse" />
+                <span className="inline-block w-2 h-4 bg-primary-600 ml-1 animate-pulse" />
               )}
             </div>
           </div>
@@ -706,7 +706,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               {currentToolCalls.map((toolCall) => (
                 <div key={toolCall.id} className="mb-2 text-xs">
                   <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                    <SearchIcon fontSize="small" className="text-blue-600 flex-shrink-0" />
+                    <SearchIcon fontSize="small" className="text-primary-600 flex-shrink-0" />
                     <span className="font-medium truncate">{toolCall.toolName}</span>
                     {toolCall.status === 'pending' && (
                       <>
@@ -751,7 +751,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
             onKeyPress={handleKeyPress}
             placeholder="Type your message..."
             disabled={isStreaming || !selectedModel}
-            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
             rows={2}
           />
           <div className="flex flex-col gap-2">
@@ -767,7 +767,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               <button
                 onClick={handleSend}
                 disabled={!currentInput.trim() || !selectedModel || isStreaming}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-1 sm:gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center justify-center gap-1 sm:gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 <SendIcon sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }} />
                 <span className="hidden sm:inline">Send</span>

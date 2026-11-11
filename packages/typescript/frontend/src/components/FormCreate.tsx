@@ -224,7 +224,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
               />
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50 transition-colors"
               >
                 <CompareArrowsIcon className="text-base" />
                 <span>Compare Versions</span>
@@ -341,7 +341,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                   }
                   saveForm();
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
                 disabled={isLoading || isReadOnly}
               >
                 {currentFormId ? 'Update Form' : 'Save Form'}
@@ -357,7 +357,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 onClick={() => setActiveTab('builder')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   activeTab === 'builder'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -368,7 +368,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 onClick={() => setActiveTab('mapper')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   activeTab === 'mapper'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -379,7 +379,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 onClick={() => setActiveTab('json')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   activeTab === 'json'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >

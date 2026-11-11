@@ -47,7 +47,7 @@ import {
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 const btnPrimary =
-  'rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50';
 
 type EditTab = 'connection' | 'details';
 
@@ -372,7 +372,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
                 type="button"
                 className={`rounded-r-md border-l-2 px-3 py-2 text-left text-sm font-medium transition ${
                   tab === id
-                    ? 'border-blue-600 bg-white text-blue-700 shadow-sm'
+                    ? 'border-primary-600 bg-white text-primary-700 shadow-sm'
                     : 'border-transparent text-gray-600 hover:bg-white/80 hover:text-gray-900'
                 }`}
                 onClick={() => setTab(id)}
@@ -836,9 +836,9 @@ function OAuthConnectBanner({
     );
   }
   return (
-    <div className="rounded-md border border-blue-100 bg-blue-50/90 px-4 py-3 text-sm text-blue-950">
+    <div className="rounded-md border border-primary-100 bg-primary-50/90 px-4 py-3 text-sm text-primary-950">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 min-w-0 flex-1 text-sm leading-snug text-blue-950">
+        <p className="m-0 min-w-0 flex-1 text-sm leading-snug text-primary-950">
           {connectNeedsSave
             ? 'Save connection settings, then sign in with the provider.'
             : 'Sign in with the provider to obtain access and refresh tokens.'}

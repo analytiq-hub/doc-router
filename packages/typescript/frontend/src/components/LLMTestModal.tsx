@@ -101,7 +101,7 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
       {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r bg-blue-600 px-6 py-4">
+        <div className="bg-gradient-to-r bg-primary-600 px-6 py-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-white">
               Test LLM Model: {modelName}
@@ -127,7 +127,7 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
             <textarea
               value={testPrompt}
               onChange={(e) => setTestPrompt(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors resize-none"
               rows={3}
               placeholder="Enter your test prompt here..."
             />
@@ -142,7 +142,7 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
               <div className="p-4 font-mono text-sm whitespace-pre-wrap">
                 {isTesting && !testResponse && (
                   <div className="flex items-center gap-2 text-gray-600">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent"></div>
                     <span>Testing...</span>
                   </div>
                 )}
@@ -194,7 +194,7 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
             className={`px-6 py-2 rounded-lg font-medium transition-all transform ${
               isTesting || !testPrompt.trim()
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-r bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg hover:scale-105 active:scale-95'
+                : 'bg-gradient-to-r bg-primary-600 text-white hover:bg-primary-700 hover:shadow-lg hover:scale-105 active:scale-95'
             }`}
           >
             {isTesting ? (

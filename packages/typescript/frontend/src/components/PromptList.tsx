@@ -299,7 +299,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       align: 'left',
       renderCell: (params) => (
         <div
-          className={`text-blue-600 flex items-center h-full w-full min-w-0 ${canConfigWrite ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
+          className={`text-primary-600 flex items-center h-full w-full min-w-0 ${canConfigWrite ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
           onClick={() => {
             if (canConfigWrite) {
               handleEdit(params.row);
@@ -446,13 +446,13 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   return (
     <div className="p-4 w-full">
       {/* Prompts List */}
-      <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
+      <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
         <p className="text-sm">
           Prompts define extraction instructions for your documents. They can be linked to schemas to ensure structured output format. 
           {canConfigWrite ? (
             <>
               If none are available,{' '}
-              <Link to={`/orgs/${organizationId}/prompts?tab=prompt-create`} className="text-blue-600 font-medium hover:underline">
+              <Link to={`/orgs/${organizationId}/prompts?tab=prompt-create`} className="text-primary-600 font-medium hover:underline">
                 click here
               </Link>{' '}
               or use the tab above to create a new prompt.
@@ -543,7 +543,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       {/* Message */}
       {message && (
         <div className={`mb-4 p-3 rounded ${
-          message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+          message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
         }`}>
           {message}
         </div>
@@ -599,7 +599,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
               }}
               className="flex items-center gap-2"
             >
-              <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+              <EditOutlinedIcon fontSize="small" className="text-primary-600" />
               <span>Edit</span>
             </MenuItem>
           )}
@@ -609,7 +609,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             }}
             className="flex items-center gap-2"
           >
-            <BadgeIcon fontSize="small" className="text-blue-600" />
+            <BadgeIcon fontSize="small" className="text-primary-600" />
             <span>Properties</span>
           </MenuItem>
           {canConfigWrite && (

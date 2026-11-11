@@ -511,7 +511,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
                   <h4 className="font-semibold text-sm">{form.name}</h4>
                   <div className="flex items-center gap-2">
                     {loadingSubmissions.has(form.form_revid) && (
-                      <ArrowPathIcon className="h-4 w-4 animate-spin text-blue-500" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin text-primary-500" />
                     )}
                     {existingSubmissions[form.form_revid] && (
                       <div className="flex items-center gap-2">
@@ -533,7 +533,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
                       </div>
                     )}
                     {submittingForms.has(form.form_revid) && (
-                      <ArrowPathIcon className="h-4 w-4 animate-spin text-blue-500" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin text-primary-500" />
                     )}
                   </div>
                 </div>
@@ -548,7 +548,7 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, o
                   />
                 ) : (
                   <div className="flex items-center justify-center py-8">
-                    <ArrowPathIcon className="h-4 w-4 animate-spin text-blue-500" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin text-primary-500" />
                     <span className="ml-2 text-gray-500">Loading form data...</span>
                   </div>
                 )}

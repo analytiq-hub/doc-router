@@ -151,7 +151,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
             <h3 className="text-sm font-medium text-gray-900">Metadata</h3>
             <button
               type="button"
-              className="text-sm text-blue-600"
+              className="text-sm text-primary-600"
               onClick={() =>
                 setMetadataFields((prev) => [...prev, { id: `field_${Date.now()}`, key: '', value: '' }])
               }
@@ -193,7 +193,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
         </div>
         <button
           type="submit"
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
           disabled={isLoading}
         >
           {editCaseId ? 'Save changes' : 'Create case'}

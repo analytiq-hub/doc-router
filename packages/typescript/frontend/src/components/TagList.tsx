@@ -212,14 +212,14 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="bg-white p-6 rounded-lg shadow">
-        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
+        <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
           <p className="text-sm">
             Tags determine which prompts are run on which documents.
             {canConfigWrite ? (
               <>
                 {' '}
                 If no tags are available,{' '}
-                <Link to={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-blue-600 font-medium hover:underline">
+                <Link to={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-primary-600 font-medium hover:underline">
                   click here
                 </Link>{' '}
                 or use the tab above to create a new tag.
@@ -254,7 +254,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         {message && (
           <div
             className={`mb-4 p-3 rounded ${
-              message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+              message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
             }`}
           >
             {message}
@@ -310,7 +310,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
               }}
               className="flex items-center gap-2"
             >
-              <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+              <EditOutlinedIcon fontSize="small" className="text-primary-600" />
               <span>Edit</span>
             </MenuItem>
           )}
@@ -320,7 +320,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
             }}
             className="flex items-center gap-2"
           >
-            <BadgeIcon fontSize="small" className="text-blue-600" />
+            <BadgeIcon fontSize="small" className="text-primary-600" />
             <span>Properties</span>
           </MenuItem>
           {canConfigWrite && (

@@ -165,7 +165,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
                 disabled={isLoading}
               >
                 {currentTag.id ? 'Update Tag' : 'Save Tag'}

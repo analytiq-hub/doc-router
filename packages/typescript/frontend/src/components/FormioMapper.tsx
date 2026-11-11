@@ -541,7 +541,7 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
   // Get type badge color
   const getTypeBadgeColor = (type: string): string => {
     const colors: Record<string, string> = {
-      'string': 'bg-blue-100 text-blue-800',
+      'string': 'bg-primary-100 text-primary-800',
       'number': 'bg-green-100 text-green-800',
       'integer': 'bg-green-100 text-green-800',
       'boolean': 'bg-purple-100 text-purple-800',
@@ -566,7 +566,7 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
               placeholder="Search fields..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
         </div>
@@ -706,7 +706,7 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                       mapping 
                         ? 'border-green-300 bg-green-50' 
                         : isDropTarget 
-                        ? 'border-blue-300 bg-blue-50'
+                        ? 'border-primary-300 bg-primary-50'
                         : 'border-gray-300 hover:border-gray-400'
                     }`}
                   >
@@ -722,7 +722,7 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                           <div className="mt-2 p-2 bg-white border rounded text-xs">
                             {mapping.sources.length > 1 && (
                               <div className="mb-2 flex items-center justify-between">
-                                <span className="text-blue-600 font-medium">
+                                <span className="text-primary-600 font-medium">
                                   {mapping.mappingType === 'concatenated' ? 'Concatenated' : 'Multiple'} mapping
                                 </span>
                                 <button

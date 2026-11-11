@@ -512,7 +512,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
               type="button"
               onClick={save}
               disabled={!canEdit || saving || !isDirty}
-              className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
             >
               {isCreatingNew ? 'Create' : 'Save'}
             </button>
@@ -620,7 +620,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                     onChange={(e) => setUrl(e.target.value)}
                     disabled={!canEdit}
                     placeholder="https://example.com/webhook"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100"
                   />
                 </div>
 
@@ -647,7 +647,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                         value={authType}
                         onChange={(e) => setAuthType(e.target.value as 'hmac' | 'header')}
                         disabled={!canEdit}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100"
                       >
                         <option value="hmac">HMAC signature</option>
                         <option value="header">Header Auth</option>
@@ -676,7 +676,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                           onChange={(e) => setAuthHeaderName(e.target.value)}
                           disabled={!canEdit}
                           placeholder="Authorization"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100"
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -696,7 +696,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                           onChange={(e) => setAuthHeaderValue(e.target.value)}
                           disabled={!canEdit}
                           placeholder="Enter header value (leave blank to keep)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100"
                         />
                       </div>
                     </div>
@@ -722,7 +722,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                         onChange={(e) => setSecret(e.target.value)}
                         disabled={!canEdit}
                         placeholder="Enter new secret (leave blank to keep, or use Regenerate)"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100"
                       />
                       <button
                         type="button"
@@ -777,7 +777,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                 <button
                   type="button"
                   onClick={addEndpoint}
-                  className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 rounded-md bg-primary-600 text-white hover:bg-primary-700"
                 >
                   <AddIcon fontSize="small" className="mr-2" />
                   Add your first webhook
@@ -838,7 +838,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                     <button
                       type="button"
                       onClick={() => openDetails(d.id)}
-                      className="text-sm text-blue-700 hover:text-blue-900"
+                      className="text-sm text-primary-700 hover:text-primary-900"
                     >
                       Details
                     </button>
@@ -989,7 +989,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
               <button
                 type="button"
                 onClick={() => setGeneratedSecret(null)}
-                className="mt-6 w-full sm:w-auto sm:ml-auto block px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                className="mt-6 w-full sm:w-auto sm:ml-auto block px-4 py-2 text-sm rounded-md bg-primary-600 text-white hover:bg-primary-700"
               >
                 Done
               </button>

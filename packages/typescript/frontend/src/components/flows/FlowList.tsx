@@ -167,7 +167,7 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                   <td className={td}>
                     <Link
                       to={`/orgs/${organizationId}/flows/${item.flow.flow_id}`}
-                      className="font-medium text-blue-700 hover:underline"
+                      className="font-medium text-primary-700 hover:underline"
                     >
                       {item.flow.name}
                     </Link>

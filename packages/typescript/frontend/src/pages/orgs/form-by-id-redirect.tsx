@@ -46,7 +46,7 @@ export default function FormByIdRedirectPage(props: PageProps) {
         <button
           type="button"
           onClick={() => router.push(`/orgs/${organizationId}/forms`)}
-          className="mt-2 text-blue-600 underline"
+          className="mt-2 text-primary-600 underline"
         >
           Back to Forms
         </button>
@@ -56,7 +56,7 @@ export default function FormByIdRedirectPage(props: PageProps) {
 
   return (
     <div className="p-4 flex items-center gap-2">
-      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
       Redirecting to form…
     </div>
   );

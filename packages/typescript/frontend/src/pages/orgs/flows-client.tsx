@@ -144,10 +144,10 @@ export default function FlowsPageClient({
   const createSplitTypography = 'min-h-8 font-sans text-[13px] font-medium leading-5 antialiased';
   const createSplitPad = 'px-1.5';
   const createFlowPrimaryClass =
-    `inline-flex shrink-0 ${createSplitTypography} ${createSplitPad} items-center justify-center rounded-l-md border border-blue-600 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 hover:border-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:cursor-not-allowed disabled:opacity-60 ${createSplitPrimaryMinW}`;
+    `inline-flex shrink-0 ${createSplitTypography} ${createSplitPad} items-center justify-center rounded-l-md border border-primary-600 bg-primary-600 text-white shadow-sm transition hover:bg-primary-700 hover:border-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 disabled:cursor-not-allowed disabled:opacity-60 ${createSplitPrimaryMinW}`;
 
   const createFlowChevronClass =
-    `inline-flex min-h-8 w-5 shrink-0 items-center justify-center rounded-r-md border border-l-0 border-blue-600 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 hover:border-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:cursor-not-allowed disabled:opacity-60`;
+    `inline-flex min-h-8 w-5 shrink-0 items-center justify-center rounded-r-md border border-l-0 border-primary-600 bg-primary-600 text-white shadow-sm transition hover:bg-primary-700 hover:border-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 disabled:cursor-not-allowed disabled:opacity-60`;
 
   const createSplitMenuItemClass = (focused: boolean) =>
     `${createSplitTypography} ${createSplitPad} flex w-full cursor-pointer items-center justify-center border-0 text-center text-gray-800 hover:bg-gray-100 ${focused ? 'bg-gray-100' : ''}`;
@@ -168,7 +168,7 @@ export default function FlowsPageClient({
             onClick={() => handleTabChange('flows')}
             className={`pb-4 px-1 relative font-semibold text-base ${
               tab === 'flows'
-                ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -179,7 +179,7 @@ export default function FlowsPageClient({
             onClick={() => handleTabChange('credentials')}
             className={`pb-4 px-1 relative font-semibold text-base ${
               tab === 'credentials'
-                ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -190,7 +190,7 @@ export default function FlowsPageClient({
             onClick={() => handleTabChange('executions')}
             className={`pb-4 px-1 relative font-semibold text-base ${
               tab === 'executions'
-                ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >

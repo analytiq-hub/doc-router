@@ -421,7 +421,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               />
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50 transition-colors"
               >
                 <CompareArrowsIcon className="text-base" />
                 <span>Compare Versions</span>
@@ -563,7 +563,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
                 disabled={isLoading || isReadOnly}
               >
                 {currentPromptId ? 'Update Prompt' : 'Save Prompt'}
@@ -601,7 +601,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   value={currentPrompt.model || DEFAULT_LLM_MODEL}
                   onChange={(e) => setCurrentPrompt(prev => ({ ...prev, model: e.target.value }))}
                   disabled={isLoading || isReadOnly}
-                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   {llmModels.map((model) => (
                     <option key={model.litellm_model} value={model.litellm_model}>
@@ -694,7 +694,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       checked={includeOcrText}
                       onChange={(e) => setIncludeOcrText(e.target.checked)}
                       disabled={isLoading || isReadOnly}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      className="h-4 w-4 text-primary-600 border-gray-300 rounded"
                     />
                     <label htmlFor="include-ocr-text" className="text-xs text-gray-700">
                       Include OCR text in LLM context
@@ -747,7 +747,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       checked={includePdf}
                       onChange={(e) => setIncludePdf(e.target.checked)}
                       disabled={isLoading || isReadOnly}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      className="h-4 w-4 text-primary-600 border-gray-300 rounded"
                     />
                     <label htmlFor="include-pdf" className="text-xs text-gray-700">
                       Include PDF in grouped prompt context

@@ -137,7 +137,7 @@ const SystemSettingsManager: React.FC = () => {
                   }))
                 }
                 disabled={saving}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Range {MIN_TEXTRACT_MAX_CONCURRENT}–{MAX_TEXTRACT_MAX_CONCURRENT} (default{' '}
@@ -176,7 +176,7 @@ const SystemSettingsManager: React.FC = () => {
                     }))
                   }
                   disabled={saving}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
                 />
               </div>
             ))}
@@ -200,7 +200,7 @@ const SystemSettingsManager: React.FC = () => {
             type="button"
             onClick={() => void handleSave()}
             disabled={saving}
-            className="mt-4 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-blue-300"
+            className="mt-4 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-primary-300"
           >
             {saving ? 'Saving...' : 'Save'}
           </button>

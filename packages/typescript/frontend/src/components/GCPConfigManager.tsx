@@ -91,7 +91,7 @@ const GCPConfigManager: React.FC = () => {
               setFileName('');
               setError(null);
             }}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             {configured ? 'Edit JSON key' : 'Add JSON key'}
           </button>
@@ -138,8 +138,8 @@ const GCPConfigManager: React.FC = () => {
         )}
       </div>
 
-      <div className="bg-blue-50 rounded-lg shadow p-4">
-        <span className="list-decimal list-inside space-y-2 text-blue-900">
+      <div className="bg-primary-50 rounded-lg shadow p-4">
+        <span className="list-decimal list-inside space-y-2 text-primary-900">
           Change GCP Configuration for on-prem installs only.
         </span>
       </div>
@@ -160,7 +160,7 @@ const GCPConfigManager: React.FC = () => {
                 </svg>
               </button>
             </div>
-            <label className="cursor-pointer inline-block mb-2 text-sm text-blue-600 hover:underline">
+            <label className="cursor-pointer inline-block mb-2 text-sm text-primary-600 hover:underline">
               Choose JSON file
               <input
                 type="file"
@@ -203,7 +203,7 @@ const GCPConfigManager: React.FC = () => {
                 type="button"
                 onClick={handleSave}
                 disabled={!jsonText.trim()}
-                className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50"
               >
                 Save
               </button>

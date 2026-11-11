@@ -353,7 +353,7 @@ const TourGuide = () => {
       
       {/* Tooltip */}
       <div 
-        className={`absolute pointer-events-auto bg-blue-600 text-white p-4 rounded-lg shadow-lg max-w-xs ${getTooltipClass()} ${!tooltipReady ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+        className={`absolute pointer-events-auto bg-primary-600 text-white p-4 rounded-lg shadow-lg max-w-xs ${getTooltipClass()} ${!tooltipReady ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
         style={{ 
           top: tooltipPosition.top, 
           left: tooltipPosition.left 
@@ -370,7 +370,7 @@ const TourGuide = () => {
             {currentStep > 0 && (
               <button 
                 onClick={prevStep}
-                className="bg-white text-blue-600 px-3 py-1 rounded text-sm mr-2 hover:bg-blue-50"
+                className="bg-white text-primary-600 px-3 py-1 rounded text-sm mr-2 hover:bg-primary-50"
               >
                 Previous
               </button>
@@ -383,13 +383,13 @@ const TourGuide = () => {
                 e.preventDefault();
                 skipTour();
               }}
-              className="text-white text-sm underline mr-4 hover:text-blue-100"
+              className="text-white text-sm underline mr-4 hover:text-primary-100"
             >
               Skip Tour
             </a>
             <button 
               onClick={nextStep}
-              className="bg-white text-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-50"
+              className="bg-white text-primary-600 px-3 py-1 rounded text-sm hover:bg-primary-50"
             >
               {currentStep < tourSteps.length - 1 ? 'Next' : 'Finish'}
             </button>

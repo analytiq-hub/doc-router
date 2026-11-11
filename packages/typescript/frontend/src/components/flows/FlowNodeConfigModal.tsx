@@ -195,7 +195,7 @@ const WebhookUrlHeader: React.FC<{
               type="button"
               className={[
                 'px-2.5 py-1 text-[11px] font-semibold',
-                mode === 'test' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50',
+                mode === 'test' ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-50',
               ].join(' ')}
               onClick={() => setMode('test')}
             >
@@ -205,7 +205,7 @@ const WebhookUrlHeader: React.FC<{
               type="button"
               className={[
                 'px-2.5 py-1 text-[11px] font-semibold',
-                mode === 'production' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50',
+                mode === 'production' ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-50',
               ].join(' ')}
               onClick={() => setMode('production')}
             >
@@ -259,7 +259,7 @@ const WebhookUrlHeader: React.FC<{
                 }}
                 className={[
                   'block truncate font-mono text-[12px] font-semibold',
-                  mode === 'test' && !testUrlLive ? 'cursor-not-allowed text-gray-500' : 'text-blue-700 hover:underline',
+                  mode === 'test' && !testUrlLive ? 'cursor-not-allowed text-gray-500' : 'text-primary-700 hover:underline',
                 ].join(' ')}
                 title={href}
               >
@@ -1079,7 +1079,7 @@ const FlowNodeConfigModal: React.FC<{
                           {(['Parameters', 'Settings'] as const).map((label) => (
                             <Tab
                               key={label}
-                              className="flex-1 border-b-2 border-transparent py-2.5 text-center text-xs font-bold text-gray-600 outline-none data-[selected]:border-blue-600 data-[selected]:text-blue-800"
+                              className="flex-1 border-b-2 border-transparent py-2.5 text-center text-xs font-bold text-gray-600 outline-none data-[selected]:border-primary-600 data-[selected]:text-primary-800"
                             >
                               {label}
                             </Tab>
@@ -1493,7 +1493,7 @@ const FlowNodeConfigModal: React.FC<{
                                             </div>
                                             <div className="flex items-center gap-2">
                                               <a
-                                                className="text-blue-700 hover:underline"
+                                                className="text-primary-700 hover:underline"
                                                 href={
                                                   r.storage_id
                                                     ? `/fastapi/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/blob?storage_id=${encodeURIComponent(r.storage_id)}&action=view`

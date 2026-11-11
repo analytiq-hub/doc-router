@@ -14,7 +14,7 @@ const LLMManagerPage: React.FC = () => {
           <h2 className="text-lg font-semibold text-gray-900">LLM Management</h2>
           <Link 
             to="/settings/account/development/llm-manager/models"
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
           >
             <ViewListIcon className="w-5 h-5" />
             View All Models

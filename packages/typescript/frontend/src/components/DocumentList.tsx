@@ -366,7 +366,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         return (
           <Link
             to={`/orgs/${organizationId}/cases/${encodeURIComponent(cid)}`}
-            className="text-blue-600 underline truncate"
+            className="text-primary-600 underline truncate"
             title={cid}
           >
             {cid}
@@ -510,10 +510,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
       minHeight: isCaseScopedList ? '280px' : '400px',
     }}>
       {!isCaseScopedList && (
-        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
+        <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
           <p className="text-sm">
             Welcome! Upload your documents to begin transforming unstructured data into structured insights. 
-            If no documents are visible, <Link to={`/orgs/${organizationId}/docs?tab=upload`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to upload and start extracting key data fields effortlessly.
+            If no documents are visible, <Link to={`/orgs/${organizationId}/docs?tab=upload`} className="text-primary-600 font-medium hover:underline">click here</Link> or use the tab above to upload and start extracting key data fields effortlessly.
           </p>
         </div>
       )}
@@ -629,7 +629,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <button
             type="button"
             onClick={() => setIsBulkUpdateOpen(true)}
-            className={`inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 ${
+            className={`inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors duration-200 ${
               isCaseScopedList ? 'h-10 whitespace-nowrap' : 'w-full sm:w-auto justify-center'
             }`}
           >
@@ -709,7 +709,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
           }}
           className="flex items-center gap-2"
         >
-          <BadgeIcon fontSize="small" className="text-blue-600" />
+          <BadgeIcon fontSize="small" className="text-primary-600" />
           <span>Properties</span>
         </MenuItem>
         {canWriteDocuments && (
@@ -719,7 +719,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
             }}
             className="flex items-center gap-2"
           >
-            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+            <EditOutlinedIcon fontSize="small" className="text-primary-600" />
             <span>Edit Tags & Metadata</span>
           </MenuItem>
         )}

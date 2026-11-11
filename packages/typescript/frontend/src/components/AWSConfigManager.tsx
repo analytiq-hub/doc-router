@@ -62,7 +62,7 @@ const AWSConfigManager: React.FC = () => {
           <h2 className="text-lg font-medium text-gray-900">AWS Configuration</h2>
           <button
             onClick={handleEditCredentials}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             {config ? 'Edit Configuration' : 'Add Configuration'}
           </button>
@@ -101,8 +101,8 @@ const AWSConfigManager: React.FC = () => {
       </div>
 
       {/* Help Section */}
-      <div className="bg-blue-50 rounded-lg shadow p-4">
-        <span className="list-decimal list-inside space-y-2 text-blue-900">
+      <div className="bg-primary-50 rounded-lg shadow p-4">
+        <span className="list-decimal list-inside space-y-2 text-primary-900">
           Change AWS Configuration for on-prem installs only.
         </span>
       </div>
@@ -134,7 +134,7 @@ const AWSConfigManager: React.FC = () => {
                   type="text"
                   value={accessKeyId}
                   onChange={(e) => setAccessKeyId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   autoFocus
                 />
               </div>
@@ -148,7 +148,7 @@ const AWSConfigManager: React.FC = () => {
                   type="password"
                   value={secretAccessKey}
                   onChange={(e) => setSecretAccessKey(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
               
@@ -161,7 +161,7 @@ const AWSConfigManager: React.FC = () => {
                   type="text"
                   value={s3BucketName}
                   onChange={(e) => setS3BucketName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="my-s3-bucket"
                 />
               </div>
@@ -170,14 +170,14 @@ const AWSConfigManager: React.FC = () => {
             <div className="flex justify-end space-x-2 mt-6">
               <button
                 onClick={() => setEditModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveConfig}
                 disabled={!accessKeyId || !secretAccessKey || !s3BucketName}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save
               </button>

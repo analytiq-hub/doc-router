@@ -29,7 +29,7 @@ interface ProcessedDataPoint {
 }
 
 const OPERATION_COLORS: Record<string, { bar: string; label: string }> = {
-  ocr:          { bar: 'bg-blue-500',   label: 'OCR' },
+  ocr:          { bar: 'bg-primary-500',   label: 'OCR' },
   document_llm: { bar: 'bg-green-500',  label: 'Document LLM' },
   agent_llm:    { bar: 'bg-purple-500', label: 'Agent LLM' },
 };
@@ -262,7 +262,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     return (
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
         </div>
       </div>
     );
@@ -311,7 +311,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
               onClick={() => setGranularity('daily')}
               className={`px-3 py-2 text-sm font-medium rounded-l-md border ${
                 granularity === 'daily'
-                  ? 'bg-blue-600 text-white border-blue-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -321,7 +321,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
               onClick={() => setGranularity('monthly')}
               className={`px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
                 granularity === 'monthly'
-                  ? 'bg-blue-600 text-white border-blue-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -340,7 +340,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
               onClick={() => handlePresetRange('current_month')}
               className={`px-3 py-1 text-xs font-medium rounded border ${
                 !isCustomRange && activePreset === 'current_month'
-                  ? 'bg-blue-600 text-white border-blue-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -350,7 +350,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
               onClick={() => handlePresetRange('last_month')}
               className={`px-3 py-1 text-xs font-medium rounded border ${
                 !isCustomRange && activePreset === 'last_month'
-                  ? 'bg-blue-600 text-white border-blue-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -360,7 +360,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
               onClick={() => handlePresetRange('last_30_days')}
               className={`px-3 py-1 text-xs font-medium rounded border ${
                 !isCustomRange && activePreset === 'last_30_days'
-                  ? 'bg-blue-600 text-white border-blue-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -370,7 +370,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
               onClick={() => handlePresetRange('last_90_days')}
               className={`px-3 py-1 text-xs font-medium rounded border ${
                 !isCustomRange && activePreset === 'last_90_days'
-                  ? 'bg-blue-600 text-white border-blue-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -408,9 +408,9 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="text-sm font-medium text-blue-600">Total SPUs</div>
-          <div className="text-2xl font-bold text-blue-900">{rangeData ? rangeData.total_spus.toLocaleString() : '0'}</div>
+        <div className="bg-primary-50 p-4 rounded-lg">
+          <div className="text-sm font-medium text-primary-600">Total SPUs</div>
+          <div className="text-2xl font-bold text-primary-900">{rangeData ? rangeData.total_spus.toLocaleString() : '0'}</div>
         </div>
         <div className="bg-green-50 p-4 rounded-lg">
           <div className="text-sm font-medium text-green-600">Average {granularity === 'daily' ? 'Daily' : 'Monthly'}</div>

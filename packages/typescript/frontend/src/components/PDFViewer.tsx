@@ -1731,9 +1731,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                 ariaLabel="OCR Output"
                 title={
                   <>
-                    <ArticleIcon className="shrink-0 text-blue-600" fontSize="small" />
+                    <ArticleIcon className="shrink-0 text-primary-600" fontSize="small" />
                     {ocrMetadataType && (
-                      <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                      <span className="shrink-0 rounded bg-primary-100 px-1.5 py-0.5 text-xs font-medium text-primary-700">
                         {ocrMetadataType}
                       </span>
                     )}
@@ -1744,7 +1744,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                   <button
                     type="button"
                     onClick={() => setOcrPanelKind(null)}
-                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                    className="rounded-md bg-primary-600 px-3 py-1.5 text-xs text-white hover:bg-primary-700"
                   >
                     Close
                   </button>
@@ -1774,7 +1774,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                       <>
                         {ocrLoading ? (
                           <div className="flex items-center gap-3 py-6">
-                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600" aria-hidden />
                             <span className="text-sm italic text-gray-500">Loading OCR text...</span>
                           </div>
                         ) : ocrError ? (
@@ -1792,7 +1792,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                       <>
                         {ocrMarkdownLoading ? (
                           <div className="flex items-center gap-3 py-6">
-                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600" aria-hidden />
                             <span className="text-sm italic text-gray-500">Loading OCR markdown...</span>
                           </div>
                         ) : ocrMarkdownError ? (
@@ -1826,7 +1826,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                       <>
                         {ocrHtmlLoading ? (
                           <div className="flex items-center gap-3 py-6">
-                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600" aria-hidden />
                             <span className="text-sm italic text-gray-500">Loading OCR HTML...</span>
                           </div>
                         ) : ocrHtmlError ? (

@@ -267,7 +267,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
           <p className="text-sm text-gray-600 mb-2">
             AWS Bedrock uses the same IAM credentials as the rest of this deployment (S3, Textract). Configure them under{' '}
-            <Link to="/settings/account/development/aws-config" className="text-blue-600 underline font-medium">
+            <Link to="/settings/account/development/aws-config" className="text-primary-600 underline font-medium">
               Account → Development → AWS setup
             </Link>
             . There is no separate Bedrock API key here.
@@ -279,7 +279,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
           <p className="text-sm text-gray-600 mb-2">
             Vertex AI uses a GCP service account JSON configured under{' '}
-            <Link to="/settings/account/development/gcp-config" className="text-blue-600 underline font-medium">
+            <Link to="/settings/account/development/gcp-config" className="text-primary-600 underline font-medium">
               Account → Development → GCP setup
             </Link>
             .

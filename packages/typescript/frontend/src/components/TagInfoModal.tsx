@@ -73,7 +73,7 @@ const TagInfoModal: React.FC<TagInfoModalProps> = ({
         ariaLabel="Tag properties"
         title={
           <>
-            <BadgeIcon className="shrink-0 text-blue-600" fontSize="small" />
+            <BadgeIcon className="shrink-0 text-primary-600" fontSize="small" />
             <span className="truncate">Tag Properties</span>
           </>
         }
@@ -81,7 +81,7 @@ const TagInfoModal: React.FC<TagInfoModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+            className="rounded-md bg-primary-600 px-3 py-1.5 text-xs text-white hover:bg-primary-700"
           >
             Close
           </button>

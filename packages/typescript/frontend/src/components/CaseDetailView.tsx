@@ -78,7 +78,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
             ? `Could not load this case: ${loadError}`
             : 'Case not found or still being deleted.'}
         </p>
-        <Link to={`/orgs/${organizationId}/cases`} className="text-blue-600 underline">
+        <Link to={`/orgs/${organizationId}/cases`} className="text-primary-600 underline">
           Back to cases
         </Link>
       </div>
@@ -89,7 +89,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link to={`/orgs/${organizationId}/cases`} className="text-sm text-blue-600 underline">
+          <Link to={`/orgs/${organizationId}/cases`} className="text-sm text-primary-600 underline">
             ← Cases
           </Link>
           <h1 className="text-2xl font-bold mt-1">{caseDisplayName(caseRow)}</h1>
@@ -158,7 +158,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
           type="button"
           className={`pb-2 border-b-2 ${
             activeTab === 'documents'
-              ? 'border-blue-600 text-blue-700 font-medium'
+              ? 'border-primary-600 text-primary-700 font-medium'
               : 'border-transparent text-gray-600'
           }`}
           onClick={() => setActiveTab('documents')}
@@ -169,7 +169,7 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
           type="button"
           className={`pb-2 border-b-2 ${
             activeTab === 'results'
-              ? 'border-blue-600 text-blue-700 font-medium'
+              ? 'border-primary-600 text-primary-700 font-medium'
               : 'border-transparent text-gray-600'
           }`}
           onClick={() => setActiveTab('results')}

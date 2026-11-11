@@ -255,30 +255,30 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div 
-            className={`flex flex-col items-center ${activeStep >= 0 ? 'text-blue-600' : 'text-gray-400'}`}
+            className={`flex flex-col items-center ${activeStep >= 0 ? 'text-primary-600' : 'text-gray-400'}`}
             onClick={() => setActiveStep(0)}
           >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 0 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
               1
             </div>
             <span className="text-sm">Select Files</span>
           </div>
-          <div className={`flex-1 h-1 mx-2 ${activeStep >= 1 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+          <div className={`flex-1 h-1 mx-2 ${activeStep >= 1 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
           <div 
-            className={`flex flex-col items-center ${activeStep >= 1 ? 'text-blue-600' : 'text-gray-400'}`}
+            className={`flex flex-col items-center ${activeStep >= 1 ? 'text-primary-600' : 'text-gray-400'}`}
             onClick={() => files.length > 0 && setActiveStep(1)}
           >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 1 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
               2
             </div>
             <span className="text-sm">Tags & Metadata</span>
           </div>
-          <div className={`flex-1 h-1 mx-2 ${activeStep >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+          <div className={`flex-1 h-1 mx-2 ${activeStep >= 2 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
           <div 
-            className={`flex flex-col items-center ${activeStep >= 2 ? 'text-blue-600' : 'text-gray-400'}`}
+            className={`flex flex-col items-center ${activeStep >= 2 ? 'text-primary-600' : 'text-gray-400'}`}
             onClick={() => files.length > 0 && setActiveStep(2)}
           >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 2 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
               3
             </div>
             <span className="text-sm">Upload</span>
@@ -299,7 +299,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
                 <span className="text-sm">PDF</span>
               </div>
               <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
-                <DescriptionIcon className="text-blue-700 mr-1" fontSize="small" />
+                <DescriptionIcon className="text-primary-700 mr-1" fontSize="small" />
                 <span className="text-sm">DOC</span>
               </div>
               <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
@@ -416,7 +416,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
                   <button
                     type="button"
                     onClick={handleAddMetadata}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-500 border border-blue-300 rounded-md hover:bg-blue-50"
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-500 border border-primary-300 rounded-md hover:bg-primary-50"
                   >
                     <AddIcon fontSize="small" className="mr-1" />
                     Add Field
@@ -434,14 +434,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
                         placeholder="Key"
                         value={field.key}
                         onChange={(e) => handleMetadataKeyChange(field.id, e.target.value)}
-                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                       />
                       <input
                         type="text"
                         placeholder="Value"
                         value={field.value}
                         onChange={(e) => handleMetadataValueChange(field.id, e.target.value)}
-                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                       />
                       <IconButton
                         size="small"

@@ -54,8 +54,8 @@ const DeveloperPage: React.FC = () => {
           </Link>
         </div>
 
-        <div className="bg-blue-50 rounded-lg shadow p-4">
-          <div className="space-y-2 text-blue-900">
+        <div className="bg-primary-50 rounded-lg shadow p-4">
+          <div className="space-y-2 text-primary-900">
             <p>
               The complete API documentation is available at:
             </p>
@@ -64,9 +64,9 @@ const DeveloperPage: React.FC = () => {
                 href={apiUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-blue-700"
+                className="hover:text-primary-700"
               >
-                <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-sm">
+                <code className="bg-primary-100 px-1.5 py-0.5 rounded font-mono text-sm">
                   {apiUrl}
                 </code>
               </a>

@@ -195,18 +195,18 @@ export const DocumentBulkDownload = forwardRef<DocumentBulkDownloadRef, Document
       </div>
 
       {isDownloading && (
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+        <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-md">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-700">
+            <span className="text-sm font-medium text-primary-700">
               Downloading Documents...
             </span>
-            <span className="text-sm text-blue-600">
+            <span className="text-sm text-primary-600">
               {downloadedCount} / {totalDocuments}
             </span>
           </div>
-          <div className="w-full bg-blue-200 rounded-full h-2">
+          <div className="w-full bg-primary-200 rounded-full h-2">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
               style={{ width: `${totalDocuments > 0 ? (downloadedCount / totalDocuments) * 100 : 0}%` }}
             ></div>
           </div>

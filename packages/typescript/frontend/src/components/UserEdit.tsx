@@ -67,7 +67,7 @@ const PasswordChangeModal: React.FC<PasswordChangeModalProps> = ({ isOpen, onClo
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <div>
@@ -78,7 +78,7 @@ const PasswordChangeModal: React.FC<PasswordChangeModalProps> = ({ isOpen, onClo
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
@@ -91,7 +91,7 @@ const PasswordChangeModal: React.FC<PasswordChangeModalProps> = ({ isOpen, onClo
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
             >
               Update Password
             </button>
@@ -265,7 +265,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
           <button
             type="button"
             onClick={() => router.push('/settings/account/users')}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
           >
             Cancel
           </button>
@@ -273,9 +273,9 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
             type="button"
             onClick={handleSubmit}
             disabled={!hasChanges()}
-            className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+            className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
               ${hasChanges()
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                ? 'bg-primary-600 text-white hover:bg-primary-700'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
           >
@@ -317,7 +317,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
@@ -331,7 +331,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
                   onChange={(e) => setIsSysadmin(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
               <span className="text-sm font-medium text-gray-700">Platform sysadmin</span>
             </div>
@@ -345,7 +345,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
                     onChange={(e) => setEmailVerified(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                 </label>
                 <span className="text-sm font-medium text-gray-700">Email Verified</span>
               </div>
@@ -357,7 +357,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
                 className={`px-4 py-2 text-sm border rounded-md transition-colors
                   ${originalValues.emailVerified 
                     ? 'text-gray-400 border-gray-400 cursor-not-allowed' 
-                    : 'text-blue-600 border-blue-600 hover:bg-blue-50'
+                    : 'text-primary-600 border-primary-600 hover:bg-primary-50'
                   }`}
               >
                 Send Verification Email
@@ -371,7 +371,7 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
             <button
               type="button"
               onClick={() => setIsPasswordModalOpen(true)}
-              className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50"
+              className="px-4 py-2 text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50"
             >
               Change Password
             </button>

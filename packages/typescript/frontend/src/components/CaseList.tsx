@@ -161,7 +161,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           return (
             <Link
               to={caseDetailHref(organizationId, params.row.case_id)}
-              className="text-blue-600 underline truncate font-medium"
+              className="text-primary-600 underline truncate font-medium"
               title={name}
             >
               {name}

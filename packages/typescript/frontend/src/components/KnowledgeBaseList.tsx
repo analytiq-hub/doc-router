@@ -232,7 +232,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             }
           }}
         >
-          <span className="font-medium text-blue-600 hover:text-blue-800 hover:underline">{params.row.name}</span>
+          <span className="font-medium text-primary-600 hover:text-primary-800 hover:underline">{params.row.name}</span>
         </div>
       ),
     },
@@ -423,14 +423,14 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   return (
     <div className="p-4 w-full">
       <div className="bg-white p-6 rounded-lg shadow">
-        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
+        <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
           <p className="text-sm">
             Knowledge Bases enable semantic search across your documents using vector embeddings.
             Documents are automatically indexed into knowledge bases based on their tags.
             {canConfigWrite ? (
               <>
                 If none are available,{' '}
-                <Link to={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-blue-600 font-medium hover:underline">
+                <Link to={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-primary-600 font-medium hover:underline">
                   click here
                 </Link>{' '}
                 or use the tab above to create a new knowledge base.
@@ -466,7 +466,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         {/* Message */}
         {message && (
           <div className={`mb-4 p-3 rounded ${
-            message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+            message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
           }`}>
             {message}
           </div>
@@ -537,7 +537,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
               }}
               className="flex items-center gap-2"
             >
-              <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+              <EditOutlinedIcon fontSize="small" className="text-primary-600" />
               <span>Edit</span>
             </MenuItem>
           )}
@@ -547,7 +547,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             }}
             className="flex items-center gap-2"
           >
-            <FolderIcon fontSize="small" className="text-blue-600" />
+            <FolderIcon fontSize="small" className="text-primary-600" />
             <span>View Documents</span>
           </MenuItem>
           <MenuItem 
@@ -556,7 +556,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             }}
             className="flex items-center gap-2"
           >
-            <SearchOutlinedIcon fontSize="small" className="text-blue-600" />
+            <SearchOutlinedIcon fontSize="small" className="text-primary-600" />
             <span>Search</span>
           </MenuItem>
           <MenuItem 
@@ -568,7 +568,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             }}
             className="flex items-center gap-2"
           >
-            <BadgeIcon fontSize="small" className="text-blue-600" />
+            <BadgeIcon fontSize="small" className="text-primary-600" />
             <span>Properties</span>
           </MenuItem>
           <MenuItem 
@@ -577,7 +577,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             }}
             className="flex items-center gap-2"
           >
-            <SyncIcon fontSize="small" className="text-blue-600" />
+            <SyncIcon fontSize="small" className="text-primary-600" />
             <span>Reconcile</span>
           </MenuItem>
           {canConfigWrite && (

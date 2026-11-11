@@ -143,9 +143,9 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
           
           {/* Recursive rendering for nested objects */}
           {field.type === 'object' && (
-            <div className="mt-2 pl-4 border-l-2 border-blue-200">
+            <div className="mt-2 pl-4 border-l-2 border-primary-200">
               <div
-                className="flex items-center text-sm font-medium text-blue-600 mb-2 cursor-pointer"
+                className="flex items-center text-sm font-medium text-primary-600 mb-2 cursor-pointer"
                 onClick={() => toggleExpansion(index)}
               >
                 <span className="mr-1 inline-flex items-center justify-center w-4">
@@ -202,7 +202,7 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
 
                   {field.arrayItemType === 'object' && (
                     <div className="mt-2">
-                      <div className="text-sm font-medium text-blue-600 mb-2">Array Object Fields</div>
+                      <div className="text-sm font-medium text-primary-600 mb-2">Array Object Fields</div>
                       <NestedFieldsEditor
                         fields={field.arrayObjectFields || [{ name: '', type: 'str' }]}
                         onChange={(objectFields) => updateNestedField(index, { arrayObjectFields: objectFields })}
@@ -1275,7 +1275,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
               />
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50 transition-colors"
               >
                 <CompareArrowsIcon className="text-base" />
                 <span>Compare Versions</span>
@@ -1338,7 +1338,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                     setIsLoading(false);
                   }
                 }}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+                className="text-sm text-primary-600 hover:text-primary-800 font-medium underline"
               >
                 View Latest Version
               </button>
@@ -1389,7 +1389,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
                 disabled={isLoading || isReadOnly}
               >
                 {currentSchemaId ? 'Update Schema' : 'Save Schema'}
@@ -1405,7 +1405,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 onClick={() => setActiveTab('fields')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   activeTab === 'fields'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -1416,7 +1416,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 onClick={() => setActiveTab('json')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   activeTab === 'json'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -1518,9 +1518,9 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                   
                                   {/* Nested fields for object type */}
                                   {field.type === 'object' && (
-                                    <div className="mt-2 pl-4 border-l-2 border-blue-200">
+                                    <div className="mt-2 pl-4 border-l-2 border-primary-200">
                                       <div 
-                                        className="flex items-center text-sm font-medium text-blue-600 mb-2 cursor-pointer"
+                                        className="flex items-center text-sm font-medium text-primary-600 mb-2 cursor-pointer"
                                         onClick={() => toggleNestedFieldExpansion(index)}
                                       >
                                         <span className="mr-1 inline-flex items-center justify-center w-4">
@@ -1579,7 +1579,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                           {/* For array of objects, show object field editor */}
                                           {field.arrayItemType === 'object' && (
                                             <div className="mt-2">
-                                              <div className="text-sm font-medium text-blue-600 mb-2">Array Object Fields</div>
+                                              <div className="text-sm font-medium text-primary-600 mb-2">Array Object Fields</div>
                                               <NestedFieldsEditor 
                                                 fields={field.arrayObjectFields || [{ name: '', type: 'str' }]}
                                                 onChange={(objectFields) => handleArrayObjectFieldsChange(index, objectFields)}
@@ -1605,7 +1605,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 <button
                   type="button"
                   onClick={addField}
-                  className="w-full p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 disabled:opacity-50 text-sm"
+                  className="w-full p-1.5 bg-primary-50 text-primary-600 rounded hover:bg-primary-100 disabled:opacity-50 text-sm"
                   disabled={isLoading || isReadOnly}
                 >
                   Add Field

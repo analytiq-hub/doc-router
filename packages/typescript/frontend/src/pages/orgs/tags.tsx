@@ -34,7 +34,7 @@ export default function TagsPage(props: { params: Promise<{ organizationId: stri
             onClick={() => handleTabChange('tags')}
             className={`pb-4 px-1 relative font-semibold text-base ${
               tab === 'tags'
-                ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -45,7 +45,7 @@ export default function TagsPage(props: { params: Promise<{ organizationId: stri
               onClick={() => handleTabChange('tag-create')}
               className={`pb-4 px-1 relative font-semibold text-base ${
                 tab === 'tag-create'
-                  ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                  ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               data-tour="tag-create"

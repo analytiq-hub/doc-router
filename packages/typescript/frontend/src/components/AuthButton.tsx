@@ -34,7 +34,7 @@ function AuthButton() {
     return (
       <div 
         onClick={handleLogin}
-        className="text-white hover:bg-blue-500 px-4 py-2 rounded-md cursor-pointer"
+        className="text-white hover:bg-primary-500 px-4 py-2 rounded-md cursor-pointer"
       >
         Sign in or Register
       </div>

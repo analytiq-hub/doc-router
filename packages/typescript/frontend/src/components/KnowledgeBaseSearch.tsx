@@ -144,7 +144,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
             onClick={() => setShowFilters(!showFilters)}
             className={`px-3 py-1.5 text-sm border rounded-md transition-colors flex items-center gap-2 ${
               hasActiveFilters
-                ? 'border-blue-600 text-blue-600 bg-blue-50 hover:bg-blue-100'
+                ? 'border-primary-600 text-primary-600 bg-primary-50 hover:bg-primary-100'
                 : 'border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
@@ -165,7 +165,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyPress={handleKeyPress}
                 disabled={isSearching}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -178,13 +178,13 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                   value={topK}
                   onChange={(e) => setTopK(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
                   disabled={isSearching}
-                  className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <button
                 onClick={handleSearch}
                 disabled={isSearching || !query.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSearching ? (
                   <CircularProgress size={20} color="inherit" />
@@ -219,7 +219,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                   <button
                     type="button"
                     onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
-                    className="w-full px-3 py-2 text-left border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between"
+                    className="w-full px-3 py-2 text-left border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent flex items-center justify-between"
                   >
                     <span className="text-gray-500">
                       {selectedTags.length > 0 ? `${selectedTags.length} selected` : 'Select tags'}
@@ -293,7 +293,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                     type="date"
                     value={uploadDateFrom}
                     onChange={(e) => setUploadDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -302,7 +302,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                     type="date"
                     value={uploadDateTo}
                     onChange={(e) => setUploadDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -349,7 +349,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                         <Chip
                           label={`Relevance: ${formatRelevanceScore(result.relevance)}`}
                           size="small"
-                          className="bg-blue-100 text-blue-800"
+                          className="bg-primary-100 text-primary-800"
                           title="Fused score from hybrid search (RRF), or vector similarity when vector-only fallback is used"
                         />
                       )}
@@ -361,8 +361,8 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {/* Chunk index */}
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100">
-                        <span className="text-blue-400">Chunk Index #</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 ring-1 ring-primary-100">
+                        <span className="text-primary-400">Chunk Index #</span>
                         {result.chunk_index}
                       </span>
                       {/* Char range */}

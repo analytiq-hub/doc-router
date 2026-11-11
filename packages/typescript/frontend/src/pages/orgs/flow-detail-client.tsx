@@ -968,7 +968,7 @@ export default function FlowDetailPageClient({
         <div className="mb-4">
           <Link
             to={`/orgs/${organizationId}/flows`}
-            className="text-sm text-blue-600 hover:text-blue-700"
+            className="text-sm text-primary-600 hover:text-primary-700"
           >
             ← Back to flows
           </Link>

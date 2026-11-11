@@ -98,7 +98,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
           <div className="mt-4">
             <input
               type="email"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="Enter email address..."
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -118,7 +118,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
                       <div className="font-medium">{user.name || 'Unnamed User'}</div>
                       <div className="text-sm text-gray-500">{user.email}</div>
                     </div>
-                    <span className="text-blue-600">Add</span>
+                    <span className="text-primary-600">Add</span>
                   </button>
                 ))}
               </div>

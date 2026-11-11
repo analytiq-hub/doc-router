@@ -74,7 +74,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
     <div className={`bg-white rounded-lg shadow-md ${isModal ? 'p-6' : 'p-8 max-w-2xl mx-auto my-8'}`}>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
-          <FeedbackIcon className="text-blue-500 mr-2" />
+          <FeedbackIcon className="text-primary-500 mr-2" />
           <h2 className="text-2xl font-semibold text-gray-800">Product Feedback</h2>
         </div>
         
@@ -82,7 +82,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
         {isAdmin && (
           <Link 
             to="/admin/feedback" 
-            className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+            className="flex items-center text-primary-600 hover:text-primary-800 transition-colors"
           >
             <AdminIcon className="mr-1" />
             <span>View All Feedback</span>
@@ -102,7 +102,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
           <textarea
             id="feedback"
             rows={5}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             placeholder="Describe your issue, suggestion, or appreciation here..."
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
@@ -130,7 +130,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
         
         <button
           type="submit"
-          className="w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          className="w-full py-2 px-4 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Submitting...' : 'Submit Feedback'}

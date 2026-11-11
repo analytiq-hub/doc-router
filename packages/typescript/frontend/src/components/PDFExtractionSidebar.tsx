@@ -1125,16 +1125,16 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         <span>Prompts</span>
         <div className="flex items-center gap-2">
           {editMode && (
-            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-md">
+            <span className="text-xs text-primary-600 bg-primary-100 px-2 py-1 rounded-md">
               Edit Mode
             </span>
           )}
           <button
             onClick={() => setEditMode(prev => !prev)}
-            className={`p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer ${editMode ? 'bg-blue-100' : ''}`}
+            className={`p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer ${editMode ? 'bg-primary-100' : ''}`}
             title={editMode ? "Disable editing mode" : "Enable editing mode"}
           >
-            <PencilIcon className={`w-4 h-4 ${editMode ? 'text-blue-600' : 'text-gray-600'}`} />
+            <PencilIcon className={`w-4 h-4 ${editMode ? 'text-primary-600' : 'text-gray-600'}`} />
           </button>
         </div>
       </div>
@@ -1316,7 +1316,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
             ariaLabel="Run info"
             title={
               <>
-                <DescriptionOutlinedIcon className="shrink-0 text-blue-600" fontSize="small" />
+                <DescriptionOutlinedIcon className="shrink-0 text-primary-600" fontSize="small" />
                 <span className="truncate">Run Info</span>
               </>
             }
@@ -1327,7 +1327,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
                   setRunInfoOpen(false);
                   setRunInfoPromptId(null);
                 }}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                className="rounded-md bg-primary-600 px-3 py-1.5 text-xs text-white hover:bg-primary-700"
               >
                 Close
               </button>
@@ -1337,7 +1337,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
             {runInfoLoading ? (
               <div className="flex items-center gap-3 py-6">
                 <div
-                  className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+                  className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600"
                   aria-hidden
                 />
                 <span className="text-sm italic text-gray-500">Loading run info...</span>
@@ -1377,7 +1377,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
                           href={promptEditHref}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="break-all font-mono text-blue-600 hover:underline"
+                          className="break-all font-mono text-primary-600 hover:underline"
                         >
                           {promptLinkLabel}
                         </a>
@@ -1448,7 +1448,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
                                           href={`/orgs/${organizationId}/docs/${docId}`}
                                           target="_blank"
                                           rel="noreferrer"
-                                          className="font-mono text-sm text-blue-600 hover:underline"
+                                          className="font-mono text-sm text-primary-600 hover:underline"
                                         >
                                           {docId}
                                         </a>

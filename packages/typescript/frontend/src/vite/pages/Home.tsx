@@ -23,7 +23,7 @@ export function HomePage() {
     <Layout>
       <div className="relative">
         <div className="absolute top-4 right-4 z-10 text-sm">
-          <Link className="text-blue-600 hover:underline" to="/auth/signin">
+          <Link className="text-primary-600 hover:underline" to="/auth/signin">
             Sign in
           </Link>
         </div>

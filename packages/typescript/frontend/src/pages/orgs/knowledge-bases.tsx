@@ -74,7 +74,7 @@ export default function KnowledgeBasesPage(props: { params: Promise<{ organizati
                 onClick={() => handleTabChange('knowledge-bases')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'knowledge-bases'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -86,7 +86,7 @@ export default function KnowledgeBasesPage(props: { params: Promise<{ organizati
                   onClick={() => handleTabChange('kb-create')}
                   className={`pb-4 px-1 relative font-semibold text-base ${
                     tab === 'kb-create'
-                      ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                      ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
@@ -103,7 +103,7 @@ export default function KnowledgeBasesPage(props: { params: Promise<{ organizati
                   onClick={() => handleTabChange('edit', kbId)}
                   className={`pb-4 px-1 relative font-semibold text-base ${
                     tab === 'edit'
-                      ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                      ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
@@ -115,7 +115,7 @@ export default function KnowledgeBasesPage(props: { params: Promise<{ organizati
                 onClick={() => handleTabChange('search', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'search'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -126,7 +126,7 @@ export default function KnowledgeBasesPage(props: { params: Promise<{ organizati
                 onClick={() => handleTabChange('documents', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'documents'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -137,7 +137,7 @@ export default function KnowledgeBasesPage(props: { params: Promise<{ organizati
                 onClick={() => handleTabChange('chat', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'chat'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >

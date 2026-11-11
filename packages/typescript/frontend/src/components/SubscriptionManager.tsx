@@ -146,7 +146,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
 
   const orgSettingsHref = `/settings/organizations/${organizationId}`;
   const orgSettingsButtonClass =
-    'inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500';
+    'inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500';
 
   const billingPageHeader = (
     <div className="flex justify-between items-center mb-4">
@@ -178,7 +178,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
       <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow min-h-[calc(100vh-80px)]">
         {billingPageHeader}
         <div className="flex justify-center items-center h-40">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500"></div>
         </div>
       </div>
     );
@@ -195,7 +195,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
             onClick={() => handleTabChange('credits')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'credits'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -206,7 +206,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
             onClick={() => handleTabChange('plans')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'plans'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -217,7 +217,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
             onClick={() => handleTabChange('usage')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'usage'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -250,9 +250,9 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
           
           {/* Credits Explanation */}
           {stripeEnabled && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-              <h4 className="text-sm font-medium text-blue-900 mb-1">When to use Credits</h4>
-              <ul className="text-sm text-blue-800 space-y-0.5">
+            <div className="bg-primary-50 border border-primary-200 rounded-md p-3">
+              <h4 className="text-sm font-medium text-primary-900 mb-1">When to use Credits</h4>
+              <ul className="text-sm text-primary-800 space-y-0.5">
                 <li>• Perfect for testing and getting started</li>
                 <li>• Ideal for occasional or one-off document processing</li>
                 <li>• No monthly commitment required</li>

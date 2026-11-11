@@ -77,7 +77,7 @@ const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig =>
   normalizeOcrConfig(JSON.parse(JSON.stringify(c)) as OrgOcrConfig)
 
 const settingsCheckboxClass =
-  'h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
+  'h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500'
 
 const getAvailableOrganizationTypes = (currentType: OrganizationType, isSystemAdmin: boolean): OrganizationType[] => {
   switch (currentType) {
@@ -442,7 +442,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       renderCell: (params: GridRenderCellParams) => (
         <button
           onClick={() => router.push(`/settings/account/users/${params.row.id}`)}
-          className="text-left hover:text-blue-600 focus:outline-none"
+          className="text-left hover:text-primary-600 focus:outline-none"
         >
           <span className="font-medium">{params.value}</span>
           <span className="text-gray-500 ml-2">({params.row.email})</span>
@@ -472,7 +472,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 key={id}
                 className={`inline-flex shrink-0 items-center px-2 py-1 text-sm leading-none rounded shadow-sm ${
                   id === primaryId
-                    ? 'bg-blue-100 font-medium text-blue-800'
+                    ? 'bg-primary-100 font-medium text-primary-800'
                     : 'bg-gray-100 text-gray-700'
                 }`}
               >
@@ -659,7 +659,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 <>
                   <Link
                     to={`/settings/organizations/${organizationId}/subscription`}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -673,9 +673,9 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               type="submit"
               form="organization-form"
               disabled={!hasChanges()}
-              className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+              className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
                 ${hasChanges() 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  ? 'bg-primary-600 text-white hover:bg-primary-700' 
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
             >
               Save Changes
@@ -683,7 +683,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
             <button
               type="button"
               onClick={() => router.push('/settings/organizations')}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
             >
               Cancel
             </button>
@@ -705,7 +705,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 />
               </div>
               
@@ -718,7 +718,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   name="type"
                   value={type}
                   onChange={(e) => setType(e.target.value as OrganizationType)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   {getAvailableOrganizationTypes(originalType, isSysAdmin(session)).map((orgType) => (
                     <option key={orgType} value={orgType}>
@@ -782,7 +782,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   id="flow-log-level"
                   value={flowLogLevel}
                   onChange={(e) => setFlowLogLevel(e.target.value as FlowLogLevel)}
-                  className="mt-2 block w-full max-w-md rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-2 block w-full max-w-md rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 >
                   <option value="ERROR">ERROR</option>
                   <option value="INFO">INFO</option>
@@ -805,7 +805,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   id="ocr-mode"
                   value={ocrConfig.mode}
                   onChange={(e) => setOcrMode(e.target.value as OcrMode)}
-                  className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 >
                   {ocrModeOptions.map((m) => {
                     const unavailable =
@@ -893,7 +893,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                             })
                           }}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                         >
                           <option value="">Select a provider</option>
                           {ocrLlmProviderOptionsWithLegacy.map((row) => (
@@ -919,7 +919,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                           onChange={(e) => setLlmField('model', e.target.value)}
                           required
                           disabled={!ocrConfig.llm.provider}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
                         >
                           <option value="">
                             {ocrConfig.llm.provider ? 'Select a model' : 'Select a provider first'}
@@ -977,10 +977,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 type="button"
                 onClick={() => setShowAddUserModal(true)}
                 disabled={type === 'individual'}
-                className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
                   ${type === 'individual' 
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                    : 'bg-primary-600 text-white hover:bg-primary-700'}`}
               >
                 Add User
               </button>
@@ -989,7 +989,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
             <div className="mb-4">
               <input
                 type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 placeholder="Search members..."
                 value={memberSearch}
                 onChange={(e) => setMemberSearch(e.target.value)}

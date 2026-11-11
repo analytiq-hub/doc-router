@@ -65,7 +65,7 @@ const FormVersionSelector: React.FC<FormVersionSelectorProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center gap-2">
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
         <span className="text-sm text-gray-600">Loading versions...</span>
       </div>
     );
@@ -91,12 +91,12 @@ const FormVersionSelector: React.FC<FormVersionSelectorProps> = ({
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[200px] justify-between"
+        className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[200px] justify-between"
       >
         <div className="flex items-center gap-2">
           <span>v{selectedVersion}</span>
           {selectedVersion === currentVersion && (
-            <span className="px-1.5 py-0.5 text-xs font-semibold text-blue-600 bg-blue-50 rounded">Current</span>
+            <span className="px-1.5 py-0.5 text-xs font-semibold text-primary-600 bg-primary-50 rounded">Current</span>
           )}
         </div>
         <svg
@@ -121,14 +121,14 @@ const FormVersionSelector: React.FC<FormVersionSelectorProps> = ({
                 key={version.form_revid}
                 onClick={() => handleVersionChange(version.form_version)}
                 className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                  version.form_version === selectedVersion ? 'bg-blue-50' : ''
+                  version.form_version === selectedVersion ? 'bg-primary-50' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">v{version.form_version}</span>
                     {version.form_version === currentVersion && (
-                      <span className="px-1.5 py-0.5 text-xs font-semibold text-blue-600 bg-blue-100 rounded">Current</span>
+                      <span className="px-1.5 py-0.5 text-xs font-semibold text-primary-600 bg-primary-100 rounded">Current</span>
                     )}
                   </div>
                   <span className="text-xs text-gray-500">

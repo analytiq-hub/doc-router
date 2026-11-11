@@ -3,7 +3,7 @@ import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 export function RouteLoadingFallback() {
   return (
     <div className="flex min-h-[12rem] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
     </div>
   );
 }

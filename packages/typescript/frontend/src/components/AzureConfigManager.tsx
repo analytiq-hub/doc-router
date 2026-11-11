@@ -91,7 +91,7 @@ const AzureConfigManager: React.FC = () => {
           <button
             type="button"
             onClick={handleOpenEdit}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             {configured ? 'Edit credentials' : 'Add credentials'}
           </button>
@@ -137,8 +137,8 @@ const AzureConfigManager: React.FC = () => {
         {error && !editOpen && <p className="text-red-600 text-sm mt-2">{error}</p>}
       </div>
 
-      <div className="bg-blue-50 rounded-lg shadow p-4">
-        <span className="list-decimal list-inside space-y-2 text-blue-900">
+      <div className="bg-primary-50 rounded-lg shadow p-4">
+        <span className="list-decimal list-inside space-y-2 text-primary-900">
           Change Azure Configuration for on-prem installs only.
         </span>
       </div>
@@ -223,7 +223,7 @@ const AzureConfigManager: React.FC = () => {
                   !clientSecret.trim() ||
                   !apiBase.trim()
                 }
-                className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50"
               >
                 Save
               </button>

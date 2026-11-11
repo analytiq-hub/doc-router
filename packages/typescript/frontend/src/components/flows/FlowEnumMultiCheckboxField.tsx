@@ -2,7 +2,7 @@ import React from 'react';
 import { FlowParamLabel } from './FlowParamLabel';
 
 const checkboxClass =
-  'h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60';
+  'h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60';
 
 /** Multi-select checkboxes for `type: array` + `items.enum` flow parameters. */
 export const FlowEnumMultiCheckboxField: React.FC<{

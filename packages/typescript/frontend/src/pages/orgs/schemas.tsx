@@ -34,7 +34,7 @@ export default function SchemasPage(props: { params: Promise<{ organizationId: s
               onClick={() => handleTabChange('schemas')}
               className={`pb-4 px-1 relative font-semibold text-base ${
                 tab === 'schemas'
-                  ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                  ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -45,7 +45,7 @@ export default function SchemasPage(props: { params: Promise<{ organizationId: s
                 onClick={() => handleTabChange('schema-create')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'schema-create'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
                 data-tour="schema-create"

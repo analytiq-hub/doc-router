@@ -177,7 +177,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
         <div className="px-3 pt-1 text-xs text-amber-600">{dictationError}</div>
       )}
       <div className="px-3 pt-2 pb-1">
-        <div className={`rounded-lg border border-gray-300 bg-white min-w-0 ${chatDisabled ? 'opacity-60' : 'focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500'}`}>
+        <div className={`rounded-lg border border-gray-300 bg-white min-w-0 ${chatDisabled ? 'opacity-60' : 'focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-primary-500'}`}>
           <textarea
             value={displayInput}
             onChange={(e) => {
@@ -225,7 +225,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                       key={m}
                       type="button"
                       onClick={() => { setModel(m); setShowModelDropUp(false); }}
-                      className={`block w-full text-left px-3 py-1.5 text-xs ${m === state.model ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                      className={`block w-full text-left px-3 py-1.5 text-xs ${m === state.model ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
                     >
                       {m}
                     </button>
@@ -244,7 +244,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showToolsDropUp ? '' : 'rotate-180'} />
               <span>Tools</span>
               {state.autoApprovedTools.length > 0 && (
-                <span className="text-[10px] text-blue-600 font-medium">({state.autoApprovedTools.length})</span>
+                <span className="text-[10px] text-primary-600 font-medium">({state.autoApprovedTools.length})</span>
               )}
             </button>
             {showToolsDropUp && (
@@ -258,7 +258,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                     <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
                       Auto-approved tools
                       {state.autoApprovedTools.length > 0 && (
-                        <span className="ml-1 text-blue-600 normal-case">({state.autoApprovedTools.length})</span>
+                        <span className="ml-1 text-primary-600 normal-case">({state.autoApprovedTools.length})</span>
                       )}
                     </div>
                     <div className="flex gap-1 mb-1">
@@ -309,7 +309,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           <button
             type="button"
             onClick={toggleDictation}
-            className="flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-700 shrink-0 animate-pulse ring-2 ring-blue-400/50 rounded-full"
+            className="flex items-center justify-center w-8 h-8 text-primary-600 hover:text-primary-700 shrink-0 animate-pulse ring-2 ring-primary-400/50 rounded-full"
             title="Click to send"
           >
             <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
@@ -319,7 +319,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             type="button"
             onClick={handleSend}
             disabled={chatDisabled}
-            className={`flex items-center justify-center w-8 h-8 shrink-0 ${chatDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:text-blue-600'}`}
+            className={`flex items-center justify-center w-8 h-8 shrink-0 ${chatDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:text-primary-600'}`}
             title="Send"
           >
             <ArrowCircleUpIcon sx={{ fontSize: 24 }} />

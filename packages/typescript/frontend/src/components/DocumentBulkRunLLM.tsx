@@ -506,7 +506,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     const getStatusIcon = (status: string) => {
       switch (status) {
         case 'running':
-          return <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />;
+          return <div className="w-3 h-3 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />;
         case 'completed':
           return <div className="w-3 h-3 bg-green-500 rounded-full" />;
         case 'error':
@@ -550,7 +550,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                     checked={executionMode === 'outdated'}
                     onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
                     disabled={disabled || isExecuting || isAnalyzing}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 mt-0.5"
                   />
                   <label htmlFor="mode-outdated" className="ml-2 block text-sm text-gray-900">
                     <span className="font-medium">Run when missing or outdated</span>
@@ -569,7 +569,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                     checked={executionMode === 'missing'}
                     onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
                     disabled={disabled || isExecuting || isAnalyzing}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 mt-0.5"
                   />
                   <label htmlFor="mode-missing" className="ml-2 block text-sm text-gray-900">
                     <span className="font-medium">Run only when completely missing</span>
@@ -588,7 +588,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                     checked={executionMode === 'all'}
                     onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
                     disabled={disabled || isExecuting || isAnalyzing}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 mt-0.5"
                   />
                   <label htmlFor="mode-all" className="ml-2 block text-sm text-gray-900">
                     <span className="font-medium">Run on all matching documents</span>
@@ -619,7 +619,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                 if (e.key === 'Enter') handleParallelRunsCommit();
               }}
               disabled={disabled || isExecuting || isAnalyzing}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
             <p className="text-xs text-gray-500 mt-1">
               Max parallel LLM requests ({MIN_PARALLEL_RUNS}–{MAX_PARALLEL_RUNS}, default{' '}
@@ -630,11 +630,11 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
 
         {/* Analysis Status */}
         {isAnalyzing && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="bg-primary-50 border border-primary-200 rounded-md p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm font-medium text-blue-900">
+                <div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm font-medium text-primary-900">
                   Analyzing required executions...
                 </span>
               </div>
@@ -648,13 +648,13 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
             </div>
             {totalAnalysisItems > 0 && (
               <div>
-                <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
+                <div className="flex items-center justify-between text-xs text-primary-700 mb-1">
                   <span>Progress</span>
                   <span>{analysisProgress} / {totalAnalysisItems}</span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-2">
+                <div className="w-full bg-primary-200 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${totalAnalysisItems > 0 ? (analysisProgress / totalAnalysisItems) * 100 : 0}%` }}
                   />
                 </div>
@@ -681,7 +681,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${totalExecutions > 0 ? (completedExecutions / totalExecutions) * 100 : 0}%` }}
                     />
                   </div>
@@ -725,7 +725,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                           <span className={`capitalize ${
                             execution.status === 'completed' ? 'text-green-600' :
                             execution.status === 'error' ? 'text-red-600' :
-                            execution.status === 'running' ? 'text-blue-600' :
+                            execution.status === 'running' ? 'text-primary-600' :
                             execution.status === 'cancelled' ? 'text-orange-600' :
                             'text-gray-500'
                           }`}>

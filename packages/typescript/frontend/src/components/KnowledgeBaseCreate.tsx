@@ -656,7 +656,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             </button>
             <button
               type="submit"
-              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
               disabled={isLoading}
             >
               {isEditing ? 'Update Knowledge Base' : 'Create Knowledge Base'}

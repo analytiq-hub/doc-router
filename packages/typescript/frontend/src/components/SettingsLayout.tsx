@@ -143,7 +143,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
                             'flex items-center justify-center h-10 rounded-md',
                             'text-sm font-medium transition-colors duration-200',
                             isSelected
-                              ? 'bg-blue-50 text-blue-600'
+                              ? 'bg-primary-50 text-primary-600'
                               : 'text-gray-600 hover:bg-gray-100',
                           ].join(' ')}
                         >
@@ -171,7 +171,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
                           settingsNavLinkClass,
                           'text-sm font-medium whitespace-nowrap transition-colors duration-200',
                           isSelected
-                            ? 'bg-blue-50 text-blue-600'
+                            ? 'bg-primary-50 text-primary-600'
                             : 'text-gray-600 hover:bg-gray-100',
                         ].join(' ')}
                       >

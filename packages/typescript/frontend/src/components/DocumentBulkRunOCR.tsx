@@ -478,7 +478,7 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
       switch (status) {
         case 'running':
           return (
-            <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-3 h-3 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
           );
         case 'completed':
           return <div className="w-3 h-3 bg-green-500 rounded-full" />;
@@ -524,7 +524,7 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
                     checked={executionMode === mode}
                     onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
                     disabled={disabled || isExecuting || isAnalyzing}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 mt-0.5"
                   />
                   <label htmlFor={`ocr-mode-${mode}`} className="ml-2 block text-sm text-gray-900">
                     <span className="font-medium">{title}</span>
@@ -552,7 +552,7 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
               if (e.key === 'Enter') handleParallelRunsCommit();
             }}
             disabled={disabled || isExecuting || isAnalyzing}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <p className="text-xs text-gray-500 mt-1">
             Max parallel OCR jobs ({MIN_PARALLEL_RUNS}–{MAX_PARALLEL_RUNS}, default {DEFAULT_PARALLEL_RUNS}).
@@ -560,7 +560,7 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
         </div>
 
         {isAnalyzing && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4 text-sm text-blue-900">
+          <div className="bg-primary-50 border border-primary-200 rounded-md p-4 text-sm text-primary-900">
             Analyzing required OCR executions...
           </div>
         )}

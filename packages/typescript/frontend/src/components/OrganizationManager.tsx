@@ -94,7 +94,7 @@ const AddOrganizationModal: React.FC<AddOrganizationModalProps> = ({ open, onClo
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 placeholder="Enter organization name"
                 required
                 autoFocus
@@ -108,7 +108,7 @@ const AddOrganizationModal: React.FC<AddOrganizationModalProps> = ({ open, onClo
                 id="type"
                 value={type}
                 onChange={(e) => setType(e.target.value as 'individual' | 'team' | 'enterprise')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
               >
                 <option value="individual">Individual</option>
                 <option value="team">Team</option>
@@ -263,7 +263,7 @@ const OrganizationManager: React.FC = () => {
       renderCell: (params) => (
         <button
           onClick={() => router.push(`/settings/organizations/${params.row.id}`)}
-          className="text-left hover:text-blue-600 focus:outline-none"
+          className="text-left hover:text-primary-600 focus:outline-none"
         >
           {params.value}
         </button>
@@ -276,7 +276,7 @@ const OrganizationManager: React.FC = () => {
       renderCell: (params) => {
         const typeColors = {
           individual: 'bg-gray-100 text-gray-800',
-          team: 'bg-blue-100 text-blue-800',
+          team: 'bg-primary-100 text-primary-800',
           enterprise: 'bg-purple-100 text-purple-800'
         };
         
@@ -336,7 +336,7 @@ const OrganizationManager: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-900">Organization Management</h2>
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
         >
           Add Organization
         </button>
@@ -350,7 +350,7 @@ const OrganizationManager: React.FC = () => {
               placeholder="Search by organization name..."
               value={orgSearch}
               onChange={(e) => setOrgSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white pl-10"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white pl-10"
             />
             <svg
               className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
@@ -372,7 +372,7 @@ const OrganizationManager: React.FC = () => {
               placeholder="Search by member name or email..."
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white pl-10"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white pl-10"
             />
             <svg
               className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
@@ -429,7 +429,7 @@ const OrganizationManager: React.FC = () => {
             className="flex items-center gap-2"
             disabled={!selectedOrg || !(selectedOrg && (isOrgAdmin(selectedOrg, session) || isSysAdmin(session)))}
           >
-            <EditIcon fontSize="small" className="text-blue-600" />
+            <EditIcon fontSize="small" className="text-primary-600" />
             <span>Edit</span>
           </MenuItem>
           <MenuItem

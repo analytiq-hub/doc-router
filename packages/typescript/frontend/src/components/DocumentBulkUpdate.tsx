@@ -504,7 +504,7 @@ export function DocumentBulkUpdate({
                           {searchParameters.searchTerm && (
                             <div className="flex items-center gap-1">
                               <span className="font-medium text-gray-700">Search:</span>
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                              <span className="px-2 py-0.5 bg-primary-100 text-primary-800 rounded text-xs">
                                 &quot;{searchParameters.searchTerm}&quot;
                               </span>
                             </div>
@@ -610,11 +610,11 @@ export function DocumentBulkUpdate({
                                     key={operation.value}
                                     onClick={() => !isDisabled && setSelectedOperation(operation.value)}
                                     disabled={isDisabled}
-                                    className={`flex flex-col items-center px-2 py-1.5 rounded-md border transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1 min-w-0 ${
+                                    className={`flex flex-col items-center px-2 py-1.5 rounded-md border transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:ring-offset-1 min-w-0 ${
                                       isDisabled
                                         ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
                                         : isSelected
-                                        ? 'text-blue-700 bg-blue-50 border-blue-300 shadow-sm'
+                                        ? 'text-primary-700 bg-primary-50 border-primary-300 shadow-sm'
                                         : 'text-gray-600 bg-gray-50 border-gray-300 hover:bg-gray-100 hover:border-gray-400'
                                     }`}
                                     title={operation.description}
@@ -803,10 +803,10 @@ export function DocumentBulkUpdate({
                           <button
                             onClick={() => handleApplyOperation(selectedOperation, getOperationData())}
                             disabled={totalDocuments === 0 || !canApplyOperation()}
-                            className={`inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200 ${
+                            className={`inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors duration-200 ${
                               totalDocuments === 0 || !canApplyOperation()
                                 ? 'text-gray-400 bg-gray-200 cursor-not-allowed'
-                                : 'text-white bg-blue-600 hover:bg-blue-700'
+                                : 'text-white bg-primary-600 hover:bg-primary-700'
                             }`}
                           >
                             <BoltIcon className="h-5 w-5" />
@@ -888,7 +888,7 @@ export function DocumentBulkUpdate({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                       onClick={handleCancelOperation}
                     >
                       Cancel
@@ -911,7 +911,7 @@ export function DocumentBulkUpdate({
             <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
               <div className="flex items-center space-x-3">
                 <div className="flex-shrink-0">
-                  <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-6 w-6 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
@@ -931,7 +931,7 @@ export function DocumentBulkUpdate({
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
                       <div
-                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                        className="bg-primary-600 h-3 rounded-full transition-all duration-300"
                         style={{ width: `${totalDocuments > 0 ? (processedDocuments / totalDocuments) * 100 : 0}%` }}
                       ></div>
                     </div>
@@ -974,7 +974,7 @@ export function DocumentBulkUpdate({
                     <div className="mt-4">
                       <button
                         type="button"
-                        className="w-full inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className="w-full inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                         onClick={() => {
                           if (pendingOperation?.operation === 'runLLMOperations' && runLLMRef.current) {
                             runLLMRef.current.cancelRunLLM();

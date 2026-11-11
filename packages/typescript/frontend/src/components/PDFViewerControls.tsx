@@ -38,8 +38,8 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
           rounded
           transition-colors duration-150
           ${showLeftPanel 
-            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
-            : 'text-blue-200 hover:bg-blue-500 hover:text-white'
+            ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+            : 'text-primary-200 hover:bg-primary-500 hover:text-white'
           }
         `}
         title={showLeftPanel ? `Hide ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel` : `Show ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel`}
@@ -59,8 +59,8 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
           rounded
           transition-colors duration-150
           ${showPdfPanel 
-            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
-            : 'text-blue-200 hover:bg-blue-500 hover:text-white'
+            ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+            : 'text-primary-200 hover:bg-primary-500 hover:text-white'
           }
         `}
         title={showPdfPanel ? "Hide PDF Panel" : "Show PDF Panel"}
@@ -81,8 +81,8 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
             rounded
             transition-colors duration-150
             ${showChatPanel 
-              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
-              : 'text-blue-200 hover:bg-blue-500 hover:text-white'
+              ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
+              : 'text-primary-200 hover:bg-primary-500 hover:text-white'
             }
           `}
           title={showChatPanel ? "Hide Chat Panel" : "Show Chat Panel"}

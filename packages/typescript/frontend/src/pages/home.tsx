@@ -44,8 +44,8 @@ const Home = () => {
               Get in touch for inquiries, partnerships, or more information about our products.
             </p>
             <ul className="text-gray-600 space-y-2">
-              <li>Email: <a href="mailto:andrei@analytiqhub.com" className="text-blue-600 hover:text-blue-800">andrei@analytiqhub.com</a></li>
-              <li>Website: <a href="https://analytiqhub.com" className="text-blue-600 hover:text-blue-800">analytiqhub.com</a></li>
+              <li>Email: <a href="mailto:andrei@analytiqhub.com" className="text-primary-600 hover:text-primary-800">andrei@analytiqhub.com</a></li>
+              <li>Website: <a href="https://analytiqhub.com" className="text-primary-600 hover:text-primary-800">analytiqhub.com</a></li>
             </ul>
           </section>
         </main>
@@ -55,7 +55,7 @@ const Home = () => {
           <div className="mt-4">
             <a 
               href="https://github.com/analytiq-hub/doc-router" 
-              className="text-blue-600 hover:text-blue-800"
+              className="text-primary-600 hover:text-primary-800"
             >
               View on GitHub
             </a>

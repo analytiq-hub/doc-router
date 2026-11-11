@@ -171,7 +171,7 @@ export function DocumentUpdate({
                         <button
                           type="button"
                           onClick={handleAddMetadata}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-500"
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-primary-600 hover:text-primary-500"
                         >
                           <PlusIcon className="h-4 w-4 mr-1" />
                           Add Field
@@ -186,14 +186,14 @@ export function DocumentUpdate({
                               placeholder="Key"
                               value={field.key}
                               onChange={(e) => handleMetadataKeyChange(field.id, e.target.value)}
-                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                             />
                             <input
                               type="text"
                               placeholder="Value"
                               value={field.value}
                               onChange={(e) => handleMetadataValueChange(field.id, e.target.value)}
-                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                             />
                             <button
                               type="button"
@@ -227,7 +227,7 @@ export function DocumentUpdate({
                     </button>
                     <button
                       type="button"
-                      className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
+                      className="rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
                       onClick={handleSave}
                     >
                       Save

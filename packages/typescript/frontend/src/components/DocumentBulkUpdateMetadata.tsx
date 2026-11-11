@@ -286,7 +286,7 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
               type="button"
               onClick={handleAddMetadataField}
               disabled={disabled || totalDocuments === 0}
-              className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-500 disabled:text-gray-400"
+              className="inline-flex items-center px-2 py-1 text-xs font-medium text-primary-600 hover:text-primary-500 disabled:text-gray-400"
             >
               <PlusIcon className="h-4 w-4 mr-1" />
               Add Field
@@ -302,7 +302,7 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
                     value={field.key}
                     onChange={(e) => handleMetadataKeyChange(field.id, e.target.value)}
                     disabled={disabled || totalDocuments === 0}
-                    className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm disabled:bg-gray-100"
+                    className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm disabled:bg-gray-100"
                   />
                   <input
                     type="text"
@@ -310,7 +310,7 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
                     value={field.value}
                     onChange={(e) => handleMetadataValueChange(field.id, e.target.value)}
                     disabled={disabled || totalDocuments === 0}
-                    className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm disabled:bg-gray-100"
+                    className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm disabled:bg-gray-100"
                   />
                   <button
                     type="button"
@@ -340,7 +340,7 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
               value={metadataKeysToRemove}
               onChange={(e) => handleKeysToRemoveChange(e.target.value)}
               disabled={disabled || totalDocuments === 0}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm disabled:bg-gray-100"
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm disabled:bg-gray-100"
             />
           <p className="text-xs text-gray-500 mt-1">
             Enter the metadata field names you want to remove, separated by commas.

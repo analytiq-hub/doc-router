@@ -113,7 +113,7 @@ function TagOptionChip({ tag, selected }: { tag: TagRow; selected: boolean }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-1 text-sm leading-none shadow-sm ${textColor} rounded ${
-        selected ? 'ring-2 ring-blue-400 ring-offset-1' : ''
+        selected ? 'ring-2 ring-primary-400 ring-offset-1' : ''
       }`}
       style={{ backgroundColor: bgColor }}
     >
@@ -242,7 +242,7 @@ export const FlowOrgTagMultiPickerField: React.FC<{
           ))
         )}
         {selectedIds.length > 0 ? (
-          <button type="button" className="text-xs text-blue-600 hover:underline" onClick={() => onChange([])}>
+          <button type="button" className="text-xs text-primary-600 hover:underline" onClick={() => onChange([])}>
             Clear all
           </button>
         ) : null}
@@ -283,12 +283,12 @@ export const FlowOrgTagMultiPickerField: React.FC<{
               role="option"
               aria-selected={selected}
               className={`flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-white ${
-                selected ? 'bg-blue-50' : 'text-gray-800'
+                selected ? 'bg-primary-50' : 'text-gray-800'
               }`}
               onClick={() => toggleTag(row.id)}
             >
               <TagOptionChip tag={row} selected={selected} />
-              {selected ? <span className="shrink-0 text-xs font-medium text-blue-700">Selected</span> : null}
+              {selected ? <span className="shrink-0 text-xs font-medium text-primary-700">Selected</span> : null}
             </button>
           );
         })}

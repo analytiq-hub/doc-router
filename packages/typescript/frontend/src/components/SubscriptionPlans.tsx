@@ -235,7 +235,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
   if (loading) {
     return (
       <div className="flex justify-center items-center h-40">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500"></div>
       </div>
     );
   }
@@ -244,14 +244,14 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
     <div className="w-full">
       {/* Stripe Disabled Notice */}
       {!stripeEnabled && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+        <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-md">
           <div className="flex items-center">
-            <svg className="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h4 className="text-sm font-medium text-blue-900">Organization Plan Selection</h4>
+            <h4 className="text-sm font-medium text-primary-900">Organization Plan Selection</h4>
           </div>
-          <p className="text-sm text-blue-800 mt-1">
+          <p className="text-sm text-primary-800 mt-1">
             Billing is disabled. Selecting a plan will change your organization type and available features, but no payment processing will occur.
           </p>
         </div>
@@ -264,14 +264,14 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
             <div
               key={plan.plan_id}
               className={`bg-white rounded-lg shadow-lg p-6 flex flex-col max-w-xs mx-auto ${
-                selectedPlan === plan.plan_id ? 'ring-2 ring-blue-500' : ''
+                selectedPlan === plan.plan_id ? 'ring-2 ring-primary-500' : ''
               }`}
             >
               <div className="flex-grow">
                 <h3 className="text-xl font-bold mb-4">{plan.name}</h3>
                 <div className="text-3xl font-bold mb-4">
                   {plan.plan_id === 'enterprise' ? (
-                    <div className="text-blue-600 text-2xl font-semibold">Contact Sales</div>
+                    <div className="text-primary-600 text-2xl font-semibold">Contact Sales</div>
                   ) : (
                     <>
                       ${plan.base_price}
@@ -353,7 +353,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
                     ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     : selectedPlan === plan.plan_id
                     ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-primary-600 hover:bg-primary-700 text-white'
                 }`}
               >
                 {currentPlan === plan.plan_id 
@@ -377,9 +377,9 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
       </div>
       
       {/* SPU Information */}
-      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-        <h4 className="text-sm font-medium text-blue-900 mb-2">About SPU (Service Processing Unit)</h4>
-        <p className="text-sm text-blue-800">
+      <div className="mt-6 p-4 bg-primary-50 border border-primary-200 rounded-md">
+        <h4 className="text-sm font-medium text-primary-900 mb-2">About SPU (Service Processing Unit)</h4>
+        <p className="text-sm text-primary-800">
           SPU is our flexible billing unit that allows for different pricing based on the complexity of document processing. 
         </p>
       </div>

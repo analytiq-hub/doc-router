@@ -225,7 +225,7 @@ export const FlowOrgEntityPickerField: React.FC<{
         {selectedId ? (
           <button
             type="button"
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-primary-600 hover:underline"
             onClick={() => onChange('')}
           >
             Clear
@@ -267,7 +267,7 @@ export const FlowOrgEntityPickerField: React.FC<{
               role="option"
               aria-selected={selected}
               className={`flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-white ${
-                selected ? 'bg-blue-50 font-medium text-blue-900' : 'text-gray-800'
+                selected ? 'bg-primary-50 font-medium text-primary-900' : 'text-gray-800'
               }`}
               onClick={() => onChange(row.id)}
             >

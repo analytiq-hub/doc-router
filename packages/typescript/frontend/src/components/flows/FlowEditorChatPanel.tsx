@@ -296,7 +296,7 @@ const FlowEditorChatPanel: React.FC<{
                   key={msg.id}
                   className={
                     msg.role === 'user'
-                      ? 'ml-6 rounded-lg bg-blue-50 px-3 py-2 text-sm text-[#1e3a5f]'
+                      ? 'ml-6 rounded-lg bg-primary-50 px-3 py-2 text-sm text-[#1e3a5f]'
                       : msg.role === 'system'
                         ? 'rounded-lg border border-dashed border-[#dfe3e9] bg-[#fafbfc] px-3 py-2 text-sm text-[#5d656e]'
                         : 'mr-2 rounded-lg bg-[#f3f6f9] px-3 py-2 text-sm text-[#22262b]'
@@ -337,13 +337,13 @@ const FlowEditorChatPanel: React.FC<{
               placeholder={placeholder}
               disabled={busy}
               rows={2}
-              className="min-h-[2.5rem] flex-1 resize-none rounded-lg border border-[#dfe3e9] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+              className="min-h-[2.5rem] flex-1 resize-none rounded-lg border border-[#dfe3e9] px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
             />
             <button
               type="button"
               onClick={() => void handleSend()}
               disabled={busy || !input.trim()}
-              className="flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              className="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-3 py-2 text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-gray-300"
               aria-label="Send message"
             >
               <SendIcon sx={{ fontSize: '1.25rem' }} />

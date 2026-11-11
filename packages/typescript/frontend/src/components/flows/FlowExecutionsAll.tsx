@@ -137,7 +137,7 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
                   <td className={td}>
                     <Link
                       to={`/orgs/${organizationId}/flows/${e.flow_id}?tab=executions`}
-                      className="font-medium text-blue-700 hover:underline"
+                      className="font-medium text-primary-700 hover:underline"
                       onClick={(ev) => ev.stopPropagation()}
                     >
                       {fname}

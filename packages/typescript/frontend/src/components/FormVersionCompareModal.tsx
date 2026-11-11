@@ -78,7 +78,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
         
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -91,7 +91,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
                     setLeftDropdownOpen(!leftDropdownOpen);
                     setRightDropdownOpen(false);
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <span>v{leftVersion}</span>
                   <svg
@@ -118,7 +118,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
                             setLeftDropdownOpen(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                            version.form_version === leftVersion ? 'bg-blue-50' : ''
+                            version.form_version === leftVersion ? 'bg-primary-50' : ''
                           }`}
                         >
                           v{version.form_version}
@@ -141,7 +141,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
                     setRightDropdownOpen(!rightDropdownOpen);
                     setLeftDropdownOpen(false);
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <span>v{rightVersion}</span>
                   <svg
@@ -168,7 +168,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
                             setRightDropdownOpen(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                            version.form_version === rightVersion ? 'bg-blue-50' : ''
+                            version.form_version === rightVersion ? 'bg-primary-50' : ''
                           }`}
                         >
                           v{version.form_version}
@@ -195,7 +195,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
                 className={`px-4 py-2 rounded-md text-white ${
                   leftVersion === rightVersion
                     ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700'
+                    : 'bg-primary-600 hover:bg-primary-700'
                 }`}
               >
                 Compare

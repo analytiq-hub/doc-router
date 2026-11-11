@@ -151,7 +151,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
       count: stats.documents,
       icon: DocumentIcon,
       href: `/orgs/${organizationId}/docs`,
-      color: 'bg-blue-500',
+      color: 'bg-primary-500',
       description: 'Uploaded documents'
     },
     {
@@ -249,7 +249,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
             <Button
               variant="contained"
               startIcon={<UploadIcon />}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-primary-600 hover:bg-primary-700"
             >
               Upload
             </Button>
@@ -258,14 +258,14 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
       </div>
 
       {/* Dashboard dropzone: upload (no tags) → OCR + default extraction → document page */}
-      <Card className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors">
+      <Card className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors">
         <CardContent className="py-8">
           <div
             {...getRootProps()}
             className={`
               flex flex-col items-center justify-center cursor-pointer rounded-lg py-10 px-6
               transition-colors min-h-[140px]
-              ${isDragActive ? 'bg-blue-50 border-2 border-blue-400' : 'bg-gray-50/80 hover:bg-gray-100'}
+              ${isDragActive ? 'bg-primary-50 border-2 border-primary-400' : 'bg-gray-50/80 hover:bg-gray-100'}
             `}
           >
             <input {...getInputProps()} />

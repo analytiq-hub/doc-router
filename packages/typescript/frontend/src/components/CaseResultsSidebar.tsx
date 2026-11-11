@@ -395,7 +395,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
             ariaLabel="Run info"
             title={
               <>
-                <DescriptionOutlinedIcon className="shrink-0 text-blue-600" fontSize="small" />
+                <DescriptionOutlinedIcon className="shrink-0 text-primary-600" fontSize="small" />
                 <span className="truncate">Run Info</span>
               </>
             }
@@ -403,7 +403,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
               <button
                 type="button"
                 onClick={() => setRunInfoOpen(false)}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                className="rounded-md bg-primary-600 px-3 py-1.5 text-xs text-white hover:bg-primary-700"
               >
                 Close
               </button>
@@ -416,7 +416,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
                   <div className="break-words rounded border bg-gray-50 p-2 text-sm">
                     <Link
                       to={`/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`}
-                      className="font-mono text-blue-600 hover:underline"
+                      className="font-mono text-primary-600 hover:underline"
                     >
                       {runInfoResult.prompt_revid}
                     </Link>
@@ -443,7 +443,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
                         <li key={docId}>
                           <Link
                             to={`/orgs/${organizationId}/docs/${docId}`}
-                            className="text-blue-600 hover:underline font-mono text-xs"
+                            className="text-primary-600 hover:underline font-mono text-xs"
                           >
                             {docId}
                           </Link>
