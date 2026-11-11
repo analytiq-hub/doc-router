@@ -8,6 +8,8 @@ This document outlines a phased approach to port `packages/typescript/frontend` 
 
 **Status & full Next removal:** see [`vite_next_elimination_plan.md`](./vite_next_elimination_plan.md). **Phases A–E complete** — Vite SPA only; `next` removed from `package.json`.
 
+**UI stack (Tailwind 4 + shadcn):** see [`design/ui-migration.md`](./design/ui-migration.md) — planned alignment with doc-orchestrator; not started.
+
 ### Implemented on `vite` (backend-first, partial)
 
 - FastAPI sets and clears the **`dr.api-token` httpOnly cookie** on login, OAuth completion, `POST/DELETE /v0/account/auth/session`.
