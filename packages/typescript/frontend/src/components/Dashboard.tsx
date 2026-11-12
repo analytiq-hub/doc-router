@@ -273,7 +273,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
         }
       />
 
-      <Card className="border-dashed">
+      <Card className="border-dashed" data-tour="dashboard-upload">
         <CardContent>
           <div
             {...getRootProps()}

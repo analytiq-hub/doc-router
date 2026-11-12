@@ -1,403 +1,397 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useAppSession } from '@/contexts/AppSessionContext';
-import { useRouter, usePathname } from '@/utils/appRouter';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { setHasSeenTour, hasSeenTour } from '@/utils/tourGuide';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+
+import { useAppSession } from '@/contexts/AppSessionContext'
+import { useOrganization } from '@/contexts/OrganizationContext'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { usePathname, useRouter } from '@/utils/appRouter'
+import { hasSeenTour, setHasSeenTour } from '@/utils/tourGuide'
+
+type Placement = 'top' | 'right' | 'bottom' | 'left'
 
 interface TourStep {
-  id: string;
-  title: string;
-  content: string;
-  selector: string;
-  position: 'top' | 'right' | 'bottom' | 'left';
-  page?: string;
+  id: string
+  title: string
+  content: string
+  selector: string
+  /** Preferred side; falls back to another side when the panel does not fit. */
+  placement: Placement
+  page?: string
 }
 
-// Add this interface at the top of your file
 declare global {
   interface Window {
-    startTourGuide?: () => void;
+    startTourGuide?: () => void
   }
 }
 
+type Layout = {
+  top: number
+  left: number
+  placement: Placement
+  /** Arrow offset along the panel edge facing the target, in px. */
+  arrowOffset: number
+}
+
+const GAP = 14
+const MARGIN = 12
+const ARROW_SIZE = 12
+
+function findTourTarget(selector: string): Element | null {
+  const el = document.querySelector(selector)
+  if (!el) return null
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return null
+  const style = window.getComputedStyle(el)
+  if (style.display === 'none' || style.visibility === 'hidden') return null
+  return el
+}
+
+function fits(placement: Placement, target: DOMRect, w: number, h: number): boolean {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  switch (placement) {
+    case 'bottom':
+      return target.bottom + GAP + h <= vh - MARGIN
+    case 'top':
+      return target.top - GAP - h >= MARGIN
+    case 'right':
+      return target.right + GAP + w <= vw - MARGIN
+    case 'left':
+      return target.left - GAP - w >= MARGIN
+  }
+}
+
+const FALLBACKS: Record<Placement, Placement[]> = {
+  bottom: ['bottom', 'top', 'right', 'left'],
+  top: ['top', 'bottom', 'right', 'left'],
+  right: ['right', 'bottom', 'left', 'top'],
+  left: ['left', 'bottom', 'right', 'top'],
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+function computeLayout(target: DOMRect, w: number, h: number, preferred: Placement): Layout {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const placement = FALLBACKS[preferred].find((p) => fits(p, target, w, h)) ?? 'bottom'
+  const centerX = target.left + target.width / 2
+  const centerY = target.top + target.height / 2
+
+  let top: number
+  let left: number
+  if (placement === 'bottom' || placement === 'top') {
+    left = clamp(centerX - w / 2, MARGIN, vw - w - MARGIN)
+    top = placement === 'bottom' ? target.bottom + GAP : target.top - GAP - h
+    top = clamp(top, MARGIN, vh - h - MARGIN)
+    const arrowOffset = clamp(centerX - left, ARROW_SIZE + 4, w - ARROW_SIZE - 4)
+    return { top, left, placement, arrowOffset }
+  }
+  top = clamp(centerY - h / 2, MARGIN, vh - h - MARGIN)
+  left = placement === 'right' ? target.right + GAP : target.left - GAP - w
+  left = clamp(left, MARGIN, vw - w - MARGIN)
+  const arrowOffset = clamp(centerY - top, ARROW_SIZE + 4, h - ARROW_SIZE - 4)
+  return { top, left, placement, arrowOffset }
+}
+
+function arrowStyle(layout: Layout): React.CSSProperties {
+  const half = ARROW_SIZE / 2
+  switch (layout.placement) {
+    case 'bottom':
+      return { top: -half, left: layout.arrowOffset - half }
+    case 'top':
+      return { bottom: -half, left: layout.arrowOffset - half }
+    case 'right':
+      return { left: -half, top: layout.arrowOffset - half }
+    case 'left':
+      return { right: -half, top: layout.arrowOffset - half }
+  }
+}
+
+const ARROW_BORDERS: Record<Placement, string> = {
+  bottom: 'border-t border-l',
+  top: 'border-b border-r',
+  right: 'border-b border-l',
+  left: 'border-t border-r',
+}
+
 const TourGuide = () => {
-  const [currentStep, setCurrentStep] = useState<number>(0);
-  const [showTour, setShowTour] = useState<boolean>(false);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const [tooltipReady, setTooltipReady] = useState<boolean>(false);
-  const { session } = useAppSession();
-  const router = useRouter();
-  const pathname = usePathname();
-  const { currentOrganization } = useOrganization();
+  const [currentStep, setCurrentStep] = useState(0)
+  const [showTour, setShowTour] = useState(false)
+  const [target, setTarget] = useState<Element | null>(null)
+  const [layout, setLayout] = useState<Layout | null>(null)
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const { session } = useAppSession()
+  const router = useRouter()
+  const pathname = usePathname()
+  const { currentOrganization } = useOrganization()
 
-  // Use org id from URL when on /orgs/[id]/... so tour steps never point to /orgs/undefined
   const orgIdForTour =
-    (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null;
+    (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null
 
-  // Define the tour steps with useMemo
   const tourSteps = useMemo<TourStep[]>(() => {
-    if (!orgIdForTour) return [];
+    if (!orgIdForTour) return []
+    const org = orgIdForTour
     return [
       {
         id: 'schemas',
         title: 'Create Schemas',
         content: 'Define document schemas to extract structured data from your documents.',
         selector: '[data-tour="schema-create"]',
-        position: 'right',
-        page: `/orgs/${orgIdForTour}/schemas?tab=schema-create`
+        placement: 'bottom',
+        page: `/orgs/${org}/schemas`,
       },
       {
         id: 'prompts',
         title: 'Create Prompts',
         content: 'Create and manage prompts to guide AI in processing your documents.',
         selector: '[data-tour="prompt-create"]',
-        position: 'right',
-        page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
+        placement: 'bottom',
+        page: `/orgs/${org}/prompts`,
       },
       {
         id: 'upload',
         title: 'Upload Docs',
         content: 'Upload your documents for processing.',
         selector: '[data-tour="upload-documents"]',
-        position: 'right',
-        page: `/orgs/${orgIdForTour}/docs?tab=upload`
+        placement: 'bottom',
+        page: `/orgs/${org}/docs?tab=upload`,
       },
       {
         id: 'documents',
         title: 'Documents',
         content: 'Click on a document to view the extracted data.',
         selector: '[data-tour="documents"]',
-        position: 'right',
-        page: `/orgs/${orgIdForTour}/docs?tab=documents`
+        placement: 'bottom',
+        page: `/orgs/${org}/docs?tab=documents`,
       },
       {
         id: 'tags',
         title: 'Configure Tags',
         content: 'With tags, you can determine which prompts are used for which documents.',
         selector: '[data-tour="tag-create"]',
-        position: 'right',
-        page: `/orgs/${orgIdForTour}/tags`
+        placement: 'bottom',
+        page: `/orgs/${org}/tags`,
       },
       {
         id: 'flows',
         title: 'Flows',
-        content: 'Build visual workflows to automate document processing—connect triggers, AI steps, and integrations in the flow editor.',
+        content:
+          'Build visual workflows to automate document processing—connect triggers, AI steps, and integrations in the flow editor.',
         selector: '[data-tour="flows-tab"]',
-        position: 'right',
-        page: `/orgs/${orgIdForTour}/flows?tab=flows`
-      }
-    ];
-  }, [orgIdForTour]);
+        placement: 'bottom',
+        page: `/orgs/${org}/flows?tab=flows`,
+      },
+    ]
+  }, [orgIdForTour])
 
-  // Check if this is the user's first login
   useEffect(() => {
-    //console.log("TourGuide: Session state changed", { session, hasSession: !!session });
-    
-    let timeoutId: NodeJS.Timeout;
-    
-    const checkTourStatus = async () => {
-      if (session) {
-        // Use a more specific key that includes the user's email to ensure it's per-user
-        const tour = await hasSeenTour(session);
-        //console.log("TourGuide: Checking if user has seen tour", { hasSeenTour: tour });
-        
-        if (!tour) {
-          //console.log("TourGuide: User hasn't seen tour, scheduling tour start");
-          // Delay the start of the tour to ensure the UI is fully loaded
-          timeoutId = setTimeout(() => {
-            //console.log("TourGuide: Starting tour now");
-            setShowTour(true);
-          }, 1000);
-        } else {
-          //console.log("TourGuide: User has already seen tour");
-        }
-      }
-    };
-    
-    checkTourStatus();
-    
-    // Cleanup function
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [session]);
+    setPortalHost(document.body)
+  }, [])
 
-  // Handle navigation between pages during the tour
-  useEffect(() => {
-    if (showTour && currentStep < tourSteps.length) {
-      const step = tourSteps[currentStep];
-      
-      // If the step has a page property, navigate to that page
-      if (step.page) {
-        //console.log(`TourGuide: Navigating to ${step.page} for step ${currentStep}`);
-        router.push(step.page);
+  const closeTour = useCallback(
+    (markSeen: boolean) => {
+      setShowTour(false)
+      setTarget(null)
+      setLayout(null)
+      if (markSeen && session) {
+        void setHasSeenTour(true, session)
       }
-    }
-  }, [showTour, currentStep, tourSteps, router]);
+    },
+    [session],
+  )
 
-  // Add this function to manually start the tour
   const startTour = useCallback(() => {
-    setCurrentStep(0); // Reset to first step
-    setShowTour(true);
+    setCurrentStep(0)
+    setShowTour(true)
     if (session) {
-      setHasSeenTour(false, session);
+      void setHasSeenTour(false, session)
     }
-  }, [session]);
+  }, [session])
 
-  // Memoize the functions with useCallback
-  const endTour = useCallback(() => {
-    setShowTour(false);
-  }, []);
-
-  // Memoize the functions with useCallback
-  const skipTour = useCallback(() => {
-    setShowTour(false);
-    if (session) {
-      setHasSeenTour(true, session);
-    }
-  }, [session]);
-
-  // Now the useEffect hooks can safely reference these functions
   useEffect(() => {
-    if (showTour && currentStep < tourSteps.length) {
-      // Reset tooltip ready state when step changes
-      setTooltipReady(false);
-      
-      const step = tourSteps[currentStep];
-      //console.log(`TourGuide: Looking for element with selector: ${step.selector}`);
-      
-      // Add a longer delay to allow the page to load after navigation
-      const timer = setTimeout(() => {
-        const element = document.querySelector(step.selector);
-        
-        if (element) {
-          //console.log(`TourGuide: Found element for step ${currentStep}`, element);
-          const rect = element.getBoundingClientRect();
-          let top = 0;
-          let left = 0;
-          
-          switch (step.position) {
-            case 'top':
-              top = rect.top - 10;
-              left = rect.left + rect.width / 2;
-              break;
-            case 'right':
-              top = rect.top + rect.height / 2;
-              left = rect.right + 10;
-              break;
-            case 'bottom':
-              top = rect.bottom + 10;
-              left = rect.left + rect.width / 2;
-              break;
-            case 'left':
-              top = rect.top + rect.height / 2;
-              left = rect.left - 10;
-              break;
-          }
-          
-          setTooltipPosition({ top, left });
-          // Mark tooltip as ready to show after positioning
-          setTooltipReady(true);
-        } else {
-          //console.warn(`TourGuide: Element not found for step ${currentStep} with selector ${step.selector}`);
-          // Try again with a longer delay if element not found
-          const retryTimer = setTimeout(() => {
-            const retryElement = document.querySelector(step.selector);
-            if (retryElement) {
-              // Element found on retry, position the tooltip
-              const rect = retryElement.getBoundingClientRect();
-              let top = 0;
-              let left = 0;
-              
-              switch (step.position) {
-                case 'top':
-                  top = rect.top - 10;
-                  left = rect.left + rect.width / 2;
-                  break;
-                case 'right':
-                  top = rect.top + rect.height / 2;
-                  left = rect.right + 10;
-                  break;
-                case 'bottom':
-                  top = rect.bottom + 10;
-                  left = rect.left + rect.width / 2;
-                  break;
-                case 'left':
-                  top = rect.top + rect.height / 2;
-                  left = rect.left - 10;
-                  break;
-              }
-              
-              setTooltipPosition({ top, left });
-            } else {
-              // Go to the next step if the element still doesn't exist
-              if (currentStep < tourSteps.length - 1) {
-                setCurrentStep(currentStep + 1);
-              } else {
-                endTour();
-              }
-            }
-          }, 1000); // Wait another second before giving up
-          
-          return () => clearTimeout(retryTimer);
-        }
-      }, 800); // Increase initial wait to 800ms
-      
-      return () => clearTimeout(timer);
+    let timeoutId: ReturnType<typeof setTimeout>
+    const checkTourStatus = async () => {
+      if (!session || !orgIdForTour) return
+      const seen = await hasSeenTour(session)
+      if (!seen) {
+        timeoutId = setTimeout(() => setShowTour(true), 1000)
+      }
     }
-  }, [showTour, currentStep, tourSteps, endTour, skipTour]);
+    void checkTourStatus()
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [session, orgIdForTour])
+
+  useEffect(() => {
+    if (!showTour || currentStep >= tourSteps.length) return
+    const step = tourSteps[currentStep]
+    if (step.page) {
+      router.push(step.page)
+    }
+  }, [showTour, currentStep, tourSteps, router])
+
+  // Wait until the step's element exists and its position has settled before showing the panel.
+  useEffect(() => {
+    if (!showTour || currentStep >= tourSteps.length) return
+    const step = tourSteps[currentStep]
+    setTarget(null)
+    setLayout(null)
+
+    let cancelled = false
+    let attempt = 0
+    let lastKey = ''
+    let timer: ReturnType<typeof setTimeout>
+
+    const poll = () => {
+      if (cancelled) return
+      const el = findTourTarget(step.selector)
+      if (el) {
+        const r = el.getBoundingClientRect()
+        const key = `${Math.round(r.top)}:${Math.round(r.left)}:${Math.round(r.width)}:${Math.round(r.height)}`
+        if (key === lastKey) {
+          el.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+          setTarget(el)
+          return
+        }
+        lastKey = key
+      } else {
+        lastKey = ''
+      }
+      attempt += 1
+      if (attempt >= 60) {
+        if (currentStep < tourSteps.length - 1) {
+          setCurrentStep((s) => s + 1)
+        } else {
+          closeTour(true)
+        }
+        return
+      }
+      timer = setTimeout(poll, 100)
+    }
+
+    timer = setTimeout(poll, 150)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [showTour, currentStep, tourSteps, closeTour])
+
+  const reposition = useCallback(() => {
+    const panel = panelRef.current
+    if (!target || !panel || !target.isConnected) return
+    const step = tourSteps[currentStep]
+    if (!step) return
+    setLayout(
+      computeLayout(target.getBoundingClientRect(), panel.offsetWidth, panel.offsetHeight, step.placement),
+    )
+  }, [target, tourSteps, currentStep])
+
+  // Measure the hidden panel and place it before paint so it appears once, already in position.
+  useLayoutEffect(() => {
+    reposition()
+  }, [reposition])
+
+  useEffect(() => {
+    if (!target) return
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
+  }, [target, reposition])
+
+  useEffect(() => {
+    window.startTourGuide = startTour
+    return () => {
+      delete window.startTourGuide
+    }
+  }, [startTour])
 
   const nextStep = () => {
     if (currentStep < tourSteps.length - 1) {
-      setCurrentStep(currentStep + 1);
+      setCurrentStep((s) => s + 1)
     } else {
-      endTour();
+      closeTour(true)
     }
-  };
+  }
 
   const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
+    if (currentStep > 0) setCurrentStep((s) => s - 1)
+  }
 
-  // Then update the useEffect
-  useEffect(() => {
-    window.startTourGuide = startTour;
-    return () => {
-      delete window.startTourGuide;
-    };
-  }, [startTour]);
+  if (!showTour || tourSteps.length === 0 || !portalHost) return null
 
-  if (!showTour) return null;
+  const step = tourSteps[currentStep]
 
-  const step = tourSteps[currentStep];
-  
-  // Calculate tooltip class based on position
-  const getTooltipClass = () => {
-    switch (step.position) {
-      case 'top':
-        return 'transform -translate-x-1/2 -translate-y-full mb-2';
-      case 'right':
-        return 'transform translate-y-[-50%] ml-2';
-      case 'bottom':
-        return 'transform -translate-x-1/2 mt-2';
-      case 'left':
-        return 'transform translate-y-[-50%] -translate-x-full mr-2';
-    }
-  };
-
-  // Calculate arrow styles based on position
-  const getArrowStyles = () => {
-    const baseStyles = {
-      position: 'absolute',
-      width: '0',
-      height: '0',
-      borderStyle: 'solid',
-    } as const;
-
-    switch (step.position) {
-      case 'top':
-        return {
-          ...baseStyles,
-          bottom: '-12px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          borderWidth: '12px 12px 0 12px',
-          borderColor: '#2563eb transparent transparent transparent',
-        };
-      case 'right':
-        return {
-          ...baseStyles,
-          left: '-12px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          borderWidth: '12px 12px 12px 0',
-          borderColor: 'transparent #2563eb transparent transparent',
-        };
-      case 'bottom':
-        return {
-          ...baseStyles,
-          top: '-12px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          borderWidth: '0 12px 12px 12px',
-          borderColor: 'transparent transparent #2563eb transparent',
-        };
-      case 'left':
-        return {
-          ...baseStyles,
-          right: '-12px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          borderWidth: '12px 0 12px 12px',
-          borderColor: 'transparent transparent transparent #2563eb',
-        };
-    }
-  };
-
-  return (
-    <div 
-      className="fixed z-50 pointer-events-none"
-      style={{ 
-        top: 0, 
-        left: 0, 
-        width: '100%', 
-        height: '100%' 
-      }}
-    >
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-50 pointer-events-auto" onClick={endTour} />
-      
-      {/* Tooltip */}
-      <div 
-        className={`absolute pointer-events-auto bg-primary-600 text-white p-4 rounded-lg shadow-lg max-w-xs ${getTooltipClass()} ${!tooltipReady ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
-        style={{ 
-          top: tooltipPosition.top, 
-          left: tooltipPosition.left 
-        }}
-      >
-        {/* Arrow */}
-        <div style={getArrowStyles()}></div>
-        
-        <h3 className="font-bold text-lg mb-2">{step.title}</h3>
-        <p className="mb-4">{step.content}</p>
-        
-        <div className="flex justify-between">
-          <div>
-            {currentStep > 0 && (
-              <button 
-                onClick={prevStep}
-                className="bg-white text-primary-600 px-3 py-1 rounded text-sm mr-2 hover:bg-primary-50"
-              >
-                Previous
-              </button>
-            )}
+  return createPortal(
+    <div className="fixed inset-0 z-[300]">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default bg-black/40"
+        aria-label="Dismiss tour"
+        onClick={() => closeTour(false)}
+      />
+      {target ? (
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label={step.title}
+          className={cn(
+            'fixed w-[min(calc(100vw-2rem),20rem)] rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl',
+            !layout && 'invisible',
+          )}
+          style={layout ? { top: layout.top, left: layout.left } : { top: 0, left: 0 }}
+        >
+          {layout ? (
+            <div
+              aria-hidden
+              className={cn(
+                'absolute size-3 rotate-45 border-border bg-popover',
+                ARROW_BORDERS[layout.placement],
+              )}
+              style={arrowStyle(layout)}
+            />
+          ) : null}
+          <div className="relative flex flex-col gap-2 p-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-base font-semibold">{step.title}</h3>
+              <span className="text-xs text-muted-foreground">
+                {currentStep + 1}/{tourSteps.length}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">{step.content}</p>
           </div>
-          <div>
-            <a 
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                skipTour();
-              }}
-              className="text-white text-sm underline mr-4 hover:text-primary-100"
-            >
-              Skip Tour
-            </a>
-            <button 
-              onClick={nextStep}
-              className="bg-white text-primary-600 px-3 py-1 rounded text-sm hover:bg-primary-50"
-            >
-              {currentStep < tourSteps.length - 1 ? 'Next' : 'Finish'}
-            </button>
+          <div className="relative flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+            <div>
+              {currentStep > 0 ? (
+                <Button type="button" variant="outline" size="sm" onClick={prevStep}>
+                  Previous
+                </Button>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => closeTour(true)}>
+                Skip tour
+              </Button>
+              <Button type="button" size="sm" onClick={nextStep}>
+                {currentStep < tourSteps.length - 1 ? 'Next' : 'Finish'}
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
+      ) : null}
+    </div>,
+    portalHost,
+  )
+}
 
-export default TourGuide;
+export default TourGuide

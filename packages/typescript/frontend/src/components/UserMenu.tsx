@@ -13,6 +13,7 @@ import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { isSysAdmin, isOrgAdmin } from '@/utils/roles';
+import { setHasSeenTour } from '@/utils/tourGuide';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -60,7 +61,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
   };
 
   const startTour = () => {
-    localStorage.removeItem('hasSeenTour');
+    void setHasSeenTour(false, session);
     if (window.startTourGuide) {
       window.startTourGuide();
     } else {

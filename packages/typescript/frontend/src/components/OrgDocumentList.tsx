@@ -437,7 +437,10 @@ export default function OrgDocumentList({
           )}
         </div>
         <ErrorAlert error={documentsQuery.error} />
-        <div className={isCaseScoped ? 'min-h-[16rem] h-96' : 'h-150 min-h-[24rem]'}>
+        <div
+          className={isCaseScoped ? 'min-h-[16rem] h-96' : 'h-150 min-h-[24rem]'}
+          data-tour="documents-list"
+        >
           <DataTable
             aria-label="Documents"
             rows={documentsQuery.data?.documents ?? []}

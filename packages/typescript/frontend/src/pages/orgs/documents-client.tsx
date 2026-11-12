@@ -34,14 +34,15 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
 
   return (
     <div className="mx-auto max-w-6xl p-4">
-      <div className="border-b border-gray-200 mb-6">
+      <div className="mb-6 border-b border-border">
         <div className="flex gap-8">
           <button
+            type="button"
             onClick={() => handleTabChange('documents')}
-            className={`pb-4 px-1 relative font-semibold text-base ${
+            className={`relative px-1 pb-4 text-base font-semibold after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 ${
               tab === 'documents'
-                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'text-primary after:bg-primary'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
             data-tour="documents"
           >
@@ -49,15 +50,16 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
           </button>
           {!capabilitiesLoading && canUpload && (
             <button
+              type="button"
               onClick={() => handleTabChange('upload')}
-              className={`pb-4 px-1 relative font-semibold text-base ${
+              className={`relative px-1 pb-4 text-base font-semibold after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 ${
                 tab === 'upload'
-                  ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-primary after:bg-primary'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
               data-tour="upload-documents"
             >
-              Upload Documents
+              Upload documents
             </button>
           )}
         </div>
