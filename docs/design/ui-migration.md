@@ -195,7 +195,9 @@ Keep **React Flow**. Flow workspace chrome now uses shadcn primitives; no `@head
 
 **Remaining (Phase 8 island — do not strip deps yet):**
 
-- `PDFViewer.tsx`, `PDFExtractionSidebar.tsx`, `PDFFlowsSidebar.tsx`, `styles/theme.ts`
+- `PDFViewer.tsx`, `styles/theme.ts`
+- ✅ `PDFExtractionSidebar.tsx`, `PDFFlowsSidebar.tsx` — MUI menus/icons → shadcn `DropdownMenu` + Lucide (`PdfPanelMoreMenu`)
+- ✅ `PDFExtractionSidebar.tsx` — orchestrator-style Results rows (`ExtractionPromptRow`, `lib/results.ts`, `RowActionsMenu`, field `dl` layout)
 
 **Exit:** `package.json` dependency story matches orchestrator’s “one styling system” rule once Phase 8 PDF port completes and `@mui/*` / `@emotion/*` can be removed.
 

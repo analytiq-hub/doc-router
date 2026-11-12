@@ -1,17 +1,12 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { 
-  ChevronDownIcon, 
-  MagnifyingGlassIcon,
-  PencilIcon,
-  CheckIcon,
-  XMarkIcon
-} from '@heroicons/react/24/outline';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import DownloadIcon from '@mui/icons-material/Download';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import { Divider, Menu, MenuItem } from '@mui/material';
-import { styled, alpha } from '@mui/material/styles';
+import React, { useEffect, useState, useMemo, useRef, useId } from 'react';
+import { Check, Download, FileText, Pencil, Play, RefreshCw, Search, X } from 'lucide-react';
+import { ExtractionPromptRow } from '@/components/pdf/ExtractionPromptRow';
+import { resultPreview } from '@/lib/results';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
 import type { Organization } from '@docrouter/sdk';
 import type { Prompt } from '@docrouter/sdk';
@@ -37,17 +32,6 @@ interface EditingState {
 // Update the type definition to handle nested structures
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
-  fontSize: '0.875rem',
-  padding: '4px 16px',
-  '& .MuiListItemIcon-root': {
-    minWidth: '32px',
-  },
-  '& .MuiSvgIcon-root': {
-    color: alpha(theme.palette.text.primary, 0.6),
-  },
-}));
-
 const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
@@ -68,9 +52,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
 
-  // Per-prompt kebab menu + "Run Info" modal
-  const [kebabAnchorEl, setKebabAnchorEl] = useState<HTMLElement | null>(null);
-  const [kebabPromptId, setKebabPromptId] = useState<string | null>(null);
   const [runInfoOpen, setRunInfoOpen] = useState(false);
   const [runInfoPromptId, setRunInfoPromptId] = useState<string | null>(null);
   const [runInfoLoading, setRunInfoLoading] = useState(false);
@@ -315,19 +296,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     }
   };
 
-  const handleOpenKebabMenu = (e: React.MouseEvent<HTMLElement>, promptId: string) => {
-    e.stopPropagation();
-    setKebabAnchorEl(e.currentTarget);
-    setKebabPromptId(promptId);
-  };
-
-  const handleCloseKebabMenu = () => {
-    setKebabAnchorEl(null);
-    setKebabPromptId(null);
-  };
-
   const handleOpenRunInfo = async (promptId: string) => {
-    handleCloseKebabMenu();
     setRunInfoPromptId(promptId);
     setRunInfoOpen(true);
     const cachedResult = llmResults[promptId];
@@ -527,56 +496,57 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       
       if (editing && editing.promptId === promptId && editing.key === fullKey) {
         return (
-          <div className="flex items-center gap-2 min-w-0">
-            <input
+          <div className="flex min-w-0 items-center gap-2">
+            <Input
               type="text"
               value={editing.value}
               onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-              className="min-w-0 w-0 flex-1 px-2 py-1 text-sm border rounded"
+              className="min-w-0 flex-1"
               autoFocus
             />
-            <div className="flex items-center flex-shrink-0 gap-0.5">
-              <button
-                onClick={handleSave}
-                className="p-1.5 text-green-600 hover:bg-gray-100 rounded"
-                title="Save changes"
-              >
-                <CheckIcon className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleCancel}
-                className="p-1.5 text-red-600 hover:bg-gray-100 rounded"
-                title="Cancel"
-              >
-                <XMarkIcon className="w-4 h-4" />
-              </button>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <Button type="button" variant="ghost" size="icon-sm" onClick={handleSave} title="Save changes">
+                <Check className="text-success" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={handleCancel} title="Cancel">
+                <X className="text-destructive" />
+              </Button>
             </div>
           </div>
         );
       }
       
       return (
-        <div className="flex items-center justify-between gap-2">
-          <div className={`flex-1 ${isEmpty ? 'text-gray-400 italic' : ''}`}>
-            {isEmpty ? 'null' : stringValue}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
+        <div className="group flex items-start justify-between gap-2">
+          <span
+            className={`min-w-0 flex-1 break-words text-sm whitespace-pre-wrap ${
+              isEmpty ? 'text-muted-foreground italic' : 'text-foreground'
+            }`}
+          >
+            {isEmpty ? '—' : stringValue}
+          </span>
+          <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => onFind(promptId, fullKey, stringValue)}
-              className="p-1 text-gray-600 hover:bg-gray-100 rounded"
               title="Find in document"
+              disabled={isEmpty}
             >
-              <MagnifyingGlassIcon className="w-4 h-4" />
-            </button>
-            {editMode && (
-              <button
+              <Search />
+            </Button>
+            {editMode ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={() => onEdit(promptId, fullKey, stringValue)}
-                className="p-1 text-gray-600 hover:bg-gray-100 rounded"
                 title="Edit value"
               >
-                <PencilIcon className="w-4 h-4" />
-              </button>
-            )}
+                <Pencil />
+              </Button>
+            ) : null}
           </div>
         </div>
       );
@@ -587,22 +557,24 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       // If the object is empty, render an empty state
       if (Object.keys(value).length === 0) {
         return (
-          <div className="text-sm text-gray-500 italic">Empty object</div>
+          <span className="text-sm text-muted-foreground">No fields</span>
         );
       }
       
       return (
-        <div className={`space-y-2 ${level > 0 ? 'ml-4 pl-2 border-l border-gray-200' : ''}`}>
+        <dl className={level > 0 ? 'flex flex-col gap-1 border-l border-border pl-3' : 'flex flex-col gap-2'}>
           {Object.entries(value).map(([key, val]) => {
             const fullKey = parentKey ? `${parentKey}.${key}` : key;
             return (
-              <div key={fullKey} className="text-sm">
-                <div className="text-xs text-gray-500 mb-1">{key}</div>
-                {renderNestedValue(promptId, fullKey, val, level + 1, onFind, onEdit, editing, handleSave, handleCancel, editMode)}
+              <div key={fullKey} className="min-w-0 text-sm">
+                <dt className="text-xs text-muted-foreground">{key}</dt>
+                <dd className="break-words">
+                  {renderNestedValue(promptId, fullKey, val, level + 1, onFind, onEdit, editing, handleSave, handleCancel, editMode)}
+                </dd>
               </div>
             );
           })}
-        </div>
+        </dl>
       );
     }
     
@@ -610,17 +582,18 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     if (Array.isArray(value)) {
       if (value.length === 0) {
         return (
-          <div className="text-sm text-gray-500 italic flex justify-between items-center">
-            <span>Empty array</span>
-            {editMode && (
-              <button
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>None</span>
+            {editMode ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => handleArrayItemAdd(promptId, parentKey, [])}
-                className="px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100"
-                title="Add item"
               >
-                Add Item
-              </button>
-            )}
+                Add item
+              </Button>
+            ) : null}
           </div>
         );
       }
@@ -630,7 +603,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       
       if (isPrimitiveArray) {
         return (
-          <div className="space-y-2">
+          <ol className="flex list-decimal flex-col gap-2 pl-5">
             {value.map((item, index) => {
               // Ensure array path is constructed properly for searching
               const arrayItemKey = `${parentKey}[${index}]`;
@@ -638,192 +611,273 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
               
               if (editing && editing.promptId === promptId && editing.key === arrayItemKey) {
                 return (
-                  <div key={index} className="flex items-center gap-2 min-w-0 pl-2 border-l-2 border-gray-200">
-                    <span className="text-gray-500 text-xs w-6 flex-shrink-0">[{index}]</span>
-                    <input
+                  <li key={index} className="flex min-w-0 items-center gap-2">
+                    <Input
                       type="text"
                       value={editing.value}
                       onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                      className="min-w-0 w-0 flex-1 px-2 py-1 text-sm border rounded"
+                      className="min-w-0 flex-1"
                       autoFocus
                     />
-                    <div className="flex items-center flex-shrink-0 gap-0.5">
-                      <button
-                        onClick={handleSave}
-                        className="p-1.5 text-green-600 hover:bg-gray-100 rounded"
-                        title="Save changes"
-                      >
-                        <CheckIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={handleCancel}
-                        className="p-1.5 text-red-600 hover:bg-gray-100 rounded"
-                        title="Cancel"
-                      >
-                        <XMarkIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={handleSave} title="Save changes">
+                      <Check className="text-success" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={handleCancel} title="Cancel">
+                      <X className="text-destructive" />
+                    </Button>
+                  </li>
                 );
               }
               
               return (
-                <div key={index} className="flex items-center gap-2 pl-2 border-l-2 border-gray-200">
-                  <span className="text-gray-500 text-xs w-6">[{index}]</span>
-                  <span className="flex-1 font-medium text-gray-900">{stringValue}</span>
-                  <button
-                    onClick={() => {
-                      // Ensure the value is properly formatted for search
-                      const searchableValue = stringValue.trim();
-                      if (searchableValue !== '') {
-                        onFind(promptId, arrayItemKey, searchableValue);
-                      }
-                    }}
-                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                    title="Find in document"
-                    disabled={!stringValue || stringValue === 'null'}
-                  >
-                    <MagnifyingGlassIcon className="w-4 h-4" />
-                  </button>
-                  {editMode && (
-                    <>
-                      <button
-                        onClick={() => onEdit(promptId, arrayItemKey, stringValue)}
-                        className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                        title="Edit item"
-                      >
-                        <PencilIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleArrayItemDelete(promptId, arrayItemKey)}
-                        className="p-1 text-red-600 hover:bg-gray-100 rounded"
-                        title="Delete item"
-                      >
-                        <XMarkIcon className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
+                <li key={index} className="group flex items-start gap-2">
+                  <span className="min-w-0 flex-1 break-words text-sm">{stringValue}</span>
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        const searchableValue = stringValue.trim();
+                        if (searchableValue !== '') {
+                          onFind(promptId, arrayItemKey, searchableValue);
+                        }
+                      }}
+                      title="Find in document"
+                      disabled={!stringValue || stringValue === 'null'}
+                    >
+                      <Search />
+                    </Button>
+                    {editMode ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onEdit(promptId, arrayItemKey, stringValue)}
+                          title="Edit item"
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleArrayItemDelete(promptId, arrayItemKey)}
+                          title="Delete item"
+                        >
+                          <X className="text-destructive" />
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </li>
               );
             })}
             
-            {editMode && (
-              <div className="mt-2">
-                <button
+            {editMode ? (
+              <li className="list-none">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
                   onClick={() => handleArrayItemAdd(promptId, parentKey, value)}
-                  className="px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100 w-full"
-                  title="Add item"
                 >
-                  Add Item
-                </button>
-              </div>
-            )}
-          </div>
+                  Add item
+                </Button>
+              </li>
+            ) : null}
+          </ol>
         );
       }
       
       // For arrays of objects, render a more structured editor with proper paths
       return (
-        <div className="space-y-3">
+        <ol className="flex list-decimal flex-col gap-3 pl-5">
           {value.map((item, index) => {
-            // Ensure array path is constructed properly
             const arrayItemKey = `${parentKey}[${index}]`;
             
             return (
-              <div key={index} className="border rounded p-2 bg-gray-50 min-w-0">
-                <div className="flex justify-between items-center gap-2 min-w-0 mb-2">
-                  <span className="font-medium text-sm text-gray-700 min-w-0 truncate">Item {index}</span>
-                  {editMode && (
-                    <button
+              <li key={index} className="min-w-0">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  {editMode ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="ml-auto"
                       onClick={() => handleArrayItemDelete(promptId, arrayItemKey)}
-                      className="p-1.5 text-red-600 hover:bg-gray-100 rounded flex-shrink-0"
                       title="Delete item"
                     >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  )}
+                      <X className="text-destructive" />
+                    </Button>
+                  ) : null}
                 </div>
-                
                 {typeof item === 'object' && item !== null ? (
-                  <div className="pl-3 border-l-2 border-gray-300">
-                    {renderNestedValue(
-                      promptId,
-                      arrayItemKey,
-                      item,
-                      level + 1,
-                      onFind,
-                      onEdit,
-                      editing,
-                      handleSave,
-                      handleCancel,
-                      editMode
-                    )}
-                  </div>
+                  renderNestedValue(
+                    promptId,
+                    arrayItemKey,
+                    item,
+                    level + 1,
+                    onFind,
+                    onEdit,
+                    editing,
+                    handleSave,
+                    handleCancel,
+                    editMode
+                  )
                 ) : (
-                  <div className="text-sm font-medium text-gray-900">{item?.toString() ?? ''}</div>
+                  <span className="text-sm">{item?.toString() ?? ''}</span>
                 )}
-              </div>
+              </li>
             );
           })}
           
-          {editMode && (
-            <div className="mt-2">
-              <button
+          {editMode ? (
+            <li className="list-none">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
                 onClick={() => handleArrayObjectAdd(promptId, parentKey, value)}
-                className="px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100 w-full"
-                title="Add item"
               >
-                Add Item
-              </button>
-            </div>
-          )}
-        </div>
+                Add item
+              </Button>
+            </li>
+          ) : null}
+        </ol>
       );
     }
     
     // Fallback for any other type
     return (
-      <div className="text-sm whitespace-pre-wrap break-words text-gray-700 bg-gray-50 rounded p-2">
+      <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-2 text-xs whitespace-pre-wrap break-words">
         {JSON.stringify(value, null, 2)}
-      </div>
+      </pre>
     );
   };
 
   const renderPromptResults = (promptId: string) => {
     const result = llmResults[promptId];
     if (!result) {
-      // Check if document is still processing
       const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
-      
+
       if (loadingPrompts.has(promptId) || isProcessing) {
-        const processingMessage = isProcessing 
-          ? (documentState === 'ocr_processing' ? 'Processing OCR...' : 'Processing LLM...')
-          : 'Loading...';
-        return <div className="p-4 text-sm text-gray-500">{processingMessage}</div>;
+        const processingMessage = isProcessing
+          ? documentState === 'ocr_processing'
+            ? 'Processing OCR…'
+            : 'Processing LLM…'
+          : 'Loading…';
+        return (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner className="size-4" />
+            {processingMessage}
+          </p>
+        );
       }
       if (failedPrompts.has(promptId)) {
-        return <div className="p-4 text-sm text-red-500">Failed to load results</div>;
+        return (
+          <Alert variant="destructive">
+            <AlertDescription>Failed to load results.</AlertDescription>
+          </Alert>
+        );
       }
-      return <div className="p-4 text-sm text-gray-500">No results available</div>;
+      return <p className="text-sm text-muted-foreground">No results on this document yet.</p>;
     }
 
-    return (
-      <div className="p-4 space-y-3">
-        {renderNestedValue(
-          promptId, 
-          '', 
-          result.updated_llm_result, 
-          0, 
-          handleFind, 
-          handleEdit, 
-          editing, 
-          handleSave, 
-          handleCancel,
-          editMode
-        )}
-      </div>
+    const payload = result.updated_llm_result;
+    const entries = Object.entries(payload);
+
+    if (entries.length === 1) {
+      return (
+        <div className="text-sm break-words">
+          {renderNestedValue(
+            promptId,
+            entries[0][0],
+            entries[0][1],
+            0,
+            handleFind,
+            handleEdit,
+            editing,
+            handleSave,
+            handleCancel,
+            editMode,
+          )}
+        </div>
+      );
+    }
+
+    return renderNestedValue(
+      promptId,
+      '',
+      payload,
+      0,
+      handleFind,
+      handleEdit,
+      editing,
+      handleSave,
+      handleCancel,
+      editMode,
     );
   };
+
+  const collapsedPreview = (promptId: string): { text: string; failed?: boolean } => {
+    const result = llmResults[promptId];
+    if (result) {
+      return { text: resultPreview(result.updated_llm_result as Record<string, unknown>) };
+    }
+    const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
+    if (loadingPrompts.has(promptId) || runningPrompts.has(promptId) || isProcessing) {
+      if (isProcessing) {
+        return {
+          text:
+            documentState === 'ocr_processing' ? 'Processing OCR…' : 'Processing LLM…',
+        };
+      }
+      return { text: runningPrompts.has(promptId) ? 'Running…' : 'Loading…' };
+    }
+    if (failedPrompts.has(promptId)) {
+      return { text: 'Failed to load results', failed: true };
+    }
+    return { text: 'Not run yet' };
+  };
+
+  const promptRowActions = (promptId: string) => {
+    const hasResult = Boolean(llmResults[promptId]);
+    const running = runningPrompts.has(promptId);
+    return [
+      {
+        label: hasResult ? 'Run again' : 'Run',
+        icon: hasResult ? RefreshCw : Play,
+        onSelect: () => void handleRunPrompt(promptId),
+        disabled: running,
+      },
+      hasResult && {
+        label: 'Correct',
+        icon: Pencil,
+        onSelect: () => {
+          setEditMode(true);
+          if (expandedPrompt !== promptId) {
+            void handlePromptChange(promptId);
+          }
+        },
+      },
+      hasResult && {
+        label: 'Download',
+        icon: Download,
+        onSelect: () => void handleDownloadResult(promptId),
+      },
+      {
+        label: 'Run info',
+        icon: FileText,
+        onSelect: () => void handleOpenRunInfo(promptId),
+      },
+    ];
+  };
+
+  const listBaseId = useId();
 
   // Add these new handler functions to the component
   const handleArrayItemDelete = async (promptId: string, arrayKey: string) => {
@@ -1120,181 +1174,93 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   const defaultPromptEnabledForRender = organization?.default_prompt_enabled !== false;
 
   return (
-    <div className="w-full h-full flex flex-col border-r border-black/10">
-      <div className="h-12 min-h-[48px] flex items-center justify-between px-4 bg-gray-100 text-black font-bold border-b border-black/10">
-        <span>Prompts</span>
-        <div className="flex items-center gap-2">
-          {editMode && (
-            <span className="text-xs text-primary-600 bg-primary-100 px-2 py-1 rounded-md">
-              Edit Mode
-            </span>
-          )}
-          <button
-            onClick={() => setEditMode(prev => !prev)}
-            className={`p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer ${editMode ? 'bg-primary-100' : ''}`}
-            title={editMode ? "Disable editing mode" : "Enable editing mode"}
+    <div className="flex h-full w-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border pb-2">
+        <span className="text-sm font-medium text-foreground">Results</span>
+        <div className="flex items-center gap-1.5">
+          {editMode ? (
+            <Badge variant="secondary" className="font-normal">
+              Editing
+            </Badge>
+          ) : null}
+          <Button
+            type="button"
+            variant={editMode ? 'secondary' : 'ghost'}
+            size="icon-sm"
+            onClick={() => setEditMode((prev) => !prev)}
+            title={editMode ? 'Disable editing' : 'Enable editing'}
+            aria-pressed={editMode}
           >
-            <PencilIcon className={`w-4 h-4 ${editMode ? 'text-primary-600' : 'text-gray-600'}`} />
-          </button>
+            <Pencil />
+          </Button>
         </div>
       </div>
-      
-      <div className="overflow-auto flex-grow">
-        {/* Default prompt (title from API: e.g. Document Summary) */}
-        {defaultPromptEnabledForRender && (
-          <div className="border-b border-black/10">
-            <div
-              onClick={() => handlePromptChange('default')}
-              className="w-full min-h-[48px] flex items-center justify-between px-4 bg-gray-100/[0.6] hover:bg-gray-100/[0.8] transition-colors cursor-pointer"
-            >
-              <span className="text-sm text-gray-900">
-                {llmResults['default']?.prompt_display_name ?? 'Document Summary'}
-              </span>
-              <div className="flex items-center gap-2">
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRunPrompt('default');
-                  }}
-                  className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                  title="Reload extraction"
-                >
-                  {runningPrompts.has('default') ? (
-                    <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <RefreshIcon fontSize="small" className="text-gray-600" />
-                  )}
-                </div>
-                <div
-                  onClick={(e) => handleOpenKebabMenu(e, 'default')}
-                  className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                  title="More actions"
-                >
-                  <MoreVertIcon fontSize="small" className="text-gray-600" />
-                </div>
-                <ChevronDownIcon 
-                  className={`w-5 h-5 text-gray-600 transition-transform ${
-                    expandedPrompt === 'default' ? 'rotate-180' : ''
-                  }`}
-                />
-              </div>
-            </div>
-            <div 
-              className={`transition-all duration-200 ease-in-out bg-white ${
-                expandedPrompt === 'default' ? '' : 'hidden'
-              }`}
-            >
-              {renderPromptResults('default')}
-            </div>
-          </div>
-        )}
 
-        {/* Other Prompts */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {defaultPromptEnabledForRender ? (
+          <ExtractionPromptRow
+            ariaLabel={llmResults.default?.prompt_display_name ?? 'Document Summary'}
+            title={llmResults.default?.prompt_display_name ?? 'Document Summary'}
+            versionLabel={
+              llmResults.default?.prompt_version !== undefined
+                ? `v${llmResults.default.prompt_version}`
+                : undefined
+            }
+            open={expandedPrompt === 'default'}
+            preview={collapsedPreview('default').text}
+            previewFailed={collapsedPreview('default').failed}
+            running={runningPrompts.has('default')}
+            loading={loadingPrompts.has('default')}
+            failed={failedPrompts.has('default')}
+            isVerified={llmResults.default?.is_verified}
+            isEdited={llmResults.default?.is_edited}
+            bodyId={`${listBaseId}-default`}
+            onToggle={() => void handlePromptChange('default')}
+            actions={promptRowActions('default')}
+          >
+            {renderPromptResults('default')}
+          </ExtractionPromptRow>
+        ) : null}
+
         {matchingPrompts.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-gray-500">
-            No tagged prompts are available for this document. Create prompts with tags matching this document&apos;s tags in the Prompts section to see them here.
-          </div>
+          <p className="py-3 text-sm text-muted-foreground">
+            No tagged prompts match this document. Add prompts whose tags overlap this document&apos;s tags
+            to see them here.
+          </p>
         ) : (
-        matchingPrompts.map((prompt) => {
-          const isExpanded = expandedPrompt === prompt.prompt_revid;
-          const llmResult = llmResults[prompt.prompt_revid];
-          const retrievedVersion = llmResult?.prompt_version;
-          
-          return (
-            <div key={prompt.prompt_revid} className="border-b border-black/10">
-              <div
-                onClick={() => handlePromptChange(prompt.prompt_revid)}
-                className="w-full min-h-[48px] flex items-center justify-between px-4 bg-gray-100/[0.6] hover:bg-gray-100/[0.8] transition-colors cursor-pointer"
-              >
-                <span className="text-sm text-gray-900">
-                  {prompt.name} <span className="text-gray-500 text-xs">
-                    {isExpanded && retrievedVersion !== undefined 
-                      ? `(v${retrievedVersion})` 
-                      : `(v${prompt.prompt_version})`
-                    }
-                  </span>
-                </span>
-                <div className="flex items-center gap-2">
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRunPrompt(prompt.prompt_revid);
-                    }}
-                    className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                    title="Reload extraction"
-                  >
-                    {runningPrompts.has(prompt.prompt_revid) ? (
-                      <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <RefreshIcon fontSize="small" className="text-gray-600" />
-                    )}
-                  </div>
-                  <div
-                    onClick={(e) => handleOpenKebabMenu(e, prompt.prompt_revid)}
-                    className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                    title="More actions"
-                  >
-                    <MoreVertIcon fontSize="small" className="text-gray-600" />
-                  </div>
-                  <ChevronDownIcon 
-                    className={`w-5 h-5 text-gray-600 transition-transform ${
-                      isExpanded ? 'rotate-180' : ''
-                    }`}
-                  />
-                </div>
-              </div>
-              <div 
-                className={`transition-all duration-200 ease-in-out ${
-                  isExpanded ? '' : 'hidden'
-                }`}
-              >
-                {renderPromptResults(prompt.prompt_revid)}
-              </div>
-            </div>
-          );
-        }))}
-      </div>
+          matchingPrompts.map((prompt) => {
+            const promptId = prompt.prompt_revid;
+            const isExpanded = expandedPrompt === promptId;
+            const llmResult = llmResults[promptId];
+            const version = isExpanded && llmResult?.prompt_version !== undefined
+              ? llmResult.prompt_version
+              : prompt.prompt_version;
+            const previewMeta = collapsedPreview(promptId);
 
-      {/* Kebab menu (per prompt) */}
-      <Menu
-        anchorEl={kebabAnchorEl}
-        open={Boolean(kebabAnchorEl)}
-        onClose={handleCloseKebabMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        MenuListProps={{ dense: true }}
-      >
-        <StyledMenuItem
-          onClick={() => {
-            if (!kebabPromptId) return;
-            handleCloseKebabMenu();
-            handleDownloadResult(kebabPromptId);
-          }}
-        >
-          <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
-          Download
-        </StyledMenuItem>
-        <StyledMenuItem
-          onClick={() => {
-            if (!kebabPromptId) return;
-            handleCloseKebabMenu();
-            void handleRunPrompt(kebabPromptId);
-          }}
-        >
-          <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-          Reload
-        </StyledMenuItem>
-        <Divider />
-        <StyledMenuItem
-          onClick={() => {
-            if (!kebabPromptId) return;
-            handleOpenRunInfo(kebabPromptId);
-          }}
-        >
-          <DescriptionOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-          Run Info
-        </StyledMenuItem>
-      </Menu>
+            return (
+              <ExtractionPromptRow
+                key={promptId}
+                ariaLabel={prompt.name}
+                title={prompt.name}
+                versionLabel={`v${version}`}
+                open={isExpanded}
+                preview={previewMeta.text}
+                previewFailed={previewMeta.failed}
+                running={runningPrompts.has(promptId)}
+                loading={loadingPrompts.has(promptId)}
+                failed={failedPrompts.has(promptId)}
+                isVerified={llmResult?.is_verified}
+                isEdited={llmResult?.is_edited}
+                bodyId={`${listBaseId}-${promptId}`}
+                onToggle={() => void handlePromptChange(promptId)}
+                actions={promptRowActions(promptId)}
+              >
+                {renderPromptResults(promptId)}
+              </ExtractionPromptRow>
+            );
+          })
+        )}
+      </div>
 
       {runInfoOpen && (
         <>
@@ -1316,7 +1282,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
             ariaLabel="Run info"
             title={
               <>
-                <DescriptionOutlinedIcon className="shrink-0 text-primary-600" fontSize="small" />
+                <FileText className="size-4 shrink-0 text-primary" aria-hidden />
                 <span className="truncate">Run Info</span>
               </>
             }

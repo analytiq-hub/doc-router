@@ -3,11 +3,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import DownloadIcon from '@mui/icons-material/Download';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import { Menu, MenuItem } from '@mui/material';
-import { styled, alpha } from '@mui/material/styles';
+import { PdfPanelMoreMenu, PdfPanelReloadButton } from '@/components/pdf/PdfPanelMoreMenu';
 import type { FlowDocumentResult, FlowListItem } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { getStatusFromError, pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
@@ -21,14 +17,6 @@ interface Props {
   panelActive: boolean;
   onHasFlows?: (hasFlows: boolean) => void;
 }
-
-const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
-  fontSize: '0.875rem',
-  padding: '4px 16px',
-  '& .MuiSvgIcon-root': {
-    color: alpha(theme.palette.text.primary, 0.6),
-  },
-}));
 
 function formatTimestamp(iso: string): string {
   const d = Date.parse(iso);
@@ -57,7 +45,8 @@ interface FlowTabHeaderProps {
   isExpanded: boolean;
   onToggle: () => void;
   onRerun: () => void;
-  onOpenKebab: (e: React.MouseEvent<HTMLElement>) => void;
+  onDownload: () => void;
+  showMoreMenu: boolean;
 }
 
 const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
@@ -71,7 +60,8 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
   isExpanded,
   onToggle,
   onRerun,
-  onOpenKebab,
+  onDownload,
+  showMoreMenu,
 }) => {
   const rowRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -122,20 +112,7 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
       </span>
       <div ref={actionsRef} className="flex shrink-0 items-center gap-2">
         {isActive ? (
-          <div
-            onClick={(e) => {
-              e.stopPropagation();
-              onRerun();
-            }}
-            className="cursor-pointer rounded-full p-1 transition-colors hover:bg-black/5"
-            title="Re-run flow"
-          >
-            {isRunning ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#2B4479]/60 border-t-transparent" />
-            ) : (
-              <RefreshIcon fontSize="small" className="text-gray-600" />
-            )}
-          </div>
+          <PdfPanelReloadButton running={isRunning} title="Re-run flow" onReload={onRerun} />
         ) : showInactive ? (
           <span
             className="inline-flex shrink-0 items-center rounded-md border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
@@ -144,17 +121,12 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
             Inactive
           </span>
         ) : null}
-        {captured ? (
-          <div
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenKebab(e);
-            }}
-            className="cursor-pointer rounded-full p-1 transition-colors hover:bg-black/5"
-            title="More actions"
-          >
-            <MoreVertIcon fontSize="small" className="text-gray-600" />
-          </div>
+        {showMoreMenu ? (
+          <PdfPanelMoreMenu
+            onDownload={onDownload}
+            onReload={isActive ? onRerun : undefined}
+            reloadLabel="Re-run"
+          />
         ) : null}
         <ChevronDownIcon
           className={`h-5 w-5 shrink-0 text-gray-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -174,8 +146,6 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedFlowId, setExpandedFlowId] = useState<string | null>(null);
-  const [kebabAnchorEl, setKebabAnchorEl] = useState<null | HTMLElement>(null);
-  const [kebabFlowId, setKebabFlowId] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const expandFetchGenRef = useRef(0);
   const rerunGenRef = useRef<Record<string, number>>({});
@@ -297,17 +267,6 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
     })();
   };
 
-  const handleOpenKebabMenu = (e: React.MouseEvent<HTMLElement>, flowId: string) => {
-    e.stopPropagation();
-    setKebabAnchorEl(e.currentTarget);
-    setKebabFlowId(flowId);
-  };
-
-  const handleCloseKebabMenu = () => {
-    setKebabAnchorEl(null);
-    setKebabFlowId(null);
-  };
-
   const handleDownloadResult = (flowId: string) => {
     const item = flows.find((f) => f.flow.flow_id === flowId);
     const resultRow = flowResults[flowId];
@@ -415,7 +374,8 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
               isExpanded={isExpanded}
               onToggle={() => handleFlowToggle(item)}
               onRerun={() => void handleRerunFlow(flowId)}
-              onOpenKebab={(e) => handleOpenKebabMenu(e, flowId)}
+              onDownload={() => handleDownloadResult(flowId)}
+              showMoreMenu={showResult}
             />
             <div className={`transition-all duration-200 ease-in-out ${isExpanded ? '' : 'hidden'}`}>
               {isExpanded ? (
@@ -462,37 +422,6 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
         );
       })}
 
-      <Menu
-        anchorEl={kebabAnchorEl}
-        open={Boolean(kebabAnchorEl)}
-        onClose={handleCloseKebabMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        MenuListProps={{ dense: true }}
-      >
-        <StyledMenuItem
-          onClick={() => {
-            if (!kebabFlowId) return;
-            handleCloseKebabMenu();
-            handleDownloadResult(kebabFlowId);
-          }}
-        >
-          <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
-          Download
-        </StyledMenuItem>
-        {kebabFlowId && flows.find((f) => f.flow.flow_id === kebabFlowId)?.flow.active ? (
-          <StyledMenuItem
-            onClick={() => {
-              if (!kebabFlowId) return;
-              handleCloseKebabMenu();
-              void handleRerunFlow(kebabFlowId);
-            }}
-          >
-            <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-            Re-run
-          </StyledMenuItem>
-        ) : null}
-      </Menu>
     </div>
   );
 };
