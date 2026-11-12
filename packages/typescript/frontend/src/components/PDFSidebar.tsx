@@ -2,35 +2,44 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from '@/utils/dynamicImport';
-import { Link } from 'react-router-dom';
 import { usePathname, useRouter, useSearchParams } from '@/utils/appRouter';
 import { PDFFormsTabProbe } from './PDFFormsTabProbe';
 import { docPageHrefWithSearch, sidebarTabFromQuery, type DocSidebarTab } from '@/utils/docPageUrl';
 
 import type { HighlightInfo } from '@/types/index';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import PDFTextPanel from '@/components/doc/PDFTextPanel';
+import PDFInfoPanel from '@/components/doc/PDFInfoPanel';
 
 const PDFExtractionSidebar = dynamic(() => import('./PDFExtractionSidebar'), {
   ssr: false,
-  loading: () => <div className="h-32 flex items-center justify-center">Loading extraction...</div>,
+  loading: () => <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading extraction…</div>,
 });
 
 const PDFFormSidebar = dynamic(() => import('./PDFFormSidebar'), {
   ssr: false,
-  loading: () => <div className="h-32 flex items-center justify-center">Loading forms...</div>,
+  loading: () => <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading forms…</div>,
 });
 
 const PDFFlowsSidebar = dynamic(() => import('./PDFFlowsSidebar'), {
   ssr: false,
-  loading: () => <div className="h-32 flex items-center justify-center">Loading flows...</div>,
+  loading: () => <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading flows…</div>,
+});
+
+const AgentTab = dynamic(() => import('@/components/agent/AgentTab'), {
+  ssr: false,
+  loading: () => <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading chat…</div>,
 });
 
 interface Props {
   organizationId: string;
   id: string;
-  /** Loaded PDF for embedded-text search when OCR blocks are missing or unmatched. */
   pdfDocument?: PDFDocumentProxy | null;
   onHighlight: (highlight: HighlightInfo) => void;
+  pdfPage: number;
+  fileName: string | null;
 }
 
 function resolveSidebarMode(
@@ -48,10 +57,20 @@ function resolveSidebarMode(
     if (!formsTabKnown) return 'extraction';
     return showFormsTab ? 'forms' : 'extraction';
   }
+  if (requested === 'text' || requested === 'info' || requested === 'chat') return requested;
   return 'extraction';
 }
 
-const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
+const TAB_LABELS: Record<DocSidebarTab, string> = {
+  extraction: 'Extraction',
+  flows: 'Flows',
+  text: 'Text',
+  info: 'Info',
+  chat: 'Chat',
+  forms: 'Forms',
+};
+
+const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight, pdfPage, fileName }: Props) => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -102,76 +121,106 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
     searchParams.toString(),
   ]);
 
-  const tabHref = useCallback(
-    (mode: DocSidebarTab) => docPageHrefWithSearch(pathname, mode, searchParams),
-    [pathname, searchParams],
-  );
+  const onTabChange = (value: string) => {
+    const tab = sidebarTabFromQuery(value === 'extraction' ? null : value);
+    router.replace(docPageHrefWithSearch(pathname, tab, searchParams));
+  };
 
-  const tabLinkClass = (mode: DocSidebarTab) =>
-    `px-3 py-1 text-sm rounded transition-colors ${
-      activeMode === mode
-        ? 'bg-white text-gray-900 shadow-sm'
-        : 'text-gray-600 hover:text-gray-900'
-    }`;
+  const tabContentClass = 'min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-2';
 
   return (
-    <div className="w-full h-full flex flex-col border-r border-black/10">
+    <div className="flex h-full min-h-0 min-w-0 flex-col border-l border-border bg-card">
       <PDFFormsTabProbe
         organizationId={organizationId}
         documentId={id}
         onHasForms={handleFormsHasForms}
       />
-
-      <div className="h-12 min-h-[48px] flex items-center px-4 bg-gray-100 text-black font-bold border-b border-black/10">
-        <div className="flex bg-gray-200 rounded-md p-1">
-          <Link to={tabHref('extraction')} replace preventScrollReset className={tabLinkClass('extraction')}>
-            Extraction
-          </Link>
-          {showFlowsTab ? (
-            <Link to={tabHref('flows')} replace preventScrollReset className={tabLinkClass('flows')}>
-              Flows
-            </Link>
-          ) : null}
-          {showFormsTab ? (
-            <Link to={tabHref('forms')} replace preventScrollReset className={tabLinkClass('forms')}>
-              Forms
-            </Link>
-          ) : null}
+      {!showFlowsTab ? (
+        <div className="sr-only" aria-hidden>
+          <PDFFlowsSidebar
+            organizationId={organizationId}
+            id={id}
+            panelActive={false}
+            onHasFlows={handleFlowsHasFlows}
+          />
         </div>
-      </div>
+      ) : null}
 
-      <div
-        className={activeMode === 'flows' ? 'flex-grow overflow-hidden' : 'hidden'}
-        aria-hidden={activeMode !== 'flows'}
-      >
-        <PDFFlowsSidebar
-          organizationId={organizationId}
-          id={id}
-          panelActive={activeMode === 'flows'}
-          onHasFlows={handleFlowsHasFlows}
-        />
-      </div>
+      <Card className="flex h-full min-h-0 flex-col gap-0 rounded-none border-0 py-0 shadow-none">
+        <Tabs
+          value={activeMode}
+          onValueChange={onTabChange}
+          className="flex h-full min-h-0 flex-1 flex-col gap-0"
+        >
+          <div className="shrink-0 border-b px-2 pt-2">
+            <TabsList variant="line" aria-label="Document panel" className="h-9 w-full flex-wrap justify-start gap-0">
+              <TabsTrigger value="extraction">{TAB_LABELS.extraction}</TabsTrigger>
+              {showFlowsTab ? <TabsTrigger value="flows">{TAB_LABELS.flows}</TabsTrigger> : null}
+              {showFormsTab ? <TabsTrigger value="forms">{TAB_LABELS.forms}</TabsTrigger> : null}
+              <TabsTrigger value="text">{TAB_LABELS.text}</TabsTrigger>
+              <TabsTrigger value="info">{TAB_LABELS.info}</TabsTrigger>
+              <TabsTrigger value="chat">{TAB_LABELS.chat}</TabsTrigger>
+            </TabsList>
+          </div>
 
-      <div className={activeMode === 'flows' ? 'hidden' : 'flex-grow overflow-hidden'}>
-        {activeMode === 'extraction' ? (
-          <PDFExtractionSidebar
-            organizationId={organizationId}
-            id={id}
-            pdfDocument={pdfDocument}
-            onHighlight={onHighlight}
-          />
-        ) : activeMode === 'forms' && showFormsTab ? (
-          <PDFFormSidebar
-            organizationId={organizationId}
-            id={id}
-            pdfDocument={pdfDocument}
-            onHighlight={onHighlight}
-            onHasForms={handleFormsHasForms}
-          />
-        ) : null}
-      </div>
+          <TabsContent value="extraction" className={tabContentClass}>
+            <PDFExtractionSidebar
+              organizationId={organizationId}
+              id={id}
+              pdfDocument={pdfDocument}
+              onHighlight={onHighlight}
+            />
+          </TabsContent>
+
+          {showFlowsTab ? (
+            <TabsContent value="flows" className={tabContentClass}>
+              <PDFFlowsSidebar
+                organizationId={organizationId}
+                id={id}
+                panelActive={activeMode === 'flows'}
+                onHasFlows={handleFlowsHasFlows}
+              />
+            </TabsContent>
+          ) : null}
+
+          {showFormsTab ? (
+            <TabsContent value="forms" className={tabContentClass}>
+              <PDFFormSidebar
+                organizationId={organizationId}
+                id={id}
+                pdfDocument={pdfDocument}
+                onHighlight={onHighlight}
+                onHasForms={handleFormsHasForms}
+              />
+            </TabsContent>
+          ) : null}
+
+          <TabsContent value="text" className={tabContentClass}>
+            <PDFTextPanel
+              organizationId={organizationId}
+              documentId={id}
+              page={pdfPage}
+              fileName={fileName}
+            />
+          </TabsContent>
+
+          <TabsContent value="info" className={cnInfoTabContent(tabContentClass)}>
+            <PDFInfoPanel organizationId={organizationId} documentId={id} />
+          </TabsContent>
+
+          <TabsContent value="chat" className={tabContentClass}>
+            <div className="flex h-full min-h-0 flex-col">
+              <AgentTab organizationId={organizationId} documentId={id} />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </Card>
     </div>
   );
 };
+
+function cnInfoTabContent(base: string) {
+  return `${base} overflow-y-auto`;
+}
 
 export default PDFSidebar;

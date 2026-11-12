@@ -155,6 +155,7 @@ Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — sha
 - ✅ Tour guide: popover-style panel with arrow pointing at `data-tour` targets (auto-flips/clamps to viewport)
 - ✅ Bulk progress: shadcn `Progress` (`components/ui/progress.tsx`) + `DocumentBulkProgress`; bulk sheet loading dialog uses same primitive
 - ✅ Document viewer **page chrome** (`DocumentViewerPage`): MUI `Box` → Tailwind layout (PDF viewer internals remain Phase 8)
+- ✅ Document viewer layout: PDF left, orchestrator-style right tab panel (Extraction → Flows → Text → Info → Chat; Forms when present)
 - ⏳ PDF viewer toolbar/canvas (Phase 8)
 
 ---

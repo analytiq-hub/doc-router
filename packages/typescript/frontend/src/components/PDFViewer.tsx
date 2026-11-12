@@ -119,9 +119,21 @@ interface PDFViewerProps {
   initialShowBoundingBoxes?: boolean;
   /** Fired when the PDF document is loaded (extraction search can use PDF.js text when OCR is missing). */
   onPdfDocumentReady?: (pdf: PDFDocumentProxy) => void;
+  /** Fired when the user changes the visible page (1-based). */
+  onViewerPageChange?: (page: number) => void;
+  /** Fired when document file metadata is known (for OCR text tab). */
+  onViewerFileNameChange?: (fileName: string | null) => void;
 }
 
-const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes, onPdfDocumentReady }: PDFViewerProps) => {
+const PDFViewer = ({
+  organizationId,
+  id,
+  highlightInfo,
+  initialShowBoundingBoxes,
+  onPdfDocumentReady,
+  onViewerPageChange,
+  onViewerFileNameChange,
+}: PDFViewerProps) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -1309,6 +1321,14 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   useEffect(() => {
     scrollToPage(pageNumber);
   }, [pageNumber, scrollToPage]);
+
+  useEffect(() => {
+    onViewerPageChange?.(pageNumber);
+  }, [pageNumber, onViewerPageChange]);
+
+  useEffect(() => {
+    onViewerFileNameChange?.(fileName || null);
+  }, [fileName, onViewerFileNameChange]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', minWidth: 0 }}>

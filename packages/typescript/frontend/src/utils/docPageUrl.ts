@@ -1,8 +1,10 @@
 
-export type DocSidebarTab = 'extraction' | 'flows' | 'forms';
+export type DocSidebarTab = 'extraction' | 'flows' | 'text' | 'info' | 'chat' | 'forms';
+
+const DOC_TABS: DocSidebarTab[] = ['extraction', 'flows', 'text', 'info', 'chat', 'forms'];
 
 export function sidebarTabFromQuery(value: string | null): DocSidebarTab {
-  if (value === 'flows' || value === 'forms') return value;
+  if (value && (DOC_TABS as string[]).includes(value)) return value as DocSidebarTab;
   return 'extraction';
 }
 

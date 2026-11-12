@@ -30,14 +30,15 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
+import type { DocSidebarTab } from '@/utils/docPageUrl';
+
 export interface PDFViewerControlsType {
-  showLeftPanel: boolean;
-  setShowLeftPanel: React.Dispatch<React.SetStateAction<boolean>>;
+  showRightPanel: boolean;
+  setShowRightPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showPdfPanel: boolean;
   setShowPdfPanel: React.Dispatch<React.SetStateAction<boolean>>;
-  showChatPanel: boolean;
-  setShowChatPanel: React.Dispatch<React.SetStateAction<boolean>>;
   isSmallScreen?: boolean;
+  rightPanelTab?: DocSidebarTab;
 }
 
 declare global {
