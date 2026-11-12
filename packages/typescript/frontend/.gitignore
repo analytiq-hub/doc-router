@@ -12,6 +12,7 @@
 # production
 /build
 /dist-vite
+/.next
 
 # misc
 .DS_Store
@@ -30,7 +31,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # Any file in backend/pfds/
 packages/pfds/*
