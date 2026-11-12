@@ -53,14 +53,14 @@ const Home = () => {
             <p>Get in touch for inquiries, partnerships, or more information about our products.</p>
             <p>
               Email:{' '}
-              <a href="mailto:andrei@analytiqhub.com" className="text-primary hover:underline">
-                andrei@analytiqhub.com
+              <a href="mailto:andrei@docrouter.ai" className="text-primary hover:underline">
+                andrei@docrouter.ai
               </a>
             </p>
             <p>
               Website:{' '}
-              <a href="https://analytiqhub.com" className="text-primary hover:underline">
-                analytiqhub.com
+              <a href="https://docrouter.ai" className="text-primary hover:underline">
+                docrouter.ai
               </a>
             </p>
           </CardContent>

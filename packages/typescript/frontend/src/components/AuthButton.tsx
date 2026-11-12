@@ -29,9 +29,9 @@ function AuthButton() {
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant="secondary"
       size="sm"
-      className="text-brand-foreground hover:bg-brand-foreground/10 hover:text-brand-foreground"
+      className="bg-card text-foreground shadow-sm ring-1 ring-brand-foreground/20 hover:bg-card/90"
       onClick={() => router.push('/auth/signin')}
     >
       Sign in or Register
