@@ -6,6 +6,8 @@ export type DocumentListSearchParameters = {
   metadataSearch: string;
   caseIdFilter?: string;
   paginationModel?: { page: number; pageSize: number };
+  sort?: string;
+  filters?: string;
 };
 
 export function parseAndEncodeMetadataSearch(searchStr: string): string | null {
@@ -53,7 +55,7 @@ export function buildListDocumentsQuery(
       ? parseAndEncodeMetadataSearch(search.metadataSearch.trim()) || undefined
       : undefined,
     caseId: search.caseIdFilter?.trim() || undefined,
-    sort: extra?.sort,
-    filters: extra?.filters,
+    sort: extra?.sort ?? search.sort,
+    filters: extra?.filters ?? search.filters,
   };
 }

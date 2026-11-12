@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Case } from '@docrouter/sdk'
 
-import { useInvalidateOrgLists, useOrgCases, useOrgTags } from '@/api/orgQueries'
+import { useInvalidateOrgLists, useOrgAllTags, useOrgCases } from '@/api/orgQueries'
 import CaseDeleteDialog from '@/components/CaseDeleteDialog'
 import { DataTable, type DataTableColumn, type PaginationModel, type SortModel } from '@/components/data-table'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -66,10 +66,10 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
     filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
   })
-  const tagsQuery = useOrgTags(organizationId, { skip: 0, limit: 200 })
+  const tagsQuery = useOrgAllTags(organizationId)
   const tagsById = useMemo(
-    () => new Map((tagsQuery.data?.tags ?? []).map((tag) => [tag.id, tag])),
-    [tagsQuery.data?.tags],
+    () => new Map((tagsQuery.data ?? []).map((tag) => [tag.id, tag])),
+    [tagsQuery.data],
   )
 
   const [viewing, setViewing] = useState<Case | null>(null)
@@ -84,12 +84,12 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         label: 'Tags',
         kind: 'tag' as const,
         single: true,
-        options: (tagsQuery.data?.tags ?? []).map((t) => ({ value: t.name, label: t.name })),
+        options: (tagsQuery.data ?? []).map((t) => ({ value: t.name, label: t.name })),
       },
       { field: 'created_at', label: 'Created', kind: 'date' as const },
       { field: 'updated_at', label: 'Updated', kind: 'date' as const },
     ],
-    [tagsQuery.data?.tags],
+    [tagsQuery.data],
   )
 
   const columns: DataTableColumn<Case>[] = [

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-
 import type { ListKnowledgeBasesResponse } from '@docrouter/sdk'
 
 import { DocRouterOrgApi } from '@/utils/api'
+import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags'
 
 export const orgKeys = {
   tags: (organizationId: string) => ['org', organizationId, 'tags'] as const,
@@ -23,6 +24,9 @@ export const orgKeys = {
   knowledgeBases: (organizationId: string) => ['org', organizationId, 'knowledge-bases'] as const,
   knowledgeBaseList: (organizationId: string, params: object) =>
     [...orgKeys.knowledgeBases(organizationId), 'list', params] as const,
+  documents: (organizationId: string) => ['org', organizationId, 'documents'] as const,
+  documentList: (organizationId: string, params: object) =>
+    [...orgKeys.documents(organizationId), 'list', params] as const,
 }
 
 export type OrgPromptListParams = {
@@ -75,6 +79,17 @@ export type OrgKnowledgeBaseListParams = {
   filters?: string
 }
 
+export type OrgDocumentListParams = {
+  skip: number
+  limit: number
+  nameSearch?: string
+  tagIds?: string
+  metadataSearch?: string
+  caseId?: string
+  sort?: string
+  filters?: string
+}
+
 const orgApi = (organizationId: string) => new DocRouterOrgApi(organizationId)
 
 export function useOrgPrompts(organizationId: string, params: OrgPromptListParams) {
@@ -110,6 +125,15 @@ export function useOrgTags(organizationId: string, params: OrgTagListParams, ena
   })
 }
 
+/** All org tags (paginated client-side; API max limit is 100). */
+export function useOrgAllTags(organizationId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...orgKeys.tags(organizationId), 'all'] as const,
+    queryFn: () => fetchAllOrgTags(orgApi(organizationId)),
+    enabled,
+  })
+}
+
 export function useOrgCases(organizationId: string, params: OrgCaseListParams) {
   return useQuery({
     queryKey: orgKeys.caseList(organizationId, params),
@@ -131,6 +155,14 @@ export function useOrgKnowledgeBases(
   })
 }
 
+export function useOrgDocuments(organizationId: string, params: OrgDocumentListParams) {
+  return useQuery({
+    queryKey: orgKeys.documentList(organizationId, params),
+    queryFn: () => orgApi(organizationId).listDocuments(params),
+    placeholderData: (previous) => previous,
+  })
+}
+
 export function useInvalidateOrgLists(organizationId: string) {
   const client = useQueryClient()
   return {
@@ -140,5 +172,6 @@ export function useInvalidateOrgLists(organizationId: string) {
     tags: () => client.invalidateQueries({ queryKey: orgKeys.tags(organizationId) }),
     cases: () => client.invalidateQueries({ queryKey: orgKeys.cases(organizationId) }),
     knowledgeBases: () => client.invalidateQueries({ queryKey: orgKeys.knowledgeBases(organizationId) }),
+    documents: () => client.invalidateQueries({ queryKey: orgKeys.documents(organizationId) }),
   }
 }

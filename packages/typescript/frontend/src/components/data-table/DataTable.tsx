@@ -323,7 +323,7 @@ export function DataTable<Row>({
       <div className="min-h-0 flex-1 overflow-auto" aria-busy={loading}>
         <table role="table" aria-label={ariaLabel} className="block text-sm" style={{ minWidth: minTableWidth }}>
           <TableHeader role="rowgroup" className="sticky top-0 z-10 block bg-muted [&_tr]:border-b-0">
-            <TableRow ref={headerRow} role="row" className="grid items-center border-b-0 hover:bg-muted" style={{ gridTemplateColumns: template }}>
+            <TableRow ref={headerRow} role="row" className="grid border-b-0 hover:bg-muted" style={{ gridTemplateColumns: template }}>
               {checkboxSelection ? (
                 <TableHead role="columnheader" className="flex h-10 items-center">
                   <Checkbox
@@ -477,11 +477,11 @@ export function DataTable<Row>({
                 key={row.id}
                 role="row"
                 data-state={row.getIsSelected() ? 'selected' : undefined}
-                className="grid items-center border-b-0 even:bg-muted/60 data-[state=selected]:bg-primary-soft"
+                className="grid border-b-0 even:bg-muted/60 data-[state=selected]:bg-primary-soft"
                 style={{ gridTemplateColumns: template }}
               >
                 {checkboxSelection ? (
-                  <TableCell role="cell" className="flex min-w-0 items-center">
+                  <TableCell role="cell" className="flex items-center">
                     <Checkbox
                       aria-label="Select row"
                       checked={row.getIsSelected()}
@@ -493,7 +493,7 @@ export function DataTable<Row>({
                   <TableCell key={cell.id} role="cell" data-field={cell.column.id} className={
                       autoRowHeight
                         ? 'flex min-h-9 min-w-0 items-center py-1 leading-snug whitespace-normal [overflow-wrap:anywhere]'
-                        : 'flex min-h-9 min-w-0 items-center overflow-hidden py-0 [&>a]:inline-block [&>a]:max-w-full [&>a]:truncate'
+                        : 'h-9 min-w-0 overflow-hidden py-0 leading-9 text-ellipsis [&>a]:inline-block [&>a]:max-w-full [&>a]:truncate [&>a]:align-middle'
                     }>
                     {/* Called, not given to flexRender: that would make each render's function a new component and remount the cell. */}
                     {(cell.column.columnDef.cell as (context: CellContext<Row, unknown>) => ReactNode)(cell.getContext())}

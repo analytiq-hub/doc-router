@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { KnowledgeBase, KBStatus } from '@docrouter/sdk'
 
-import { useInvalidateOrgLists, useOrgKnowledgeBases, useOrgTags } from '@/api/orgQueries'
+import { useInvalidateOrgLists, useOrgAllTags, useOrgKnowledgeBases } from '@/api/orgQueries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type DataTableColumn, type PaginationModel, type SortModel } from '@/components/data-table'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -83,10 +83,10 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
     },
   })
 
-  const tagsQuery = useOrgTags(organizationId, { skip: 0, limit: 200 })
+  const tagsQuery = useOrgAllTags(organizationId)
   const tagsById = useMemo(
-    () => new Map((tagsQuery.data?.tags ?? []).map((tag) => [tag.id, tag])),
-    [tagsQuery.data?.tags],
+    () => new Map((tagsQuery.data ?? []).map((tag) => [tag.id, tag])),
+    [tagsQuery.data],
   )
 
   const [infoKb, setInfoKb] = useState<KnowledgeBase | null>(null)
@@ -146,12 +146,12 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         label: 'Tags',
         kind: 'tag' as const,
         single: true,
-        options: (tagsQuery.data?.tags ?? []).map((t) => ({ value: t.name, label: t.name })),
+        options: (tagsQuery.data ?? []).map((t) => ({ value: t.name, label: t.name })),
       },
       { field: 'created_at', label: 'Created', kind: 'date' as const },
       { field: 'updated_at', label: 'Updated', kind: 'date' as const },
     ],
-    [tagsQuery.data?.tags],
+    [tagsQuery.data],
   )
 
   const columns: DataTableColumn<KnowledgeBase>[] = [

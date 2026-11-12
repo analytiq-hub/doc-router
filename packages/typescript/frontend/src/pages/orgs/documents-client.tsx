@@ -1,7 +1,8 @@
 'use client'
 
-import DocumentList from '@/components/DocumentList';
+import OrgDocumentList from '@/components/OrgDocumentList';
 import DocumentUpload from '@/components/DocumentUpload';
+import { PageHeader } from '@/components/PageHeader';
 import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
@@ -33,7 +34,7 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
   };
 
   return (
-    <div className="p-4">
+    <div className="mx-auto max-w-6xl p-4">
       <div className="border-b border-gray-200 mb-6">
         <div className="flex gap-8">
           <button
@@ -63,20 +64,21 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto">
-        <div role="tabpanel" hidden={tab !== 'documents'}>
-          {tab === 'documents' && (
-            <DocumentList
-              organizationId={organizationId}
-              initialCaseIdFilter={caseIdFromQuery}
+      <div role="tabpanel" hidden={tab !== 'documents'}>
+        {tab === 'documents' && (
+          <>
+            <PageHeader
+              title="Documents"
+              subtitle="Browse, filter, and run actions on organization documents."
             />
-          )}
-        </div>
-        <div role="tabpanel" hidden={tab !== 'upload' || !canUpload}>
-          {tab === 'upload' && canUpload && (
-            <DocumentUpload organizationId={organizationId} defaultCaseId={caseIdFromQuery} />
-          )}
-        </div>
+            <OrgDocumentList organizationId={organizationId} initialCaseIdFilter={caseIdFromQuery} />
+          </>
+        )}
+      </div>
+      <div role="tabpanel" hidden={tab !== 'upload' || !canUpload}>
+        {tab === 'upload' && canUpload && (
+          <DocumentUpload organizationId={organizationId} defaultCaseId={caseIdFromQuery} />
+        )}
       </div>
     </div>
   );
