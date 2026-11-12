@@ -1,9 +1,21 @@
-import { Fragment, useState, useEffect } from 'react'
-import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
-import { Tag } from '@docrouter/sdk';
-import TagSelector from './TagSelector';
-import { CaseAssignmentFields } from './CaseAssignmentFields';
+import { Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import type { Tag } from '@docrouter/sdk'
+
+import { CaseAssignmentFields } from './CaseAssignmentFields'
+import { TagCheckboxList } from '@/components/TagCheckboxList'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface DocumentUpdateProps {
   isOpen: boolean
@@ -16,31 +28,26 @@ interface DocumentUpdateProps {
   onSave: (
     tagIds: string[],
     metadata: Record<string, string>,
-    caseOptions?: { caseId: string | null; createCaseIfMissing: boolean }
+    caseOptions?: { caseId: string | null; createCaseIfMissing: boolean },
   ) => Promise<void>
 }
 
-export function DocumentUpdate({ 
-  isOpen, 
-  onClose, 
-  documentName, 
-  currentTags, 
+export function DocumentUpdate({
+  isOpen,
+  onClose,
+  documentName,
+  currentTags,
   currentMetadata = {},
   currentCaseId = null,
   availableTags,
-  onSave 
+  onSave,
 }: DocumentUpdateProps) {
   const [selectedTags, setSelectedTags] = useState(currentTags)
   const [caseIdInput, setCaseIdInput] = useState('')
   const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false)
-  const [metadataFields, setMetadataFields] = useState<Array<{id: string, key: string, value: string}>>(
-    Object.entries(currentMetadata).map(([key, value], index) => ({
-      id: `field_${index}`,
-      key,
-      value
-    }))
-  )
+  const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([])
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -50,7 +57,7 @@ export function DocumentUpdate({
           id: `field_${index}`,
           key,
           value,
-        }))
+        })),
       )
       setCaseIdInput(currentCaseId ?? '')
       setCreateCaseIfMissing(false)
@@ -59,186 +66,127 @@ export function DocumentUpdate({
   }, [isOpen, currentTags, currentMetadata, currentCaseId])
 
   const handleAddMetadata = () => {
-    const newId = `field_${Date.now()}`
-    setMetadataFields(prev => [...prev, { id: newId, key: '', value: '' }])
-  }
-
-  const handleRemoveMetadata = (id: string) => {
-    setMetadataFields(prev => prev.filter(field => field.id !== id))
-  }
-
-  const handleMetadataKeyChange = (id: string, newKey: string) => {
-    setMetadataFields(prev => 
-      prev.map(field => 
-        field.id === id ? { ...field, key: newKey } : field
-      )
-    )
-    // Clear validation error when user makes changes
-    setValidationError(null)
-  }
-
-  const handleMetadataValueChange = (id: string, newValue: string) => {
-    setMetadataFields(prev => 
-      prev.map(field => 
-        field.id === id ? { ...field, value: newValue } : field
-      )
-    )
-    // Clear validation error when user makes changes
-    setValidationError(null)
+    setMetadataFields((prev) => [...prev, { id: `field_${Date.now()}`, key: '', value: '' }])
   }
 
   const handleSave = async () => {
-    // Filter out empty keys and convert to object
-    const nonEmptyFields = metadataFields.filter(field => field.key.trim() !== '')
-    const cleanMetadata: Record<string, string> = {}
-    
-    // Check for duplicate keys
-    const keys = nonEmptyFields.map(field => field.key)
+    const nonEmptyFields = metadataFields.filter((field) => field.key.trim() !== '')
+    const keys = nonEmptyFields.map((field) => field.key)
     const duplicateKeys = keys.filter((key, index) => keys.indexOf(key) !== index)
-    
     if (duplicateKeys.length > 0) {
-      setValidationError(`Duplicate keys found: ${duplicateKeys.join(', ')}. Please remove or rename duplicate keys.`)
+      setValidationError(
+        `Duplicate keys found: ${duplicateKeys.join(', ')}. Please remove or rename duplicate keys.`,
+      )
       return
     }
-    
-    // Convert to object
-    nonEmptyFields.forEach(field => {
+    const cleanMetadata: Record<string, string> = {}
+    nonEmptyFields.forEach((field) => {
       cleanMetadata[field.key] = field.value
     })
-    
-    // Send the case only when it changed, so a tag or metadata edit doesn't depend on
-    // the current case (for example, fail while that case is being deleted).
     const newCaseId = caseIdInput.trim() || null
     const caseChanged = newCaseId !== (currentCaseId || null)
-    await onSave(
-      selectedTags,
-      cleanMetadata,
-      caseChanged ? { caseId: newCaseId, createCaseIfMissing } : undefined
-    );
-    onClose();
-  };
+    setSaving(true)
+    try {
+      await onSave(
+        selectedTags,
+        cleanMetadata,
+        caseChanged ? { caseId: newCaseId, createCaseIfMissing } : undefined,
+      )
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
-    <Transition show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
-
-        <div className="fixed inset-0 overflow-hidden">
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
-              <div className="pointer-events-auto w-screen max-w-md">
-                <div className="flex h-full flex-col bg-white shadow-xl">
-                  <div className="px-4 py-6 sm:px-6">
-                    <div className="flex items-start justify-between">
-                      <h2 className="text-base font-semibold leading-6 text-gray-900">
-                        Update Document: {documentName}
-                      </h2>
-                      <button
-                        type="button"
-                        className="rounded-md text-gray-400 hover:text-gray-500"
-                        onClick={onClose}
-                      >
-                        <XMarkIcon className="h-6 w-6" />
-                      </button>
-                    </div>
-                    <span className="text-sm text-gray-500">Click on tags to enable or disable them</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto px-4 sm:px-6 space-y-6">
-                    {/* Tags Section */}
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-900 mb-3">Tags</h3>
-                      <TagSelector
-                        availableTags={availableTags}
-                        selectedTagIds={selectedTags}
-                        onChange={setSelectedTags}
-                      />
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-900 mb-3">Case</h3>
-                      <CaseAssignmentFields
-                        caseId={caseIdInput}
-                        onCaseIdChange={setCaseIdInput}
-                        createCaseIfMissing={createCaseIfMissing}
-                        onCreateCaseIfMissingChange={setCreateCaseIfMissing}
-                      />
-                    </div>
-
-                    {/* Metadata Section */}
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-medium text-gray-900">Metadata</h3>
-                        <button
-                          type="button"
-                          onClick={handleAddMetadata}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-primary-600 hover:text-primary-500"
-                        >
-                          <PlusIcon className="h-4 w-4 mr-1" />
-                          Add Field
-                        </button>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {metadataFields.map((field) => (
-                          <div key={field.id} className="flex gap-2 items-center">
-                            <input
-                              type="text"
-                              placeholder="Key"
-                              value={field.key}
-                              onChange={(e) => handleMetadataKeyChange(field.id, e.target.value)}
-                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Value"
-                              value={field.value}
-                              onChange={(e) => handleMetadataValueChange(field.id, e.target.value)}
-                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveMetadata(field.id)}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                        {metadataFields.length === 0 && (
-                          <p className="text-sm text-gray-500 italic">No metadata fields. Click &quot;Add Field&quot; to add some.</p>
-                        )}
-                      </div>
-                      
-                      {/* Validation Error Display */}
-                      {validationError && (
-                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
-                          <p className="text-sm text-red-600">{validationError}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-shrink-0 justify-end gap-3 px-4 py-4">
-                    <button
-                      type="button"
-                      className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-                      onClick={onClose}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
-                      onClick={handleSave}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="top-4 right-4 bottom-4 left-auto flex w-[min(calc(100vw-2rem),28rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-xl p-0 sm:max-w-none">
+        <DialogHeader className="border-b px-4 py-4">
+          <DialogTitle className="truncate">Update document</DialogTitle>
+          <DialogDescription className="truncate" title={documentName}>
+            {documentName}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4">
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <TagCheckboxList
+              tags={availableTags}
+              selectedIds={selectedTags}
+              onChange={setSelectedTags}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Case</Label>
+            <CaseAssignmentFields
+              caseId={caseIdInput}
+              onCaseIdChange={setCaseIdInput}
+              createCaseIfMissing={createCaseIfMissing}
+              onCreateCaseIfMissingChange={setCreateCaseIfMissing}
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Metadata</Label>
+              <Button type="button" variant="ghost" size="sm" onClick={handleAddMetadata}>
+                <Plus data-icon="inline-start" />
+                Add field
+              </Button>
             </div>
+            <div className="space-y-2">
+              {metadataFields.map((field) => (
+                <div key={field.id} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key"
+                    value={field.key}
+                    onChange={(e) =>
+                      setMetadataFields((prev) =>
+                        prev.map((f) => (f.id === field.id ? { ...f, key: e.target.value } : f)),
+                      )
+                    }
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="Value"
+                    value={field.value}
+                    onChange={(e) =>
+                      setMetadataFields((prev) =>
+                        prev.map((f) => (f.id === field.id ? { ...f, value: e.target.value } : f)),
+                      )
+                    }
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Remove field"
+                    onClick={() => setMetadataFields((prev) => prev.filter((f) => f.id !== field.id))}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              ))}
+              {metadataFields.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">No metadata fields.</p>
+              ) : null}
+            </div>
+            {validationError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{validationError}</AlertDescription>
+              </Alert>
+            ) : null}
           </div>
         </div>
-      </Dialog>
-    </Transition>
+        <DialogFooter className="border-t bg-muted/40 px-4 py-3">
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => void handleSave()} disabled={saving}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
-} 
+}

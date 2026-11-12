@@ -119,6 +119,15 @@ Settings layout, users, orgs, license, development/LLM screens — shadcn form c
 
 Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — Headless → shadcn `Dialog` / `Progress`.
 
+**Progress on `frontend-shadcn` (documents):**
+
+- ✅ Org + case document lists → `OrgDocumentList` + `DataTable` + `FilterBuilder` + React Query (`useOrgDocuments`, `useOrgAllTags`)
+- ✅ Row actions: `PropertiesDialog`, shadcn `DocumentUpdate` / `DocumentRename` slide-over & modal; tags via `TagCheckboxList` (no autocomplete)
+- ✅ Bulk actions sheet (`DocumentBulkUpdate`): inset panel, confirm dialogs, bulk tag add/remove checklists
+- ✅ Bulk LLM/OCR/Flows: single tag via shadcn `TagSelect` / `SingleTagSelector` wrapper
+- ✅ Upload wizard: shadcn controls + `TagCheckboxList`; removed legacy MUI `DocumentList.tsx`
+- ⏳ Dashboard widgets; tour guide; case delete / KB info modals; PDF viewer (Phase 8)
+
 ---
 
 ### Phase 7 — Flows UI (2–4 weeks, separate track)

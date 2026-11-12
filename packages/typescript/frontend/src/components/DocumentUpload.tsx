@@ -1,82 +1,64 @@
 'use client'
 
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { Button, Typography, CircularProgress, IconButton } from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import DescriptionIcon from '@mui/icons-material/Description';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import ArticleIcon from '@mui/icons-material/Article';
-import ImageIcon from '@mui/icons-material/Image';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { 
-  DocRouterOrgApi
-} from '@/utils/api';
-import { Tag } from '@docrouter/sdk';
-import { isColorLight } from '@/utils/colors';
-import { randomUUID } from '@/utils/uuid';
-import InfoTooltip from '@/components/InfoTooltip';
-import TagSelector from './TagSelector';
-import { CaseAssignmentFields } from './CaseAssignmentFields';
-import { toast } from 'react-toastify';
-import { toastActionError } from '@/utils/toastActionError';
-import { useOrgCapability } from '@/hooks/useOrgPermissions';
-import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useDropzone } from 'react-dropzone'
+import { CloudUpload, Loader2, Plus, Trash2 } from 'lucide-react'
+import type { Tag } from '@docrouter/sdk'
+
+import { useOrgAllTags } from '@/api/orgQueries'
+import { CaseAssignmentFields } from './CaseAssignmentFields'
+import { TagBadge } from '@/components/TagBadge'
+import { TagCheckboxList } from '@/components/TagCheckboxList'
+import InfoTooltip from '@/components/InfoTooltip'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities'
+import { DocRouterOrgApi } from '@/utils/api'
+import { randomUUID } from '@/utils/uuid'
+import { toast } from 'react-toastify'
+import { toastActionError } from '@/utils/toastActionError'
+import { useOrgCapability } from '@/hooks/useOrgPermissions'
 
 interface DocumentUploadProps {
-  organizationId: string;
-  defaultCaseId?: string;
+  organizationId: string
+  defaultCaseId?: string
 }
 
-/** Local file row (multipart upload; avoid base64 in memory). */
 interface PendingUploadFile {
-  id: string;
-  file: File;
+  id: string
+  file: File
 }
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, defaultCaseId }) => {
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
   const { hasCapability: canUpload, loading: capabilitiesLoading } = useOrgCapability(
     organizationId,
     CAP_DOCUMENTS_WRITE,
-  );
-  const [files, setFiles] = useState<PendingUploadFile[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [metadataFields, setMetadataFields] = useState<Array<{id: string, key: string, value: string}>>([]);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [activeStep, setActiveStep] = useState(0);
-  const [caseId, setCaseId] = useState(defaultCaseId ?? '');
-  const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false);
+  )
+  const { data: availableTags = [] } = useOrgAllTags(organizationId, canUpload || capabilitiesLoading)
+
+  const [files, setFiles] = useState<PendingUploadFile[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([])
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [activeStep, setActiveStep] = useState(0)
+  const [caseId, setCaseId] = useState(defaultCaseId ?? '')
+  const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false)
 
   useEffect(() => {
-    setCaseId(defaultCaseId ?? '');
-  }, [defaultCaseId]);
-
-  // Fetch available tags on component mount
-  useEffect(() => {
-    const fetchTags = async () => {
-      try {
-        const response = await docRouterOrgApi.listTags({ limit: 100 });
-        setAvailableTags(response.tags);
-      } catch (error) {
-        console.error('Error fetching tags:', error);
-      }
-    };
-    fetchTags();
-  }, [organizationId, docRouterOrgApi]);
+    setCaseId(defaultCaseId ?? '')
+  }, [defaultCaseId])
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newRows: PendingUploadFile[] = acceptedFiles.map((file) => ({
       id: randomUUID(),
       file,
-    }));
-    setFiles((prev) => [...prev, ...newRows]);
-  }, []);
+    }))
+    setFiles((prev) => [...prev, ...newRows])
+  }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -95,25 +77,23 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
       'image/gif': ['.gif'],
       'image/webp': ['.webp'],
       'image/bmp': ['.bmp'],
-      'image/tiff': ['.tiff', '.tif']
+      'image/tiff': ['.tiff', '.tif'],
     },
-    multiple: true
-  });
+    multiple: true,
+  })
 
   const handleUpload = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0) return
     if (!canUpload) {
-      toast.error('You do not have permission to upload documents.');
-      return;
+      toast.error('You do not have permission to upload documents.')
+      return
     }
 
     const metadata = Object.fromEntries(
-      metadataFields
-        .filter((field) => field.key.trim() !== '')
-        .map((field) => [field.key, field.value])
-    );
+      metadataFields.filter((field) => field.key.trim() !== '').map((field) => [field.key, field.value]),
+    )
 
-    setUploading(true);
+    setUploading(true)
 
     try {
       await Promise.all(
@@ -125,269 +105,229 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
             metadata,
             case_id: caseId.trim() || undefined,
             create_case_if_missing: createCaseIfMissing,
-          })
-        )
-      );
+          }),
+        ),
+      )
 
-      const fileNames = files.map((row) => row.file.name).join(', ');
-      const tagNames = selectedTags.length > 0
-        ? availableTags
-            .filter(tag => selectedTags.includes(tag.id))
-            .map(tag => tag.name)
-            .join(", ")
-        : "no tags";
+      const fileNames = files.map((row) => row.file.name).join(', ')
+      const tagNames =
+        selectedTags.length > 0
+          ? availableTags
+              .filter((tag) => selectedTags.includes(tag.id))
+              .map((tag) => tag.name)
+              .join(', ')
+          : 'no tags'
 
       toast.success(
         `Uploaded ${files.length} file(s): ${fileNames}${tagNames !== 'no tags' ? ` (${tagNames})` : ''}`,
-      );
+      )
 
-      setFiles([]);
-      setSelectedTags([]); // Reset selected tags after successful upload
-      setMetadataFields([]); // Reset metadata after successful upload
-      setCaseId(defaultCaseId ?? '');
-      setCreateCaseIfMissing(false);
-      setActiveStep(0); // Reset to first step
+      setFiles([])
+      setSelectedTags([])
+      setMetadataFields([])
+      setCaseId(defaultCaseId ?? '')
+      setCreateCaseIfMissing(false)
+      setActiveStep(0)
     } catch (error) {
-      console.error('Error uploading files:', error);
-      toastActionError('Upload failed', error);
+      console.error('Error uploading files:', error)
+      toastActionError('Upload failed', error)
     } finally {
-      setUploading(false);
+      setUploading(false)
     }
-  };
+  }
 
   const handleAddMetadata = () => {
-    const newId = `field_${Date.now()}`
-    setMetadataFields(prev => [...prev, { id: newId, key: '', value: '' }])
+    setMetadataFields((prev) => [...prev, { id: `field_${Date.now()}`, key: '', value: '' }])
   }
 
   const handleRemoveMetadata = (id: string) => {
-    setMetadataFields(prev => prev.filter(field => field.id !== id))
+    setMetadataFields((prev) => prev.filter((field) => field.id !== id))
   }
 
   const handleMetadataKeyChange = (id: string, newKey: string) => {
-    setMetadataFields(prev => 
-      prev.map(field => 
-        field.id === id ? { ...field, key: newKey } : field
-      )
-    )
-    // Clear validation error when user makes changes
+    setMetadataFields((prev) => prev.map((field) => (field.id === id ? { ...field, key: newKey } : field)))
     setValidationError(null)
   }
 
   const handleMetadataValueChange = (id: string, newValue: string) => {
-    setMetadataFields(prev => 
-      prev.map(field => 
-        field.id === id ? { ...field, value: newValue } : field
-      )
-    )
-    // Clear validation error when user makes changes
+    setMetadataFields((prev) => prev.map((field) => (field.id === id ? { ...field, value: newValue } : field)))
     setValidationError(null)
   }
 
   const handleNextStep = useCallback(() => {
-    // If moving from step 2 (tags & metadata) to step 3 (upload), validate metadata
     if (activeStep === 1) {
-      // Filter out empty keys and check for duplicates
-      const nonEmptyFields = metadataFields.filter(field => field.key.trim() !== '')
-      const keys = nonEmptyFields.map(field => field.key)
+      const nonEmptyFields = metadataFields.filter((field) => field.key.trim() !== '')
+      const keys = nonEmptyFields.map((field) => field.key)
       const duplicateKeys = keys.filter((key, index) => keys.indexOf(key) !== index)
-      
+
       if (duplicateKeys.length > 0) {
-        setValidationError(`Duplicate keys found: ${duplicateKeys.join(', ')}. Please remove or rename duplicate keys.`)
+        setValidationError(
+          `Duplicate keys found: ${duplicateKeys.join(', ')}. Please remove or rename duplicate keys.`,
+        )
         return
       }
     }
-    
-    setActiveStep((prev) => Math.min(prev + 1, 2));
+
+    setActiveStep((prev) => Math.min(prev + 1, 2))
     setValidationError(null)
-  }, [activeStep, metadataFields]);
+  }, [activeStep, metadataFields])
 
   const handlePrevStep = useCallback(() => {
-    setActiveStep((prev) => Math.max(prev - 1, 0));
+    setActiveStep((prev) => Math.max(prev - 1, 0))
     setValidationError(null)
-  }, []);
+  }, [])
 
-  const handleDeleteFile = useCallback((id: string) => {
-    setFiles((prevFiles) => prevFiles.filter((row) => row.id !== id));
+  const handleDeleteFile = useCallback(
+    (id: string) => {
+      setFiles((prevFiles) => prevFiles.filter((row) => row.id !== id))
+      if (files.length === 1) {
+        setActiveStep(0)
+      }
+    },
+    [files.length],
+  )
 
-    if (files.length === 1) {
-      setActiveStep(0);
-    }
-  }, [files.length]);
+  const selectedTagObjects = useMemo(
+  () => availableTags.filter((tag) => selectedTags.includes(tag.id)),
+  [availableTags, selectedTags],
+  )
 
   if (!capabilitiesLoading && !canUpload) {
     return (
-      <div className="max-w-3xl mx-auto p-4 text-gray-600">
-        You do not have permission to upload documents. Contact an organization admin if you need
-        upload access.
+      <div className="mx-auto max-w-3xl p-4 text-muted-foreground">
+        You do not have permission to upload documents. Contact an organization admin if you need upload access.
       </div>
-    );
+    )
   }
 
+  const stepButton = (step: number, label: string, enabled: boolean) => (
+    <button
+      type="button"
+      disabled={!enabled}
+      className={`flex flex-col items-center disabled:cursor-not-allowed ${
+        activeStep >= step ? 'text-primary' : 'text-muted-foreground'
+      }`}
+      onClick={() => enabled && setActiveStep(step)}
+    >
+      <div
+        className={`mb-1 flex h-8 w-8 items-center justify-center rounded-full ${
+          activeStep >= step ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+        }`}
+      >
+        {step + 1}
+      </div>
+      <span className="text-sm">{label}</span>
+    </button>
+  )
+
+  const fileRow = (row: PendingUploadFile) => (
+    <div key={row.id} className="flex items-center justify-between px-2 py-1 odd:bg-muted/40">
+      <span className="truncate text-sm">{row.file.name}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Remove ${row.file.name}`}
+        onClick={() => handleDeleteFile(row.id)}
+      >
+        <Trash2 className="text-destructive" />
+      </Button>
+    </div>
+  )
+
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="hidden md:flex items-center gap-2 mb-4">
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-4 hidden items-center gap-2 md:flex">
         <h2 className="text-xl font-bold">Upload Documents</h2>
-        <InfoTooltip 
+        <InfoTooltip
           title="Document Upload"
           content={
             <>
-              <p className="mb-2">
-                Upload documents to be processed by AI prompts. Supported file formats:
-              </p>
-              <ul className="list-disc list-inside space-y-1 mb-2">
-                <li><strong>PDF files</strong> (.pdf)</li>
-                <li><strong>Word documents</strong> (.doc, .docx)</li>
-                <li><strong>Excel files</strong> (.xls, .xlsx)</li>
-                <li><strong>CSV files</strong> (.csv)</li>
-                <li><strong>Text files</strong> (.txt, .md)</li>
-                <li><strong>Image files</strong> (.jpg, .jpeg, .png, .gif, .webp, .bmp, .tiff, .tif)</li>
+              <p className="mb-2">Upload documents to be processed by AI prompts. Supported file formats:</p>
+              <ul className="mb-2 list-inside list-disc space-y-1">
+                <li>
+                  <strong>PDF files</strong> (.pdf)
+                </li>
+                <li>
+                  <strong>Word documents</strong> (.doc, .docx)
+                </li>
+                <li>
+                  <strong>Excel files</strong> (.xls, .xlsx)
+                </li>
+                <li>
+                  <strong>CSV files</strong> (.csv)
+                </li>
+                <li>
+                  <strong>Text files</strong> (.txt, .md)
+                </li>
+                <li>
+                  <strong>Image files</strong> (.jpg, .jpeg, .png, .gif, .webp, .bmp, .tiff, .tif)
+                </li>
               </ul>
               <p className="mb-2">
-                <strong>Note:</strong> Select appropriate tags for your documents to control which prompts are run. Images will be processed using OCR to extract text.
+                <strong>Note:</strong> Select appropriate tags for your documents to control which prompts are run.
+                Images will be processed using OCR to extract text.
               </p>
             </>
           }
         />
       </div>
-      
-      {/* Progress Indicator */}
+
       <div className="mb-6">
         <div className="flex items-center justify-between">
-          <div 
-            className={`flex flex-col items-center ${activeStep >= 0 ? 'text-primary-600' : 'text-gray-400'}`}
-            onClick={() => setActiveStep(0)}
-          >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 0 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-              1
-            </div>
-            <span className="text-sm">Select Files</span>
-          </div>
-          <div className={`flex-1 h-1 mx-2 ${activeStep >= 1 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
-          <div 
-            className={`flex flex-col items-center ${activeStep >= 1 ? 'text-primary-600' : 'text-gray-400'}`}
-            onClick={() => files.length > 0 && setActiveStep(1)}
-          >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 1 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-              2
-            </div>
-            <span className="text-sm">Tags & Metadata</span>
-          </div>
-          <div className={`flex-1 h-1 mx-2 ${activeStep >= 2 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
-          <div 
-            className={`flex flex-col items-center ${activeStep >= 2 ? 'text-primary-600' : 'text-gray-400'}`}
-            onClick={() => files.length > 0 && setActiveStep(2)}
-          >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${activeStep >= 2 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-              3
-            </div>
-            <span className="text-sm">Upload</span>
-          </div>
+          {stepButton(0, 'Select Files', true)}
+          <div className={`mx-2 h-1 flex-1 ${activeStep >= 1 ? 'bg-primary' : 'bg-muted'}`} />
+          {stepButton(1, 'Tags & Metadata', files.length > 0)}
+          <div className={`mx-2 h-1 flex-1 ${activeStep >= 2 ? 'bg-primary' : 'bg-muted'}`} />
+          {stepButton(2, 'Upload', files.length > 0)}
         </div>
       </div>
-      
-      <div className="bg-white rounded-lg shadow p-6">
-        {/* Step 1: Select Files */}
+
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
         {activeStep === 0 && (
           <div>
-            <h3 className="text-lg font-medium mb-4">Select Files</h3>
-            
-            <div className="flex items-center mb-3">
-              <span className="mr-2">Supported formats:</span>
-              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
-                <PictureAsPdfIcon className="text-red-600 mr-1" fontSize="small" />
-                <span className="text-sm">PDF</span>
-              </div>
-              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
-                <DescriptionIcon className="text-primary-700 mr-1" fontSize="small" />
-                <span className="text-sm">DOC</span>
-              </div>
-              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
-                <TableChartIcon className="text-green-700 mr-1" fontSize="small" />
-                <span className="text-sm">CSV,XLS</span>
-              </div>
-              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
-                <ArticleIcon className="text-gray-700 mr-1" fontSize="small" />
-                <span className="text-sm">TXT,MD</span>
-              </div>
-              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
-                <ImageIcon className="text-purple-700 mr-1" fontSize="small" />
-                <span className="text-sm">JPG,PNG,GIF</span>
-              </div>
-            </div>
-            
+            <h3 className="mb-4 text-lg font-medium">Select Files</h3>
+            <p className="mb-3 text-sm text-muted-foreground">
+              PDF, Word, Excel, CSV, text, markdown, and common image formats.
+            </p>
             <div
               {...getRootProps()}
-              className="border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+              className="cursor-pointer rounded-lg border-2 border-dashed border-border p-6 transition-colors hover:bg-muted/40"
             >
               <input {...getInputProps()} />
-              <CloudUploadIcon sx={{ fontSize: 48, mb: 2, color: '#4B5563' }} />
-              {isDragActive ? (
-                <Typography>Drop files here ...</Typography>
-              ) : (
-                <Typography>Drag files here, or click to select files</Typography>
-              )}
+              <CloudUpload className="mx-auto mb-2 size-12 text-muted-foreground" />
+              <p className="text-center text-sm">
+                {isDragActive ? 'Drop files here…' : 'Drag files here, or click to select files'}
+              </p>
             </div>
-            
-            {files.length > 0 && (
+
+            {files.length > 0 ? (
               <div className="mt-4">
-                <Typography variant="subtitle1" className="text-left mb-2">Selected files:</Typography>
-                <div className="max-h-40 overflow-y-auto border rounded-md">
-                  {files.map((row) => (
-                    <div key={row.id} className="text-left py-1 px-2 odd:bg-gray-50 flex justify-between items-center">
-                      <span>{row.file.name}</span>
-                      <IconButton 
-                        size="small" 
-                        onClick={() => handleDeleteFile(row.id)}
-                        className="text-red-500 hover:bg-red-50"
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </div>
-                  ))}
-                </div>
+                <Label className="mb-2 block">Selected files</Label>
+                <div className="max-h-40 overflow-y-auto rounded-md border">{files.map(fileRow)}</div>
               </div>
-            )}
-            
+            ) : null}
+
             <div className="mt-6 flex justify-end">
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleNextStep}
-                disabled={files.length === 0}
-              >
+              <Button type="button" onClick={handleNextStep} disabled={files.length === 0}>
                 Continue
               </Button>
             </div>
           </div>
         )}
-        
-        {/* Step 2: Tags & Metadata */}
+
         {activeStep === 1 && (
           <div>
-            <h3 className="text-lg font-medium mb-4">Tags & Metadata (Optional)</h3>
-            
-            <div className="mb-6 bg-gray-50 p-3 rounded-lg">
-              <h4 className="font-medium mb-2">Selected Files:</h4>
-              <div className="max-h-32 overflow-y-auto text-sm text-gray-600">
-                {files.map((row) => (
-                  <div key={row.id} className="mb-1 flex justify-between items-center">
-                    <span>{row.file.name}</span>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleDeleteFile(row.id)}
-                      className="text-red-500 hover:bg-red-50"
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </div>
-                ))}
-              </div>
+            <h3 className="mb-4 text-lg font-medium">Tags &amp; Metadata (optional)</h3>
+
+            <div className="mb-6 rounded-lg bg-muted/40 p-3">
+              <Label className="mb-2 block">Selected files</Label>
+              <div className="max-h-32 overflow-y-auto text-sm">{files.map(fileRow)}</div>
             </div>
-            
+
             <div className="space-y-6">
-              <div>
-                <h4 className="text-md font-medium mb-3">Case</h4>
+              <div className="space-y-2">
+                <Label>Case</Label>
                 <CaseAssignmentFields
                   caseId={caseId}
                   onCaseIdChange={setCaseId}
@@ -396,183 +336,126 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
                 />
               </div>
 
-              {/* Tags Section */}
-              <div>
-                <h4 className="text-md font-medium mb-3">Tags</h4>
-                <p className="text-gray-600 mb-3 text-sm">
-                  Select appropriate tags for your documents to ensure they&apos;re processed by the right prompts.
+              <div className="space-y-2">
+                <Label>Tags</Label>
+                <p className="text-sm text-muted-foreground">
+                  Select tags so documents are processed by the right prompts.
                 </p>
-                <TagSelector
-                  availableTags={availableTags}
-                  selectedTagIds={selectedTags}
-                  onChange={setSelectedTags}
-                />
+                <TagCheckboxList tags={availableTags} selectedIds={selectedTags} onChange={setSelectedTags} />
               </div>
 
-              {/* Metadata Section */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-md font-medium">Metadata</h4>
-                  <button
-                    type="button"
-                    onClick={handleAddMetadata}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-500 border border-primary-300 rounded-md hover:bg-primary-50"
-                  >
-                    <AddIcon fontSize="small" className="mr-1" />
-                    Add Field
-                  </button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Metadata</Label>
+                  <Button type="button" variant="ghost" size="sm" onClick={handleAddMetadata}>
+                    <Plus data-icon="inline-start" />
+                    Add field
+                  </Button>
                 </div>
-                <p className="text-gray-600 mb-3 text-sm">
-                  Add key-value pairs that will be attached to all uploaded documents.
-                </p>
-                
+                <p className="text-sm text-muted-foreground">Key-value pairs attached to all uploaded documents.</p>
                 <div className="space-y-2">
                   {metadataFields.map((field) => (
-                    <div key={field.id} className="flex gap-2 items-center">
-                      <input
-                        type="text"
+                    <div key={field.id} className="flex items-center gap-2">
+                      <Input
                         placeholder="Key"
                         value={field.key}
                         onChange={(e) => handleMetadataKeyChange(field.id, e.target.value)}
-                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                        className="flex-1"
                       />
-                      <input
-                        type="text"
+                      <Input
                         placeholder="Value"
                         value={field.value}
                         onChange={(e) => handleMetadataValueChange(field.id, e.target.value)}
-                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                        className="flex-1"
                       />
-                      <IconButton
-                        size="small"
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove field"
                         onClick={() => handleRemoveMetadata(field.id)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
                       >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                        <Trash2 />
+                      </Button>
                     </div>
                   ))}
-                  {metadataFields.length === 0 && (
-                    <p className="text-sm text-gray-500 italic">No metadata fields. Click &quot;Add Field&quot; to add some.</p>
-                  )}
+                  {metadataFields.length === 0 ? (
+                    <p className="text-sm italic text-muted-foreground">No metadata fields.</p>
+                  ) : null}
                 </div>
-                
-                {/* Validation Error Display */}
-                {validationError && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-600">{validationError}</p>
-                  </div>
-                )}
+                {validationError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{validationError}</AlertDescription>
+                  </Alert>
+                ) : null}
               </div>
             </div>
-            
-            <div className="mt-6 flex justify-between">
-              <Button
-                variant="outlined"
-                onClick={handlePrevStep}
-              >
+
+            <div className="mt-6 flex justify-between gap-2">
+              <Button type="button" variant="outline" onClick={handlePrevStep}>
                 Back
               </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleNextStep}
-              >
+              <Button type="button" onClick={handleNextStep}>
                 Continue
               </Button>
             </div>
           </div>
         )}
-        
-        {/* Step 3: Upload */}
+
         {activeStep === 2 && (
           <div>
-            <h3 className="text-lg font-medium mb-4">Upload Files</h3>
-            
-            <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <div className="mb-4">
-                <h4 className="font-medium mb-2">Selected Files:</h4>
-                <div className="text-sm text-gray-600">
-                  {files.map((row) => (
-                    <div key={row.id} className="mb-1 flex justify-between items-center">
-                      <span>{row.file.name}</span>
-                      <IconButton 
-                        size="small" 
-                        onClick={() => handleDeleteFile(row.id)}
-                        className="text-red-500 hover:bg-red-50"
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </div>
-                  ))}
-                </div>
+            <h3 className="mb-4 text-lg font-medium">Upload files</h3>
+
+            <div className="mb-6 space-y-4 rounded-lg bg-muted/40 p-4">
+              <div>
+                <Label className="mb-2 block">Selected files</Label>
+                <div className="text-sm">{files.map(fileRow)}</div>
               </div>
-              
-              <div className="mb-4">
-                <h4 className="font-medium mb-2">Selected Tags:</h4>
+
+              <div>
+                <Label className="mb-2 block">Selected tags</Label>
                 <div className="flex flex-wrap gap-1">
-                  {selectedTags.length > 0 ? (
-                    availableTags
-                      .filter(tag => selectedTags.includes(tag.id))
-                      .map(tag => (
-                        <div
-                          key={tag.id}
-                          className={`px-2 py-1 rounded text-xs ${
-                            isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-                          }`}
-                          style={{ backgroundColor: tag.color }}
-                        >
-                          {tag.name}
-                        </div>
-                      ))
+                  {selectedTagObjects.length > 0 ? (
+                    selectedTagObjects.map((tag: Tag) => <TagBadge key={tag.id} tag={tag} />)
                   ) : (
-                    <span className="text-gray-500 text-sm italic">No tags selected</span>
+                    <span className="text-sm italic text-muted-foreground">No tags selected</span>
                   )}
                 </div>
               </div>
-              
+
               <div>
-                <h4 className="font-medium mb-2">Metadata:</h4>
+                <Label className="mb-2 block">Metadata</Label>
                 <div className="space-y-1">
-                  {metadataFields.length > 0 ? (
+                  {metadataFields.filter((field) => field.key.trim() !== '').length > 0 ? (
                     metadataFields
-                      .filter(field => field.key.trim() !== '')
-                      .map(field => (
-                        <div key={field.id} className="flex items-center text-sm">
-                          <span className="font-medium text-gray-600 mr-2">{field.key}:</span>
-                          <span className="text-gray-800">{field.value || '(empty)'}</span>
+                      .filter((field) => field.key.trim() !== '')
+                      .map((field) => (
+                        <div key={field.id} className="flex text-sm">
+                          <span className="mr-2 font-medium text-muted-foreground">{field.key}:</span>
+                          <span>{field.value || '(empty)'}</span>
                         </div>
                       ))
                   ) : (
-                    <span className="text-gray-500 text-sm italic">No metadata fields</span>
+                    <span className="text-sm italic text-muted-foreground">No metadata fields</span>
                   )}
                 </div>
               </div>
             </div>
-            
-            <div className="mt-6 flex justify-between">
-              <Button
-                variant="outlined"
-                onClick={handlePrevStep}
-              >
+
+            <div className="mt-6 flex justify-between gap-2">
+              <Button type="button" variant="outline" onClick={handlePrevStep} disabled={uploading}>
                 Back
               </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleUpload}
-                disabled={uploading || !canUpload}
-                startIcon={uploading ? <CircularProgress size={20} color="inherit" /> : <CloudUploadIcon />}
-              >
-                {uploading ? 'Uploading...' : 'Upload Files'}
+              <Button type="button" onClick={() => void handleUpload()} disabled={uploading || !canUpload}>
+                {uploading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <CloudUpload data-icon="inline-start" />}
+                {uploading ? 'Uploading…' : 'Upload files'}
               </Button>
             </div>
           </div>
         )}
       </div>
-      
     </div>
-  );
-};
+  )
+}
 
-export default DocumentUpload;
+export default DocumentUpload

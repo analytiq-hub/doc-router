@@ -1,90 +1,91 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface DocumentRenameModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  documentName: string;
-  onSubmit: (newName: string) => Promise<void>;
+  isOpen: boolean
+  onClose: () => void
+  documentName: string
+  onSubmit: (newName: string) => Promise<void>
 }
 
-const DocumentRenameModal: React.FC<DocumentRenameModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  documentName, 
-  onSubmit 
+const DocumentRenameModal: React.FC<DocumentRenameModalProps> = ({
+  isOpen,
+  onClose,
+  documentName,
+  onSubmit,
 }) => {
-  const [newName, setNewName] = useState(documentName);
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newName, setNewName] = useState(documentName)
+  const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setNewName(documentName)
+      setError(null)
+    }
+  }, [isOpen, documentName])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
+    e.preventDefault()
+    setError(null)
     if (!newName.trim()) {
-      setError('Document name cannot be empty');
-      return;
+      setError('Document name cannot be empty')
+      return
     }
-
-    setIsSubmitting(true);
+    setIsSubmitting(true)
     try {
-      await onSubmit(newName);
-      onClose();
-    } catch (error) {
-      console.error('Document rename failed:', error);
+      await onSubmit(newName)
+      onClose()
+    } catch (err) {
+      console.error('Document rename failed:', err)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
-  if (!isOpen) return null;
+  const unchanged = newName.trim() === documentName
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-        <h3 className="text-lg font-medium mb-4">Rename</h3>
-        
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
-            {error}
-          </div>
-        )}
-
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename document</DialogTitle>
+          <DialogDescription>Enter a new file name for this document.</DialogDescription>
+        </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <input
-              type="text"
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <div className="space-y-2">
+            <Label htmlFor="document-rename">Name</Label>
+            <Input
+              id="document-rename"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               autoFocus
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              disabled={isSubmitting}
-            >
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              className={`px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 ${
-                isSubmitting || !newName.trim() || newName === documentName
-                  ? 'opacity-50 cursor-not-allowed'
-                  : ''
-              }`}
-              disabled={isSubmitting || !newName.trim() || newName === documentName}
-            >
-              {isSubmitting ? 'Saving...' : 'Save'}
-            </button>
-          </div>
+            </Button>
+            <Button type="submit" disabled={isSubmitting || !newName.trim() || unchanged}>
+              Save
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
-  );
-};
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-export default DocumentRenameModal; 
+export default DocumentRenameModal
