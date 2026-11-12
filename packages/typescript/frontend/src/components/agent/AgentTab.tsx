@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { CircleArrowUp, ChevronUp, Mic, Square } from 'lucide-react';
+import { CircleArrowUp, ChevronUp, CircleStop, Mic } from 'lucide-react';
 import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
@@ -322,7 +322,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             className="flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-700 shrink-0"
             title="Stop"
           >
-            <Square className="h-6 w-6 fill-current" aria-hidden />
+            <CircleStop className="h-6 w-6" aria-hidden />
           </button>
         ) : isListening ? (
           <button
