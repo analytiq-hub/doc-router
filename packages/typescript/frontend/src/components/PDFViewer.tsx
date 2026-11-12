@@ -141,6 +141,8 @@ const PDFViewer = ({
   const [rotation, setRotation] = useState(0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  /** When true, skip the pageNumber→scroll effect (page came from the viewer scroll position). */
+  const suppressProgrammaticScrollRef = useRef(false);
 
   // PDF fetch state: we pass a blob URL (string) to react-pdf so the file prop is stable. One URL per load.
   const [loading, setLoading] = useState(true);
@@ -327,13 +329,43 @@ const PDFViewer = ({
   const [fileSize, setFileSize] = useState<number>(0);
 
   const scrollToPage = useCallback((pageNum: number, behavior: ScrollBehavior = 'smooth') => {
-    
-    if (pageRefs.current[pageNum - 1]) {
-      pageRefs.current[pageNum - 1]?.scrollIntoView({ behavior });
-      setPageNumber(pageNum);
-      setInputPageNumber(pageNum.toString());
-    }
+    const container = containerRef.current;
+    const pageEl = pageRefs.current[pageNum - 1];
+    if (!container || !pageEl) return;
+    const top =
+      pageEl.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop;
+    container.scrollTo({ top, behavior });
   }, []);
+
+  const syncPageFromViewerScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || !numPages) return;
+    const anchorY = container.getBoundingClientRect().top + container.clientHeight * 0.35;
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < pageRefs.current.length; i++) {
+      const el = pageRefs.current[i];
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom < container.getBoundingClientRect().top) continue;
+      if (rect.top > container.getBoundingClientRect().bottom) continue;
+      const dist = Math.abs(rect.top - anchorY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx < 0) return;
+    const page = bestIdx + 1;
+    setPageNumber((prev) => {
+      if (prev === page) return prev;
+      suppressProgrammaticScrollRef.current = true;
+      setInputPageNumber(String(page));
+      return page;
+    });
+  }, [numPages]);
 
   const [showProperties, setShowProperties] = useState(false);
   const [documentProperties, setDocumentProperties] = useState<Record<string, string> | null>(null);
@@ -1265,7 +1297,8 @@ const PDFViewer = ({
 
       const nextPage = findNextHighlightedPage(pageNumber, isSameSearch);
       if (nextPage && nextPage !== pageNumber) {
-        scrollToPage(nextPage);
+        setPageNumber(nextPage);
+        setInputPageNumber(String(nextPage));
         // Update lastSearch with the new page
         setLastSearch({
           promptId: highlightInfo.promptId,
@@ -1319,8 +1352,27 @@ const PDFViewer = ({
   }, [highlightInfo]);
 
   useEffect(() => {
+    if (suppressProgrammaticScrollRef.current) {
+      suppressProgrammaticScrollRef.current = false;
+      return;
+    }
     scrollToPage(pageNumber);
   }, [pageNumber, scrollToPage]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(syncPageFromViewerScroll);
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      container.removeEventListener('scroll', onScroll);
+    };
+  }, [syncPageFromViewerScroll, fileUrl, numPages]);
 
   useEffect(() => {
     onViewerPageChange?.(pageNumber);
@@ -1560,6 +1612,7 @@ const PDFViewer = ({
                   flex: 1,
                   minHeight: 0,
                   overflowY: 'auto',
+                  overscrollBehavior: 'contain',
                   padding: '16px',
                 }}
               >

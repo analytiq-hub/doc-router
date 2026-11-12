@@ -155,7 +155,7 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
 
   return (
     <MuiPdfThemeIsland>
-      <div className={cn('flex h-full min-h-0 flex-col overflow-hidden')}>
+      <div className={cn('flex min-h-0 flex-1 flex-col overflow-hidden')}>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <PanelGroup
             ref={panelGroupRef}
@@ -164,7 +164,13 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
             className="h-full w-full"
           >
             {showPdfPanel && (
-              <Panel id="doc-pdf" defaultSize={pdfPanelSize!} minSize={25} order={1}>
+              <Panel
+                id="doc-pdf"
+                defaultSize={pdfPanelSize!}
+                minSize={25}
+                order={1}
+                className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+              >
                 <div className={panelShell}>
                   <PDFViewer
                     organizationId={organizationId}
@@ -184,7 +190,13 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
             )}
 
             {showRightPanel && (
-              <Panel id="doc-sidebar" defaultSize={rightPanelSize!} minSize={22} order={2}>
+              <Panel
+                id="doc-sidebar"
+                defaultSize={rightPanelSize!}
+                minSize={22}
+                order={2}
+                className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+              >
                 <div className={cn(panelShell, 'overflow-hidden')}>
                   <PDFSidebar
                     organizationId={organizationId}

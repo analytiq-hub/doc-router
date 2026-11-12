@@ -276,7 +276,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div>{systemMenuItems.map(renderMenuItem)}</div>
         </nav>
 
-        <main className="min-w-0 flex-1 overflow-auto bg-background">{children}</main>
+        <main
+          className={cn(
+            'min-w-0 flex-1 bg-background',
+            isPDFViewer
+              ? 'flex min-h-0 flex-col overflow-hidden'
+              : 'overflow-auto',
+          )}
+        >
+          {children}
+        </main>
       </div>
 
       {status === 'authenticated' ? (

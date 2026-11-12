@@ -126,7 +126,8 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight, pdfPage, fil
     router.replace(docPageHrefWithSearch(pathname, tab, searchParams));
   };
 
-  const tabContentClass = 'min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-2';
+  const tabContentClass =
+    'min-h-0 flex-1 overflow-hidden overscroll-y-contain px-3 pb-3 pt-2';
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col border-l border-border bg-card">
@@ -220,7 +221,7 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight, pdfPage, fil
 };
 
 function cnInfoTabContent(base: string) {
-  return `${base} overflow-y-auto`;
+  return `${base} overflow-y-auto overscroll-y-contain`;
 }
 
 export default PDFSidebar;
