@@ -19,7 +19,7 @@ import ReactFlow, {
   type EdgeChange,
   type NodeChange,
 } from 'reactflow';
-import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import { FlowWorkspaceDropdown } from './FlowWorkspaceDropdown';
 import {
   ArrowUturnLeftIcon,
   ArrowsPointingOutIcon,
@@ -75,7 +75,6 @@ import { flowEditorPath, targetFlowIdFromFlowNode, targetFlowSubtitle } from './
 import { useOrgFlowNameMap } from './useOrgFlowNameMap';
 import { flowNodeTypeFor, isValidFlowConnection } from './flowConnectionValidation';
 import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WIDTH_PX } from './flowUiClasses';
-import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 import { isFlowEditorEditableTarget, isFlowEditorUndoKey } from './flowGraphUndo';
 import { useFlowGraphUndo } from './useFlowGraphUndo';
 import {
@@ -1310,34 +1309,20 @@ const FlowEditor: React.FC<{
                           <span className="text-[11px] font-semibold opacity-95">{footerExecuteSubLabel}</span>
                         </span>
                       </button>
-                      <Menu as="div" className="relative shrink-0 self-stretch text-left">
-                        <MenuButton
-                          type="button"
-                          aria-label="Choose which trigger starts the workflow"
-                          className="inline-flex h-full min-h-full min-w-[2.75rem] items-center justify-center border-l border-white/30 bg-primary-600 px-3 text-white transition hover:bg-primary-700 active:scale-[0.99]"
-                        >
-                          <ChevronDownIcon className="h-4 w-4" aria-hidden />
-                        </MenuButton>
-                        <MenuItems
-                          anchor="top end"
-                          modal={false}
-                          className={`${flowWorkspaceMenuPanelClass} mt-2 min-w-[12rem]`}
-                        >
-                          {executeWorkflowTriggers.map((t) => (
-                            <MenuItem key={t.id}>
-                              {({ focus }) => (
-                                <button
-                                  type="button"
-                                  className={`${flowWorkspaceDropdownItemSimpleClass} flex w-full items-center gap-2 ${focus ? 'bg-gray-100' : ''}`}
-                                  onClick={() => onExecuteFromWorkflowTrigger(t.id)}
-                                >
-                                  <span className="whitespace-normal text-left">{`From ${t.label.trim() ? t.label : t.id}`}</span>
-                                </button>
-                              )}
-                            </MenuItem>
-                          ))}
-                        </MenuItems>
-                      </Menu>
+                      <FlowWorkspaceDropdown
+                        unstyledTrigger
+                        side="top"
+                        align="end"
+                        triggerClassName="inline-flex h-full min-h-full min-w-[2.75rem] items-center justify-center border-l border-white/30 bg-primary-600 px-3 text-white transition hover:bg-primary-700 active:scale-[0.99]"
+                        trigger={<ChevronDownIcon className="h-4 w-4" aria-hidden />}
+                        contentClassName="mt-2 min-w-[12rem]"
+                        items={executeWorkflowTriggers.map((t) => ({
+                          id: t.id,
+                          label: `From ${t.label.trim() ? t.label : t.id}`,
+                          simple: true,
+                          onSelect: () => onExecuteFromWorkflowTrigger(t.id),
+                        }))}
+                      />
                     </div>
                   ) : onExecute ? (
                     <button

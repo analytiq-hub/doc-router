@@ -37,46 +37,78 @@ function DialogOverlay({
   )
 }
 
+const dialogPopupMotionClass =
+  "duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+
+const dialogPopupDefaultClass = cn(
+  "fixed top-1/2 left-1/2 z-50 grid w-full overflow-y-auto max-h-11/12 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 sm:max-w-sm",
+  dialogPopupMotionClass,
+)
+
+const dialogPopupViewportFrameClass = cn(
+  "pointer-events-auto relative z-50 grid w-full gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10",
+  dialogPopupMotionClass,
+)
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   overlay = true,
+  overlayClassName,
+  viewportFrame = false,
+  viewportFrameClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
   /** The dimmed backdrop; off for a non-modal panel the page stays usable behind. */
   overlay?: boolean
+  overlayClassName?: string
+  /** Flexbox viewport centering (legacy large modals e.g. flow node config) instead of translate centering. */
+  viewportFrame?: boolean
+  viewportFrameClassName?: string
 }) {
+  const popup = (
+    <DialogPrimitive.Popup
+      data-slot="dialog-content"
+      className={cn(viewportFrame ? dialogPopupViewportFrameClass : dialogPopupDefaultClass, className)}
+      {...props}
+    >
+      {children}
+      {showCloseButton && (
+        <DialogPrimitive.Close
+          data-slot="dialog-close"
+          render={
+            <Button
+              variant="ghost"
+              className="absolute top-2 right-2"
+              size="icon-sm"
+            />
+          }
+        >
+          <XIcon
+          />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      )}
+    </DialogPrimitive.Popup>
+  )
+
   return (
     <DialogPortal>
-      {overlay ? <DialogOverlay /> : null}
-      <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full overflow-y-auto max-h-11/12 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            render={
-              <Button
-                variant="ghost"
-                className="absolute top-2 right-2"
-                size="icon-sm"
-              />
-            }
-          >
-            <XIcon
-            />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Popup>
+      {overlay ? <DialogOverlay className={overlayClassName} /> : null}
+      {viewportFrame ? (
+        <div
+          className={cn(
+            "pointer-events-none fixed inset-0 z-50 flex w-screen items-center justify-center py-2 px-[calc(22px+3pt)]",
+            viewportFrameClassName,
+          )}
+        >
+          {popup}
+        </div>
+      ) : (
+        popup
+      )}
     </DialogPortal>
   )
 }

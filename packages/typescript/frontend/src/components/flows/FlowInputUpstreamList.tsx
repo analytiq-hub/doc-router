@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 import { flowNodeIconColorClass } from './flowNodeBrand';
 import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { IoDataModeTabs, IoViewer, type IoDataMode } from './IoViewer';
+import { FlowDisclosure } from './FlowDisclosure';
 
 export type UpstreamInputSlot = {
   slot: number;
@@ -71,10 +71,14 @@ export const FlowInputUpstreamList: React.FC<{
           const countLabel = `${n} ${n === 1 ? 'item' : 'items'}`;
           const titleSuffix = s.slot > 0 ? ` · in ${s.slot}` : '';
           return (
-            <Disclosure key={slotKey(s)} as="div" defaultOpen={i === 0}>
-              <DisclosureButton className="flex w-full items-center gap-2 px-2 py-1.5 text-left outline-none hover:bg-gray-50">
-                {({ open }) => (
-                  <>
+            <FlowDisclosure key={slotKey(s)} defaultOpen={i === 0}>
+              {({ open, toggle }) => (
+                <>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left outline-none hover:bg-gray-50"
+                    onClick={toggle}
+                  >
                     <span className="flex h-4 w-4 shrink-0 items-center justify-center text-gray-500" aria-hidden>
                       <ChevronRightIcon
                         className={['h-3 w-3 transition-transform duration-150 ease-out', open ? 'rotate-90' : 'rotate-0'].join(
@@ -108,32 +112,34 @@ export const FlowInputUpstreamList: React.FC<{
                     <span className="shrink-0 whitespace-nowrap text-[11px] font-medium tabular-nums text-gray-500">
                       {countLabel}
                     </span>
-                  </>
-                )}
-              </DisclosureButton>
-              <DisclosurePanel className="bg-[#fafbfc]/40">
-                <div className="border-t border-gray-100 px-1 py-1.5">
-                  <IoViewer
-                    hideHeader
-                    value={s.itemsJson}
-                    valueKind="executionItems"
-                    executionItemsBinaries={s.itemsBinaries}
-                    flowBlobDownloadContext={flowBlobDownloadContext ?? null}
-                    flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
-                    dragSource={{
-                      nodeId: s.fromNodeId,
-                      source: 'nodeOutput',
-                      nodeDisplayName: label,
-                    }}
-                    expressionConfigNodeId={expressionConfigNodeId}
-                    soleInboundParentNodeId={soleInboundParentNodeId}
-                    defaultMode="schema"
-                    mode={mode}
-                    onModeChange={onModeChange}
-                  />
-                </div>
-              </DisclosurePanel>
-            </Disclosure>
+                  </button>
+                  {open ? (
+                    <div className="bg-[#fafbfc]/40">
+                      <div className="border-t border-gray-100 px-1 py-1.5">
+                        <IoViewer
+                          hideHeader
+                          value={s.itemsJson}
+                          valueKind="executionItems"
+                          executionItemsBinaries={s.itemsBinaries}
+                          flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+                          flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
+                          dragSource={{
+                            nodeId: s.fromNodeId,
+                            source: 'nodeOutput',
+                            nodeDisplayName: label,
+                          }}
+                          expressionConfigNodeId={expressionConfigNodeId}
+                          soleInboundParentNodeId={soleInboundParentNodeId}
+                          defaultMode="schema"
+                          mode={mode}
+                          onModeChange={onModeChange}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </FlowDisclosure>
           );
         })}
       </div>

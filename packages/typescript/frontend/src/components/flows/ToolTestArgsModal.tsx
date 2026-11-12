@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import Editor from '@monaco-editor/react';
 import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType, FlowPinData } from '@docrouter/sdk';
@@ -108,10 +108,11 @@ const ToolTestArgsModal: React.FC<{
           : null;
 
   return (
-    <Dialog open={open} onClose={busy ? () => {} : onClose} className="relative z-[260]">
-      <DialogBackdrop className="fixed inset-0 bg-black/30" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+    <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="z-[260] flex max-h-[min(90vh,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+      >
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
             <DialogTitle className="text-base font-semibold text-gray-900">Test tool arguments</DialogTitle>
             <button
@@ -226,8 +227,7 @@ const ToolTestArgsModal: React.FC<{
               {busy ? 'Running…' : attemptedRun ? 'Run again' : 'Run tool test'}
             </button>
           </div>
-        </DialogPanel>
-      </div>
+      </DialogContent>
     </Dialog>
   );
 };

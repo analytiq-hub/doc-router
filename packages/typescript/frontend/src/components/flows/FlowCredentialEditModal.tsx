@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Switch } from '@headlessui/react';
+import { Switch } from '@/components/ui/switch';
 import {
   BoltIcon,
   CheckCircleIcon,
@@ -23,8 +23,6 @@ import {
   flowInputClass,
   flowLabelClass,
   flowSelectClass,
-  flowSwitchThumbClass,
-  flowSwitchTrackClass,
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import {
@@ -717,11 +715,8 @@ function CredEditFieldBlock({
           <CredEditFieldLabel label={label} description={field.description} />
           <Switch
             checked={checked}
-            onChange={(next) => onChange(next ? 'true' : 'false')}
-            className={flowSwitchTrackClass}
-          >
-            <span className={flowSwitchThumbClass} aria-hidden />
-          </Switch>
+            onCheckedChange={(next) => onChange(next ? 'true' : 'false')}
+          />
         </div>
       </div>
     );

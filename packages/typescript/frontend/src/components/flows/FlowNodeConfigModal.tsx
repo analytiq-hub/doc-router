@@ -1,22 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-  Disclosure,
-  DisclosureButton,
-  DisclosurePanel,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuItems,
-  Tab,
-  TabGroup,
-  TabList,
-  TabPanel,
-  TabPanels,
-} from '@headlessui/react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
+import { FlowDisclosure } from './FlowDisclosure';
+import { FlowWorkspaceDropdown } from './FlowWorkspaceDropdown';
 import { BoltIcon, ChevronRightIcon, EllipsisVerticalIcon, MapPinIcon as MapPinOutlineIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { MapPinIcon as MapPinSolidIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -55,11 +42,6 @@ import {
 import type { ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import { FlowModalSideNavStraddle } from './FlowCanvasViewTabs';
-import {
-  flowWorkspaceDropdownItemSimpleClass,
-  flowWorkspaceMenuPanelClass,
-  flowWorkspaceMenuTriggerIconBtnClass,
-} from './flowWorkspaceMenu';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
 import { copyToClipboard } from '@/utils/clipboard';
 
@@ -295,10 +277,14 @@ const WebhookUrlHeader: React.FC<{
 };
 
 const VariablesAndContext: React.FC = () => (
-  <Disclosure as="div" defaultOpen={false} className="mb-3 rounded border border-[#eceff2] bg-white">
-    <DisclosureButton className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left outline-none hover:bg-gray-50">
-      {({ open }) => (
-        <>
+  <FlowDisclosure className="mb-3 rounded border border-[#eceff2] bg-white" defaultOpen={false}>
+    {({ open, toggle }) => (
+      <>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left outline-none hover:bg-gray-50"
+          onClick={toggle}
+        >
           <span className="flex h-4 w-4 shrink-0 items-center justify-center text-gray-500" aria-hidden>
             <ChevronRightIcon
               className={['h-3 w-3 transition-transform duration-150 ease-out', open ? 'rotate-90' : 'rotate-0'].join(' ')}
@@ -308,46 +294,48 @@ const VariablesAndContext: React.FC = () => (
           <div className="min-w-0 flex-1">
             <div className="truncate text-[11px] font-semibold text-gray-900">Context</div>
           </div>
-        </>
-      )}
-    </DisclosureButton>
-    <DisclosurePanel className="max-h-[280px] overflow-auto text-[11px]">
-      <div className="divide-y divide-gray-100">
-        {(
-          [
-            ['_json', 'Object'],
-            ['_binary', 'Object'],
-          ] as const
-        ).map(([name, preview]) => (
-          <div key={name} className="flex items-center gap-2 px-2 py-1.5">
-            <div className="h-4 w-4 shrink-0" aria-hidden />
-            <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
-              <div
-                className="min-w-0 cursor-grab truncate font-mono font-semibold text-gray-900 active:cursor-grabbing"
-                draggable
-                title={`Drag to insert ${name} into a parameter`}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(
-                    FLOW_VALUE_MIME,
-                    JSON.stringify({
-                      kind: 'contextVar',
-                      varName: name,
-                      path: [],
-                      exampleValue: null,
-                    }),
-                  );
-                  e.dataTransfer.effectAllowed = 'copy';
-                }}
-              >
-                {name}
-              </div>
-              <div className="min-w-0 truncate text-right font-mono text-gray-600">{preview}</div>
+        </button>
+        {open ? (
+          <div className="max-h-[280px] overflow-auto text-[11px]">
+            <div className="divide-y divide-gray-100">
+              {(
+                [
+                  ['_json', 'Object'],
+                  ['_binary', 'Object'],
+                ] as const
+              ).map(([name, preview]) => (
+                <div key={name} className="flex items-center gap-2 px-2 py-1.5">
+                  <div className="h-4 w-4 shrink-0" aria-hidden />
+                  <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+                    <div
+                      className="min-w-0 cursor-grab truncate font-mono font-semibold text-gray-900 active:cursor-grabbing"
+                      draggable
+                      title={`Drag to insert ${name} into a parameter`}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(
+                          FLOW_VALUE_MIME,
+                          JSON.stringify({
+                            kind: 'contextVar',
+                            varName: name,
+                            path: [],
+                            exampleValue: null,
+                          }),
+                        );
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                    >
+                      {name}
+                    </div>
+                    <div className="min-w-0 truncate text-right font-mono text-gray-600">{preview}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
-    </DisclosurePanel>
-  </Disclosure>
+        ) : null}
+      </>
+    )}
+  </FlowDisclosure>
 );
 
 function safeParseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
@@ -917,21 +905,23 @@ const FlowNodeConfigModal: React.FC<{
     URL.revokeObjectURL(url);
   };
 
+  const configTabValue = tab === 0 ? 'parameters' : 'settings';
+
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-[200]">
-      <DialogBackdrop
-        transition
-        className="fixed inset-0 bg-black/20 transition data-[closed]:opacity-0 data-[enter]:duration-200 data-[leave]:duration-150"
-      />
-      <div className="fixed inset-0 flex w-screen items-center justify-center py-2 px-[calc(22px+3pt)]">
-        <DialogPanel
-          transition
-          className="relative flex h-[min(90vh,900px)] max-h-[90vh] w-[min(1200px,90vw)] max-w-[90vw] flex-col overflow-visible rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
+    <>
+      <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+        <DialogContent
+          viewportFrame
+          viewportFrameClassName="z-[200]"
+          overlayClassName="z-[200] bg-black/20 supports-backdrop-filter:backdrop-blur-none"
+          showCloseButton={false}
+          className="z-[200] flex h-[min(90vh,900px)] max-h-[90vh] w-[min(1200px,90vw)] max-w-[90vw] flex-col gap-0 overflow-visible rounded-lg border border-[#e2e4e8] bg-white p-0 shadow-2xl ring-0 sm:max-w-[90vw]"
         >
           {/*
-            Outer panel stays overflow-visible so FlowModalSideNavStraddle buttons (±50% translate on the edge)
-            are not clipped; inner shell keeps overflow-hidden for layout + rounded chrome.
+            Outer shell is `relative` for side straddle. `viewportFrame` flex-centers the panel like the Headless dialog shell.
+            Overflow-visible on this shell so FlowModalSideNavStraddle buttons are not clipped.
           */}
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-visible rounded-lg">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
             <div
@@ -972,24 +962,17 @@ const FlowNodeConfigModal: React.FC<{
               )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              <Menu as="div" className="relative inline-flex">
-                <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
-                  <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
-                </MenuButton>
-                <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                        onClick={() => downloadJson(`node_${node.id}.json`, node)}
-                      >
-                        Download
-                      </button>
-                    )}
-                  </MenuItem>
-                </MenuItems>
-              </Menu>
+              <FlowWorkspaceDropdown
+                trigger={<EllipsisVerticalIcon className="h-5 w-5" aria-hidden />}
+                items={[
+                  {
+                    id: 'download',
+                    label: 'Download',
+                    simple: true,
+                    onSelect: () => downloadJson(`node_${node.id}.json`, node),
+                  },
+                ]}
+              />
               <button
                 type="button"
                 onClick={onClose}
@@ -1072,19 +1055,29 @@ const FlowNodeConfigModal: React.FC<{
                 className="flex min-h-0 min-w-0 overflow-hidden"
               >
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                  <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <Tabs
+                    value={configTabValue}
+                    onValueChange={(v) => setTab(v === 'parameters' ? 0 : 1)}
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                  >
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
                       <div className="flex items-stretch gap-2">
-                        <TabList className="flex min-w-0 flex-1">
-                          {(['Parameters', 'Settings'] as const).map((label) => (
-                            <Tab
-                              key={label}
-                              className="flex-1 border-b-2 border-transparent py-2.5 text-center text-xs font-bold text-gray-600 outline-none data-[selected]:border-primary-600 data-[selected]:text-primary-800"
+                        <TabsPrimitive.List className="flex min-w-0 flex-1">
+                          {(
+                            [
+                              ['parameters', 'Parameters'],
+                              ['settings', 'Settings'],
+                            ] as const
+                          ).map(([value, label]) => (
+                            <TabsPrimitive.Tab
+                              key={value}
+                              value={value}
+                              className="flex-1 border-b-2 border-transparent py-2.5 text-center text-xs font-bold text-gray-600 outline-none data-active:border-primary-600 data-active:text-primary-800"
                             >
                               {label}
-                            </Tab>
+                            </TabsPrimitive.Tab>
                           ))}
-                        </TabList>
+                        </TabsPrimitive.List>
                         {onExecuteStep && !readOnly && !isTrigger ? (
                           <div className="flex shrink-0 items-center pr-1">
                             <button
@@ -1115,8 +1108,10 @@ const FlowNodeConfigModal: React.FC<{
                         ) : null}
                       </div>
                     </div>
-                    <TabPanels className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
-                      <TabPanel>
+                    <TabsContent
+                      value="parameters"
+                      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]"
+                    >
                         <div className="min-w-0 space-y-4">
                           {node && nodeType?.key === SCHEDULE_NODE_KEY ? (
                             <ScheduleTriggerTestHeader
@@ -1176,17 +1171,19 @@ const FlowNodeConfigModal: React.FC<{
                             />
                           )}
                         </div>
-                      </TabPanel>
-                      <TabPanel>
+                    </TabsContent>
+                    <TabsContent
+                      value="settings"
+                      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]"
+                    >
                         <FlowNodeSettingsFields
                           readOnly={readOnly}
                           node={node}
                           nodeType={nodeType}
                           onChange={onChange}
                         />
-                      </TabPanel>
-                    </TabPanels>
-                  </TabGroup>
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </Panel>
 
@@ -1365,13 +1362,18 @@ const FlowNodeConfigModal: React.FC<{
               })}
             </FlowModalSideNavStraddle>
           )}
-        </DialogPanel>
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      <Dialog open={pinEditOpen} onClose={() => setPinEditOpen(false)} className="relative z-[250]">
-        <DialogBackdrop className="fixed inset-0 bg-black/30" />
-        <div className="fixed inset-0 flex items-center justify-center p-3">
-          <DialogPanel className="w-[min(900px,95vw)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl">
+      <Dialog open={pinEditOpen} onOpenChange={setPinEditOpen}>
+        <DialogContent
+          viewportFrame
+          viewportFrameClassName="z-[250] p-3"
+          overlayClassName="z-[250] bg-black/30 supports-backdrop-filter:backdrop-blur-none"
+          showCloseButton={false}
+          className="z-[250] w-[min(900px,95vw)] max-w-[95vw] gap-0 overflow-hidden rounded-lg border border-gray-200 bg-white p-0 shadow-2xl ring-0 sm:max-w-[min(900px,95vw)]"
+        >
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <div className="text-sm font-semibold text-gray-900">Edit pinned output</div>
               <button
@@ -1385,17 +1387,22 @@ const FlowNodeConfigModal: React.FC<{
             </div>
             {pinEditError && <div className="border-b border-gray-100 px-4 py-2 text-sm text-red-600">{pinEditError}</div>}
             <div className="p-3">
-              <TabGroup>
-                <TabList className="flex items-center gap-1 border-b border-gray-200 bg-gray-50 px-2 py-1">
-                  <Tab className="rounded px-2 py-1 text-xs font-semibold text-gray-700 data-[selected]:bg-white data-[selected]:shadow-sm">
+              <Tabs defaultValue="json">
+                <TabsPrimitive.List className="flex items-center gap-1 border-b border-gray-200 bg-gray-50 px-2 py-1">
+                  <TabsPrimitive.Tab
+                    value="json"
+                    className="rounded px-2 py-1 text-xs font-semibold text-gray-700 data-active:bg-white data-active:shadow-sm"
+                  >
                     Json
-                  </Tab>
-                  <Tab className="rounded px-2 py-1 text-xs font-semibold text-gray-700 data-[selected]:bg-white data-[selected]:shadow-sm">
+                  </TabsPrimitive.Tab>
+                  <TabsPrimitive.Tab
+                    value="binary"
+                    className="rounded px-2 py-1 text-xs font-semibold text-gray-700 data-active:bg-white data-active:shadow-sm"
+                  >
                     Binary
-                  </Tab>
-                </TabList>
-                <TabPanels>
-                  <TabPanel>
+                  </TabsPrimitive.Tab>
+                </TabsPrimitive.List>
+                <TabsContent value="json">
                     <div className="rounded border border-gray-200">
                       <Editor
                         height="420px"
@@ -1417,8 +1424,8 @@ const FlowNodeConfigModal: React.FC<{
                     <div className="mt-2 text-xs text-gray-500">
                       Shape: <span className="font-mono">{`[ { ... }, { ... } ]`}</span>
                     </div>
-                  </TabPanel>
-                  <TabPanel>
+                </TabsContent>
+                <TabsContent value="binary">
                     <div className="rounded border border-gray-200 p-3">
                       {!flowOrgApi || !flowId || !flowRevidForPins ? (
                         <div className="text-sm text-gray-600">
@@ -1574,9 +1581,8 @@ const FlowNodeConfigModal: React.FC<{
                         </div>
                       )}
                     </div>
-                  </TabPanel>
-                </TabPanels>
-              </TabGroup>
+                </TabsContent>
+              </Tabs>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">
               <button
@@ -1595,10 +1601,9 @@ const FlowNodeConfigModal: React.FC<{
                 Save
               </button>
             </div>
-          </DialogPanel>
-        </div>
+        </DialogContent>
       </Dialog>
-    </Dialog>
+    </>
   );
 };
 

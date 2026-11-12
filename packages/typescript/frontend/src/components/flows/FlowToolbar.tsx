@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import { FlowWorkspaceDropdown, type FlowWorkspaceMenuItem } from './FlowWorkspaceDropdown';
 import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import {
   FLOW_WORKSPACE_HEADER_HEIGHT_CLASS,
@@ -9,11 +9,6 @@ import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
 } from './flowUiClasses';
-import {
-  flowWorkspaceDropdownItemSimpleClass,
-  flowWorkspaceMenuPanelClass,
-  flowWorkspaceMenuTriggerIconBtnClass,
-} from './flowWorkspaceMenu';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
 const flowToolbarBtnClass =
@@ -170,78 +165,54 @@ const FlowToolbar: React.FC<{
           </>
         )}
         {readOnly && active ? <FlowPublishedIndicator revisionIdHint={activeFlowRevid} /> : null}
-        <Menu as="div" className="relative inline-flex">
-          <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
-            <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
-          </MenuButton>
-          <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
-            {!readOnly && (
-              <MenuItem>
-                {({ focus }) => (
-                  <button
-                    type="button"
-                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                    onClick={() => onOpenSettings()}
-                  >
-                    Settings
-                  </button>
-                )}
-              </MenuItem>
-            )}
-            {!readOnly && onOpenToolSettings ? (
-              <MenuItem>
-                {({ focus }) => (
-                  <button
-                    type="button"
-                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                    onClick={() => onOpenToolSettings()}
-                  >
-                    Tool flow settings
-                  </button>
-                )}
-              </MenuItem>
-            ) : null}
-            <MenuItem>
-              {({ focus }) => (
-                <button
-                  type="button"
-                  className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                  onClick={() => onDownloadFlowJson()}
-                >
-                  Download
-                </button>
-              )}
-            </MenuItem>
-            {!readOnly &&
-              (!active ? (
-                <MenuItem disabled={activateDisabled}>
-                  {({ disabled, focus }) => (
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
-                      onClick={() => void onActivate()}
-                    >
-                      Activate
-                    </button>
-                  )}
-                </MenuItem>
-              ) : (
-                <MenuItem disabled={deactivateDisabled}>
-                  {({ disabled, focus }) => (
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
-                      onClick={() => void onDeactivate()}
-                    >
-                      Deactivate
-                    </button>
-                  )}
-                </MenuItem>
-              ))}
-          </MenuItems>
-        </Menu>
+        <FlowWorkspaceDropdown
+          trigger={<EllipsisVerticalIcon className="h-5 w-5" aria-hidden />}
+          items={(() => {
+            const menuItems: FlowWorkspaceMenuItem[] = [];
+            if (!readOnly) {
+              menuItems.push({
+                id: 'settings',
+                label: 'Settings',
+                simple: true,
+                onSelect: () => onOpenSettings(),
+              });
+            }
+            if (!readOnly && onOpenToolSettings) {
+              menuItems.push({
+                id: 'tool-settings',
+                label: 'Tool flow settings',
+                simple: true,
+                onSelect: () => onOpenToolSettings(),
+              });
+            }
+            menuItems.push({
+              id: 'download',
+              label: 'Download',
+              simple: true,
+              onSelect: () => onDownloadFlowJson(),
+            });
+            if (!readOnly) {
+              if (!active) {
+                menuItems.push({
+                  id: 'activate',
+                  label: 'Activate',
+                  simple: true,
+                  disabled: activateDisabled,
+                  onSelect: () => void onActivate(),
+                });
+              } else {
+                menuItems.push({
+                  id: 'deactivate',
+                  label: 'Deactivate',
+                  simple: true,
+                  disabled: deactivateDisabled,
+                  onSelect: () => void onDeactivate(),
+                });
+              }
+            }
+            return menuItems;
+          })()}
+        />
       </div>
     </div>
   );

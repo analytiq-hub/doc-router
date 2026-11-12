@@ -3,7 +3,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from '@/utils/appRouter';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
-import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import FlowList from '@/components/flows/FlowList';
 import FlowCreate from '@/components/flows/FlowCreate';
 import FlowCredentials from '@/components/flows/FlowCredentials';
@@ -220,54 +225,43 @@ export default function FlowsPageClient({
                   ? 'Creating…'
                   : 'Create flow'}
             </button>
-            <Menu as="div" className="relative -ml-px block">
-              <MenuButton
+            <DropdownMenu>
+              <DropdownMenuTrigger
                 type="button"
                 disabled={menuButtonDisabled}
                 className={createFlowChevronClass}
                 aria-label="More create options"
               >
                 <ChevronDownIcon className="h-3 w-3" aria-hidden />
-              </MenuButton>
-              <MenuItems
-                anchor="bottom end"
-                portal
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
                 className={createMenuPanelClass}
                 style={splitWidthPx != null ? { width: splitWidthPx } : undefined}
               >
                 {tab === 'credentials' ? (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        className={createSplitMenuItemClass(focus)}
-                        onClick={() => void handleCreateFlowNavigate()}
-                      >
-                        Create flow
-                      </button>
-                    )}
-                  </MenuItem>
+                  <DropdownMenuItem
+                    className={createSplitMenuItemClass(false)}
+                    onClick={() => void handleCreateFlowNavigate()}
+                  >
+                    Create flow
+                  </DropdownMenuItem>
                 ) : (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        className={createSplitMenuItemClass(focus)}
-                        onClick={() =>
-                          pushWithSearch((q) => {
-                            q.set('tab', 'credentials');
-                            q.delete('newCredential');
-                            q.set('bootstrapCredential', '1');
-                          })
-                        }
-                      >
-                        Create credential
-                      </button>
-                    )}
-                  </MenuItem>
+                  <DropdownMenuItem
+                    className={createSplitMenuItemClass(false)}
+                    onClick={() =>
+                      pushWithSearch((q) => {
+                        q.set('tab', 'credentials');
+                        q.delete('newCredential');
+                        q.set('bootstrapCredential', '1');
+                      })
+                    }
+                  >
+                    Create credential
+                  </DropdownMenuItem>
                 )}
-              </MenuItems>
-            </Menu>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           )}
         </div>

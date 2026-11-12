@@ -13,13 +13,8 @@ import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import { buildNodeInputPreview, buildNodeOutputPreview, agentIncludeToolTrace, agentToolCallsFromItems, filterAgentNodeLogs, filterAgentOutputItemsJson } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import { FlowWorkspaceDropdown, type FlowWorkspaceMenuItem } from './FlowWorkspaceDropdown';
 import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
-import {
-  flowWorkspaceDropdownItemSimpleClass,
-  flowWorkspaceMenuPanelClass,
-  flowWorkspaceMenuTriggerIconBtnClass,
-} from './flowWorkspaceMenu';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowNodeTracePanel, hasNodeTraceContent, traceEventCount } from './flowNodeTracePanel';
 import { flowPanelColResizeHandleClass, flowPanelColResizeHitAreaMargins } from './flowUiClasses';
@@ -463,38 +458,28 @@ const FlowLogsPanel: React.FC<{
         <div className="flex shrink-0 items-center gap-0.5">
           {execution && (
             <>
-              <Menu as="div" className="relative inline-flex">
-                <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
-                  <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
-                </MenuButton>
-                <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
-                  {execution && canResumeExecution(execution) ? (
-                    <MenuItem>
-                      {({ focus }) => (
-                        <button
-                          type="button"
-                          disabled={resumeLoading}
-                          className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                          onClick={() => void onResume()}
-                        >
-                          {resumeLoading ? 'Resuming…' : resumeExecutionLabel(execution)}
-                        </button>
-                      )}
-                    </MenuItem>
-                  ) : null}
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                        onClick={() => onDownloadExecutionJson()}
-                      >
-                        Download
-                      </button>
-                    )}
-                  </MenuItem>
-                </MenuItems>
-              </Menu>
+              <FlowWorkspaceDropdown
+                trigger={<EllipsisVerticalIcon className="h-5 w-5" aria-hidden />}
+                items={(() => {
+                  const menuItems: FlowWorkspaceMenuItem[] = [];
+                  if (execution && canResumeExecution(execution)) {
+                    menuItems.push({
+                      id: 'resume',
+                      label: resumeLoading ? 'Resuming…' : resumeExecutionLabel(execution),
+                      simple: true,
+                      disabled: resumeLoading,
+                      onSelect: () => void onResume(),
+                    });
+                  }
+                  menuItems.push({
+                    id: 'download',
+                    label: 'Download',
+                    simple: true,
+                    onSelect: () => onDownloadExecutionJson(),
+                  });
+                  return menuItems;
+                })()}
+              />
             </>
           )}
           {(execution || focusExecutionId) && (

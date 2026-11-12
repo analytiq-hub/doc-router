@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Switch } from '@headlessui/react';
+import { Switch } from '@/components/ui/switch';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
@@ -9,8 +9,6 @@ import {
   flowLabelClass,
   flowMonacoParamShellClass,
   flowSelectClass,
-  flowSwitchThumbClass,
-  flowSwitchTrackClass,
 } from './flowUiClasses';
 import {
   FLOW_NODE_BATCH_SIZE_DEFAULT,
@@ -382,11 +380,9 @@ export const FlowNodeSettingsFields: React.FC<{
         <span className="text-sm text-gray-800">Disabled</span>
         <Switch
           checked={Boolean(node.disabled)}
-          onChange={(checked) => onChange({ disabled: checked })}
-          className={flowSwitchTrackClass}
-        >
-          <span className={flowSwitchThumbClass} aria-hidden />
-        </Switch>
+          onCheckedChange={(checked) => onChange({ disabled: checked })}
+          disabled={readOnly}
+        />
       </div>
       <div>
         <label className={flowLabelClass} htmlFor="flow-node-on-error">
@@ -441,15 +437,13 @@ export const FlowNodeSettingsFields: React.FC<{
           <span className="text-sm text-gray-800">Allow multiple HTTP methods</span>
           <Switch
             checked={multipleMethods}
-            onChange={(checked) =>
+            onCheckedChange={(checked) =>
               onChange({
                 parameters: { ...(node.parameters ?? {}), multiple_methods: checked },
               })
             }
-            className={flowSwitchTrackClass}
-          >
-            <span className={flowSwitchThumbClass} aria-hidden />
-          </Switch>
+            disabled={readOnly}
+          />
         </div>
       ) : null}
     </div>
@@ -826,11 +820,9 @@ export const FlowNodeParameterFields: React.FC<{
             ) : null}
             <Switch
               checked={Boolean(v)}
-              onChange={(checked) => setField(key, checked)}
-              className={flowSwitchTrackClass}
-            >
-              <span className={flowSwitchThumbClass} aria-hidden />
-            </Switch>
+              onCheckedChange={(checked) => setField(key, checked)}
+              disabled={readOnly}
+            />
           </div>
         </div>
       );

@@ -159,9 +159,18 @@ Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — sha
 
 ---
 
-### Phase 7 — Flows UI (2–4 weeks, separate track)
+### Phase 7 — Flows UI — **Headless → shadcn complete** (`devel`)
 
-Keep **React Flow**. Replace Headless in flow modals, palettes, settings (`FlowNodeConfigModal`, etc.) with shadcn `Dialog` / `Popover` / `Tabs`.
+Keep **React Flow**. Flow workspace chrome now uses shadcn primitives; no `@headlessui/react` under `src/`.
+
+**Done:**
+
+- ✅ Shared helpers: `FlowWorkspaceDropdown`, `FlowDisclosure`
+- ✅ Modals / fullscreen editors: `FlowNodeConfigModal`, settings & tool modals, Monaco/textarea expand dialogs → `Dialog` + `DialogContent`
+- ✅ Menus: list/credentials/toolbar/canvas/logs/editor/flows header → `DropdownMenu` via `FlowWorkspaceDropdown` (or shadcn menu on flows split button)
+- ✅ Switches in node config + credential edit + tool settings → shadcn `Switch`
+- ✅ Node config tabs + pin editor → shadcn `Tabs`
+- ✅ Removed `@headlessui/react` from frontend `package.json` (no TS/TSX imports remain)
 
 ---
 

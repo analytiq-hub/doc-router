@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { flowInputClass } from './flowUiClasses';
 
@@ -67,13 +67,12 @@ export function FlowTextareaEditorField({
         </button>
       </div>
 
-      <Dialog open={modalOpen} onClose={() => setModalOpen(false)} className="relative z-[250]">
-        <DialogBackdrop className="fixed inset-0 bg-black/30" />
-        <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-6">
-          <DialogPanel
-            className="flex w-[min(720px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl"
-            data-testid="textarea-editor-fullscreen"
-          >
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="z-[250] flex w-[min(720px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(720px,calc(100vw-1.5rem))]"
+          data-testid="textarea-editor-fullscreen"
+        >
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <DialogTitle className="text-sm font-semibold text-gray-900">Edit {label}</DialogTitle>
               <button
@@ -88,8 +87,7 @@ export function FlowTextareaEditorField({
             <div className="ignore-key-press-canvas min-h-0 flex-1 p-3">
               {renderTextarea(16, `${textareaClass} min-h-[min(480px,calc(100vh-12rem))] w-full`)}
             </div>
-          </DialogPanel>
-        </div>
+        </DialogContent>
       </Dialog>
     </>
   );

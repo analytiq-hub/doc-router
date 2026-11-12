@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
+import { FlowWorkspaceDropdown, type FlowWorkspaceMenuItem } from './FlowWorkspaceDropdown';
 import { Link } from 'react-router-dom';
 import { useRouter } from '@/utils/appRouter';
 import {
@@ -14,13 +14,6 @@ import {
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import FlowStatusBadge from './FlowStatusBadge';
-import {
-  flowWorkspaceDropdownDividerClass,
-  flowWorkspaceDropdownItemClass,
-  flowWorkspaceDropdownItemDestructiveClass,
-  flowWorkspaceMenuPanelClass,
-  flowWorkspaceMenuTriggerIconBtnClass,
-} from './flowWorkspaceMenu';
 import { useFlowApi } from './useFlowApi';
 import type { FlowListItem } from '@docrouter/sdk';
 import { useOrgCapability } from '@/hooks/useOrgPermissions';
@@ -201,83 +194,54 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                       >
                         <PlayIcon className="h-5 w-5" />
                       </button>
-                      <Menu as="div" className="relative inline-flex">
-                        <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} title="More" aria-label="More">
-                          <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
-                        </MenuButton>
-                        <MenuItems anchor="bottom end" portal className={flowWorkspaceMenuPanelClass}>
-                          <MenuItem>
-                            {({ focus }) => (
-                              <button
-                                type="button"
-                                className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                                onClick={() => (canConfigWrite ? handleEdit(item) : handleView(item))}
-                              >
-                                <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden />{' '}
-                                {canConfigWrite ? 'Edit' : 'View'}
-                              </button>
-                            )}
-                          </MenuItem>
-                          <MenuItem>
-                            {({ focus }) => (
-                              <button
-                                type="button"
-                                className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                                onClick={() => void handleRun(item)}
-                              >
-                                <PlayIcon className="h-4 w-4 shrink-0" aria-hidden /> Run
-                              </button>
-                            )}
-                          </MenuItem>
-                          {canConfigWrite && (
-                            <>
-                              <MenuItem>
-                                {({ focus }) => (
-                                  <button
-                                    type="button"
-                                    className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                                    onClick={() => void handleToggleActive(item)}
-                                  >
-                                    {item.flow.active ? (
-                                      <>
-                                        <BoltSlashIcon className="h-4 w-4 shrink-0" aria-hidden /> Deactivate
-                                      </>
-                                    ) : (
-                                      <>
-                                        <BoltIcon className="h-4 w-4 shrink-0" aria-hidden /> Activate
-                                      </>
-                                    )}
-                                  </button>
-                                )}
-                              </MenuItem>
-                              <MenuItem disabled={cloningFlowId === item.flow.flow_id}>
-                                {({ focus, disabled }) => (
-                                  <button
-                                    type="button"
-                                    disabled={disabled}
-                                    className={`${flowWorkspaceDropdownItemClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
-                                    onClick={() => void handleClone(item)}
-                                  >
-                                    <Square2StackIcon className="h-4 w-4 shrink-0" aria-hidden /> Clone
-                                  </button>
-                                )}
-                              </MenuItem>
-                              <MenuSeparator className={flowWorkspaceDropdownDividerClass} />
-                              <MenuItem>
-                                {({ focus }) => (
-                                  <button
-                                    type="button"
-                                    className={`${flowWorkspaceDropdownItemDestructiveClass} w-full ${focus ? 'bg-red-50' : ''}`}
-                                    onClick={() => void handleDelete(item)}
-                                  >
-                                    <TrashIcon className="h-4 w-4 shrink-0" aria-hidden /> Delete
-                                  </button>
-                                )}
-                              </MenuItem>
-                            </>
-                          )}
-                        </MenuItems>
-                      </Menu>
+                      <FlowWorkspaceDropdown
+                        trigger={<EllipsisVerticalIcon className="h-5 w-5" aria-hidden />}
+                        items={(() => {
+                          const menuItems: FlowWorkspaceMenuItem[] = [
+                            {
+                              id: 'edit',
+                              label: canConfigWrite ? 'Edit' : 'View',
+                              icon: <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                              onSelect: () => (canConfigWrite ? handleEdit(item) : handleView(item)),
+                            },
+                            {
+                              id: 'run',
+                              label: 'Run',
+                              icon: <PlayIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                              onSelect: () => void handleRun(item),
+                            },
+                          ];
+                          if (canConfigWrite) {
+                            menuItems.push(
+                              {
+                                id: 'toggle-active',
+                                label: item.flow.active ? 'Deactivate' : 'Activate',
+                                icon: item.flow.active ? (
+                                  <BoltSlashIcon className="h-4 w-4 shrink-0" aria-hidden />
+                                ) : (
+                                  <BoltIcon className="h-4 w-4 shrink-0" aria-hidden />
+                                ),
+                                onSelect: () => void handleToggleActive(item),
+                              },
+                              {
+                                id: 'clone',
+                                label: 'Clone',
+                                icon: <Square2StackIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                                onSelect: () => void handleClone(item),
+                                disabled: cloningFlowId === item.flow.flow_id,
+                              },
+                              {
+                                id: 'delete',
+                                label: 'Delete',
+                                icon: <TrashIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                                onSelect: () => void handleDelete(item),
+                                destructive: true,
+                              },
+                            );
+                          }
+                          return menuItems;
+                        })()}
+                      />
                     </div>
                   </td>
                 </tr>

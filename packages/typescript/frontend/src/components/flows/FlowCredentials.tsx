@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
+import { FlowWorkspaceDropdown, type FlowWorkspaceMenuItem } from './FlowWorkspaceDropdown';
 import {
   BoltIcon,
   EllipsisVerticalIcon,
@@ -14,13 +14,6 @@ import { getApiErrorMsg } from '@/utils/api';
 import { toast } from 'sonner';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
-import {
-  flowWorkspaceDropdownDividerClass,
-  flowWorkspaceDropdownItemClass,
-  flowWorkspaceDropdownItemDestructiveClass,
-  flowWorkspaceMenuPanelClass,
-  flowWorkspaceMenuTriggerIconBtnClass,
-} from './flowWorkspaceMenu';
 import { flowInputClass, flowLabelClass } from './flowUiClasses';
 import {
   defaultCredentialAccountName,
@@ -395,54 +388,37 @@ const FlowCredentials: React.FC<{
                         >
                           <PencilSquareIcon className="h-5 w-5" aria-hidden />
                         </button>
-                        <Menu as="div" className="relative inline-flex">
-                          <MenuButton
-                            className={flowWorkspaceMenuTriggerIconBtnClass}
-                            title="More"
-                            aria-label="More"
-                          >
-                            <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
-                          </MenuButton>
-                          <MenuItems anchor="bottom end" portal className={flowWorkspaceMenuPanelClass}>
-                            {canTest ? (
-                              <MenuItem>
-                                {({ focus }) => (
-                                  <button
-                                    type="button"
-                                    disabled={testLoadingId === row.credential_id}
-                                    className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''} disabled:cursor-not-allowed disabled:opacity-50`}
-                                    onClick={() => void runTest(row)}
-                                  >
-                                    <BoltIcon className="h-4 w-4 shrink-0" aria-hidden /> Test
-                                  </button>
-                                )}
-                              </MenuItem>
-                            ) : null}
-                            <MenuItem>
-                              {({ focus }) => (
-                                <button
-                                  type="button"
-                                  className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
-                                  onClick={() => openEdit(row)}
-                                >
-                                  <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden /> Edit
-                                </button>
-                              )}
-                            </MenuItem>
-                            <MenuSeparator className={flowWorkspaceDropdownDividerClass} />
-                            <MenuItem>
-                              {({ focus }) => (
-                                <button
-                                  type="button"
-                                  className={`${flowWorkspaceDropdownItemDestructiveClass} w-full ${focus ? 'bg-red-50' : ''}`}
-                                  onClick={() => setDeleteRow(row)}
-                                >
-                                  <TrashIcon className="h-4 w-4 shrink-0" aria-hidden /> Delete
-                                </button>
-                              )}
-                            </MenuItem>
-                          </MenuItems>
-                        </Menu>
+                        <FlowWorkspaceDropdown
+                          trigger={<EllipsisVerticalIcon className="h-5 w-5" aria-hidden />}
+                          items={(() => {
+                            const menuItems: FlowWorkspaceMenuItem[] = [];
+                            if (canTest) {
+                              menuItems.push({
+                                id: 'test',
+                                label: 'Test',
+                                icon: <BoltIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                                onSelect: () => void runTest(row),
+                                disabled: testLoadingId === row.credential_id,
+                              });
+                            }
+                            menuItems.push(
+                              {
+                                id: 'edit',
+                                label: 'Edit',
+                                icon: <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                                onSelect: () => openEdit(row),
+                              },
+                              {
+                                id: 'delete',
+                                label: 'Delete',
+                                icon: <TrashIcon className="h-4 w-4 shrink-0" aria-hidden />,
+                                onSelect: () => setDeleteRow(row),
+                                destructive: true,
+                              },
+                            );
+                            return menuItems;
+                          })()}
+                        />
                       </div>
                     </div>
                   </td>

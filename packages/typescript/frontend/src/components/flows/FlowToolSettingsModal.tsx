@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { Switch } from '@headlessui/react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { FlowHeader } from '@docrouter/sdk';
-import { flowInputClass, flowLabelClass, flowSwitchThumbClass, flowSwitchTrackClass } from './flowUiClasses';
+import { flowInputClass, flowLabelClass } from './flowUiClasses';
 
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
@@ -51,10 +51,8 @@ const FlowToolSettingsModal: React.FC<FlowToolSettingsModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-[120]">
-      <DialogBackdrop className="fixed inset-0 bg-black/30" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="flex w-full max-w-lg flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+    <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
+      <DialogContent showCloseButton={false} className="z-[120] gap-0 overflow-hidden p-0 sm:max-w-lg">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
             <DialogTitle className="text-base font-semibold text-gray-900">Tool flow settings</DialogTitle>
             <button
@@ -77,12 +75,9 @@ const FlowToolSettingsModal: React.FC<FlowToolSettingsModalProps> = ({
               <span className="text-sm text-gray-800">Callable as tool</span>
               <Switch
                 checked={callable}
-                onChange={setCallable}
+                onCheckedChange={setCallable}
                 disabled={readOnly || busy}
-                className={flowSwitchTrackClass}
-              >
-                <span className={flowSwitchThumbClass} aria-hidden />
-              </Switch>
+              />
             </div>
 
             <div>
@@ -110,8 +105,7 @@ const FlowToolSettingsModal: React.FC<FlowToolSettingsModalProps> = ({
               </button>
             ) : null}
           </div>
-        </DialogPanel>
-      </div>
+      </DialogContent>
     </Dialog>
   );
 };
