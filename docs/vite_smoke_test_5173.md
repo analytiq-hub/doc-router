@@ -1,11 +1,11 @@
 # Vite smoke test (dev :5173 and compose :3000)
 
-Manual regression on branch `vite`. Re-run after large router, auth, or deploy changes.
+Manual regression on `main`. Re-run after large router, auth, deploy, or UI migration changes.
 
 **Prereqs:** FastAPI :8000 + Vite :5173, signed-in session.
 
 - **Default:** `make dev` → FastAPI + **http://localhost:5173** (Vite only)
-- **Docker compose:** edge **http://localhost:3000** → Vite nginx frontend (see `deploy/compose/nginx.conf`). Rebuild **both** `frontend` and `backend` on branch `vite` (`docker compose build --no-cache frontend backend`). SPA must use **`/fastapi`** (not `http://localhost:8000`) so session cookies work.
+- **Docker compose:** edge **http://localhost:3000** → Vite nginx frontend (see `deploy/compose/nginx.conf`). Rebuild **both** `frontend` and `backend` (`docker compose build --no-cache frontend backend`). SPA must use **`/fastapi`** (not `http://localhost:8000`) so session cookies work.
 
 ## Session / API
 
@@ -46,7 +46,7 @@ Build notes (non-blocking): esbuild CSS nesting warnings from Formio styles; mai
 
 ## Docker Compose (`deploy/compose`, edge :3000)
 
-Verified **Phase A** on branch `vite` (rebuild `frontend` + `backend` from this branch).
+Compose smoke checklist (rebuild `frontend` + `backend` after image changes).
 
 | Check | Result |
 |-------|--------|

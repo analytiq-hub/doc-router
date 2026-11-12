@@ -38,7 +38,7 @@ The Smart Document Router is a full-stack document processing platform with huma
 - Located in `packages/typescript/frontend/src/`
 - React Router SPA; routes in `src/router.tsx`, screens in `src/pages/`
 - Auth/session via FastAPI cookies (`AppSessionContext`)
-- Material-UI and TailwindCSS for styling today; planned move to Tailwind 4 + shadcn — see `docs/design/ui-migration.md`
+- Vite SPA (Next removed); styling is MUI + Tailwind 3 today — **active roadmap:** Tailwind 4 + shadcn in `docs/design/ui-migration.md`
 - React Flow for visual workflow builder
 - Monaco Editor for code editing
 - Multi-tenant organization structure

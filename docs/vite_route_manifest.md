@@ -1,7 +1,7 @@
 # Vite SPA route manifest
 
 Tracks SPA route coverage in `src/router.tsx` (page components under `src/pages/**`).  
-**Last updated:** Phase E — branch `vite`, Next App Router tree removed.
+**Last updated:** Vite SPA on `main` (Next removed).
 
 ## Legend
 
