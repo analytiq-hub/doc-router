@@ -14,6 +14,9 @@ interface AgentTabProps {
   documentId: string;
 }
 
+/** Below this footer width, model + Tools + mic do not fit; hide idle mic (dictation still via hotkey). */
+const COMPOSER_FOOTER_MIN_WIDTH_FOR_MIC = 260;
+
 export default function AgentTab({ organizationId, documentId }: AgentTabProps) {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [documentLoaded, setDocumentLoaded] = useState(false);
@@ -163,8 +166,23 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     sendMessageWithHistory(history, newContent);
   };
 
+  const composerFooterRef = useRef<HTMLDivElement>(null);
+  const [composerHasRoomForMic, setComposerHasRoomForMic] = useState(true);
+
+  useEffect(() => {
+    const el = composerFooterRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const update = () => {
+      setComposerHasRoomForMic(el.clientWidth >= COMPOSER_FOOTER_MIN_WIDTH_FOR_MIC);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const inputBlock = (
-    <div className="shrink-0 border-t border-gray-200 bg-white min-w-0">
+    <div className="shrink-0 border-t border-gray-200 bg-white min-w-0 overflow-visible">
       {documentNotFound && (
         <div className="px-3 pt-2 pb-1 text-sm text-gray-600 bg-gray-50 border-b border-gray-200">
           Document not found. Chat is not available.
@@ -196,17 +214,20 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           />
         </div>
       </div>
-      <div className="flex items-center justify-between px-3 pb-2 pt-0 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="relative" ref={modelDropRef}>
+      <div
+        ref={composerFooterRef}
+        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pb-2 pt-0 min-w-0 overflow-visible"
+      >
+        <div className="flex items-center gap-1.5 min-w-0 overflow-visible">
+          <div className="relative z-10 min-w-0 shrink overflow-visible" ref={modelDropRef}>
             <button
               type="button"
               onClick={() => { setShowModelDropUp((v) => !v); setShowToolsDropUp(false); }}
-              className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
+              className="flex max-w-full items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5 min-w-0"
               title="Model"
             >
-              <ChevronUp className={`h-3.5 w-3.5 ${showModelDropUp ? '' : 'rotate-180'}`} aria-hidden />
-              <span className="max-w-[120px] truncate">{state.model}</span>
+              <ChevronUp className={`h-3.5 w-3.5 shrink-0 ${showModelDropUp ? '' : 'rotate-180'}`} aria-hidden />
+              <span className="truncate">{state.model}</span>
             </button>
             {showModelDropUp && (
               <div
@@ -231,11 +252,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               </div>
             )}
           </div>
-          <div className="relative" ref={toolsDropRef}>
+          <div className="relative z-10 shrink-0 overflow-visible" ref={toolsDropRef}>
             <button
               type="button"
               onClick={() => { setShowToolsDropUp((v) => !v); setShowModelDropUp(false); }}
-              className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
+              className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5 whitespace-nowrap"
               title={state.autoApprovedTools.length > 0 ? `Tools (${state.autoApprovedTools.length} auto-approved)` : 'Tools'}
             >
               <ChevronUp className={`h-3.5 w-3.5 ${showToolsDropUp ? '' : 'rotate-180'}`} aria-hidden />
@@ -293,6 +314,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             )}
           </div>
         </div>
+        <div className="flex shrink-0 justify-end">
         {state.loading ? (
           <button
             type="button"
@@ -321,7 +343,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           >
             <CircleArrowUp className="h-6 w-6" aria-hidden />
           </button>
-        ) : dictationSupported && !chatDisabled ? (
+        ) : dictationSupported && !chatDisabled && composerHasRoomForMic ? (
           <button
             type="button"
             onClick={toggleDictation}
@@ -340,6 +362,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             <CircleArrowUp className="h-6 w-6" aria-hidden />
           </button>
         )}
+        </div>
       </div>
     </div>
   );
