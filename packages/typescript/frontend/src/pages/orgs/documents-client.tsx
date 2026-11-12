@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { useSearchParams, useRouter } from '@/utils/appRouter'
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions'
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities'
+import { OrgPageContainer } from '@/components/OrgPageContainer'
 import { Button } from '@/components/ui/button'
 import { docsListPath, docsUploadPath } from '@/utils/documentsRoutes'
 
@@ -32,7 +33,7 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
 
   if (tab === 'upload' && canUpload) {
     return (
-      <div className="mx-auto max-w-6xl p-4">
+      <OrgPageContainer>
         <div className="mb-6">
           <Button variant="ghost" render={<Link to={listPath} />}>
             <ArrowLeft data-icon="inline-start" />
@@ -45,12 +46,12 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
           subtitle="Add files to process with prompts. Tags and metadata on upload apply to each document."
         />
         <DocumentUpload organizationId={organizationId} defaultCaseId={caseIdFromQuery} />
-      </div>
+      </OrgPageContainer>
     )
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-4">
+    <OrgPageContainer>
       <div data-tour="documents">
         <PageHeader
           title="Documents"
@@ -66,6 +67,6 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
         />
       </div>
       <OrgDocumentList organizationId={organizationId} initialCaseIdFilter={caseIdFromQuery} />
-    </div>
+    </OrgPageContainer>
   )
 }

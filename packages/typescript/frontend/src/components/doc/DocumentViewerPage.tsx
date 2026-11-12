@@ -15,6 +15,7 @@ import type { PDFViewerControlsType } from '@/components/Layout';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { EXTRACTION_HIGHLIGHT_AUTO_CLEAR_MS } from '@/constants/extractionHighlight';
 import { cn } from 'cn';
+import { MuiPdfThemeIsland } from '@/components/pdf/MuiPdfThemeIsland';
 
 const AGENT_PANEL_BREAKPOINT = 640;
 
@@ -119,6 +120,7 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
   const pdfId = Array.isArray(id) ? id[0] : id;
 
   return (
+    <MuiPdfThemeIsland>
     <div className={cn('flex h-full min-h-0 flex-col overflow-hidden')}>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <PanelGroup
@@ -172,5 +174,6 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
         </PanelGroup>
       </div>
     </div>
+    </MuiPdfThemeIsland>
   );
 }

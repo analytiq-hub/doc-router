@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from '@/utils/dynamicImport';
-import { Box } from '@mui/material';
+import { MuiPdfThemeIsland } from '@/components/pdf/MuiPdfThemeIsland';
 import {
   Panel,
   PanelGroup,
@@ -82,8 +82,9 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
   }, [showLeftPanel, showPdfPanel]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+    <MuiPdfThemeIsland>
+    <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <PanelGroup
             ref={panelGroupRef}
             id={`doc-viewer-panels-${id}`}
@@ -93,7 +94,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
             {showLeftPanel && (
               <>
                 <Panel id="doc-sidebar" defaultSize={leftPanelSize!} minSize={15} order={1}>
-                  <Box sx={{ height: '100%', overflow: 'auto' }}>
+                  <div className="h-full overflow-auto">
                     <Suspense fallback={<div className="h-64 flex items-center justify-center">Loading sidebar...</div>}>
                       <PDFSidebar
                         organizationId={organizationId}
@@ -102,7 +103,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
                         onHighlight={setHighlightInfo}
                       />
                     </Suspense>
-                  </Box>
+                  </div>
                 </Panel>
                 <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
               </>
@@ -110,18 +111,19 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
 
             {showPdfPanel && (
               <Panel id="doc-pdf" defaultSize={mainPanelSize!} minSize={20} order={2}>
-                <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
-                  <PDFViewer
-                    organizationId={organizationId}
-                    id={id}
-                    highlightInfo={highlightInfo}
-                    onPdfDocumentReady={setPdfDocument}
-                  />
-                </Box>
+                <div className="h-full min-w-0 overflow-hidden">
+                    <PDFViewer
+                      organizationId={organizationId}
+                      id={id}
+                      highlightInfo={highlightInfo}
+                      onPdfDocumentReady={setPdfDocument}
+                    />
+                </div>
               </Panel>
             )}
           </PanelGroup>
-        </Box>
-      </Box>
+        </div>
+      </div>
+    </MuiPdfThemeIsland>
   );
 }

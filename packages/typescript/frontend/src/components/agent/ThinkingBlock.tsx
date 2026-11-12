@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 /** Cursor-style collapsible thinking block. Live (loading) or completed (with content). */
 export default function ThinkingBlock({
@@ -46,9 +45,9 @@ export default function ThinkingBlock({
         )}
         <span className="flex-1" />
         {expanded ? (
-          <ExpandLessIcon sx={{ fontSize: 18 }} className="text-gray-500 shrink-0" />
+          <ChevronUp className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden />
         ) : (
-          <ExpandMoreIcon sx={{ fontSize: 18 }} className="text-gray-500 shrink-0" />
+          <ChevronDown className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden />
         )}
       </button>
       {expanded && (

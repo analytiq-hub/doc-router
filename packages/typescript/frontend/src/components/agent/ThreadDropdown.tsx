@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import HistoryIcon from '@mui/icons-material/History';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import { History, Plus, Trash2 } from 'lucide-react';
 import type { AgentThreadSummary } from './useAgentChat';
 
 interface ThreadDropdownProps {
@@ -115,7 +113,7 @@ export default function ThreadDropdown({
         className="flex h-9 max-w-[11rem] min-w-[7.5rem] items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 text-xs text-gray-700 hover:bg-gray-50 sm:max-w-[12.5rem] sm:text-sm"
         title="Conversation history"
       >
-        <HistoryIcon sx={{ fontSize: 18 }} className="shrink-0 text-gray-500" />
+        <History className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden />
         <span className="truncate">{triggerLabel}</span>
         {triggerSub && (
           <span className="shrink-0 text-xs text-gray-400">{triggerSub}</span>
@@ -130,7 +128,7 @@ export default function ThreadDropdown({
               onClick={() => { onNewChat(); setOpen(false); }}
               className="flex items-center gap-2 w-full px-2 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded"
             >
-              <AddIcon fontSize="small" />
+              <Plus className="h-4 w-4" aria-hidden />
               {newChatLabel}
             </button>
           </div>
@@ -170,7 +168,7 @@ export default function ThreadDropdown({
                         className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-100 text-gray-400 hover:text-red-600"
                         title="Delete"
                       >
-                        <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                        <Trash2 className="h-4 w-4" aria-hidden />
                       </button>
                     </div>
                   ))}

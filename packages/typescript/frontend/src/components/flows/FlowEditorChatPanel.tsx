@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FlowChatStreamEvent, FlowNode, RevisionSnapshotPayload } from '@docrouter/sdk';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import SendIcon from '@mui/icons-material/Send';
+import { Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -346,7 +346,7 @@ const FlowEditorChatPanel: React.FC<{
               className="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-3 py-2 text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-gray-300"
               aria-label="Send message"
             >
-              <SendIcon sx={{ fontSize: '1.25rem' }} />
+              <Send className="h-5 w-5" aria-hidden />
             </button>
           </div>
         </div>

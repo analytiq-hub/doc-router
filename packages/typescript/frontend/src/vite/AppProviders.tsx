@@ -4,21 +4,17 @@ import { AppSessionProvider } from '@/contexts/AppSessionContext';
 import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { createQueryClient } from '@/api/queryClient';
-import { ThemeShell } from './ThemeShell';
-
 /** Session + theme only — router-bound providers live in `RouterProviders`. */
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => createQueryClient());
   return (
     <QueryClientProvider client={queryClient}>
-    <ThemeShell>
       <TooltipProvider>
         <AppSessionProvider initialSession={null}>
           {children}
         </AppSessionProvider>
         <SonnerToaster />
       </TooltipProvider>
-    </ThemeShell>
     </QueryClientProvider>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import ReplayIcon from '@mui/icons-material/Replay';
+import { RotateCcw } from 'lucide-react';
 import type { AgentChatMessage, PendingToolCall } from './useAgentChat';
 import AgentMessage from './AgentMessage';
 import ThinkingBlock from './ThinkingBlock';
@@ -330,7 +330,7 @@ export default function AgentChat({
                 className="shrink-0 p-1.5 rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
                 title="Resubmit from this point"
               >
-                <ReplayIcon sx={{ fontSize: 16 }} />
+                <RotateCcw className="h-4 w-4" aria-hidden />
               </button>
             )}
             </div>
@@ -377,7 +377,7 @@ export default function AgentChat({
                     className="shrink-0 p-1.5 rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
                     title="Resubmit from this point"
                   >
-                    <ReplayIcon sx={{ fontSize: 16 }} />
+                    <RotateCcw className="h-4 w-4" aria-hidden />
                   </button>
                 )}
               </div>

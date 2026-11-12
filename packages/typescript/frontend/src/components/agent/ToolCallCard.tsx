@@ -2,11 +2,13 @@
 
 import React, { useState } from 'react';
 import type { PendingToolCall } from './useAgentChat';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import { Menu, MenuItem } from '@mui/material';
+import { CheckCircle2, ChevronDown, CircleX } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface ToolCallCardProps {
   toolCall: PendingToolCall;
@@ -36,7 +38,7 @@ export default function ToolCallCard({
   showApprovalStatus = true,
 }: ToolCallCardProps) {
   const [showRaw, setShowRaw] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   let argsObj: Record<string, unknown> = {};
   try {
     argsObj = JSON.parse(toolCall.arguments || '{}');
@@ -45,21 +47,19 @@ export default function ToolCallCard({
   }
   const hasArgs = Object.keys(argsObj).length > 0;
 
-  const handleMenuClose = () => setMenuAnchor(null);
-
   return (
     <div className="group">
       <div
         className="flex items-center gap-1.5 py-0.5 text-xs cursor-pointer select-none"
         onClick={() => setShowRaw((v) => !v)}
       >
-        <ExpandMoreIcon
-          sx={{ fontSize: 14 }}
-          className={`text-gray-400 transition-transform duration-150 shrink-0 ${showRaw ? 'rotate-180' : ''}`}
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-150 ${showRaw ? 'rotate-180' : ''}`}
+          aria-hidden
         />
         <span className="font-medium text-gray-600">{toolCall.name}</span>
         {!resolved && !isAutoApproved && (
-          <span className="flex items-center ml-auto rounded overflow-hidden border border-green-200">
+          <span className="ml-auto flex items-center overflow-hidden rounded border border-green-200">
             <button
               type="button"
               onClick={(e) => {
@@ -72,76 +72,43 @@ export default function ToolCallCard({
             >
               Approve
             </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuAnchor(e.currentTarget);
-              }}
-              disabled={disabled}
-              className="px-0.5 py-0.5 text-green-600 hover:bg-green-100 border-l border-green-200 disabled:opacity-50"
-              title="More options"
-            >
-              <ArrowDropDownIcon sx={{ fontSize: 16 }} />
-            </button>
-            <Menu
-              anchorEl={menuAnchor}
-              open={Boolean(menuAnchor)}
-              onClose={handleMenuClose}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-              slotProps={{
-                paper: {
-                  sx: { width: 140, minWidth: 140 },
-                },
-              }}
-            >
-              <MenuItem
-                onClick={() => {
-                  onReject();
-                  handleMenuClose();
-                }}
-                sx={{
-                  display: 'flex',
-                  width: '100%',
-                  justifyContent: 'flex-end',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  py: 0.5,
-                  px: 1.5,
-                  fontSize: '11px',
-                  fontWeight: 500,
-                  color: '#b91c1c',
-                }}
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger
+                disabled={disabled}
+                className="border-l border-green-200 px-0.5 py-0.5 text-green-600 hover:bg-green-100 disabled:opacity-50"
+                title="More options"
+                onClick={(e) => e.stopPropagation()}
               >
-                Reject
-                <CancelOutlinedIcon sx={{ fontSize: 16 }} />
-              </MenuItem>
-              {onAlwaysApprove && (
-                <MenuItem
-                  onClick={() => {
-                    onAlwaysApprove(toolCall.name);
-                    onApprove();
-                    handleMenuClose();
-                  }}
-                  sx={{
-                    display: 'flex',
-                    width: '100%',
-                    justifyContent: 'flex-end',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    py: 0.5,
-                    px: 1.5,
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    color: '#1d4ed8',
+                <ChevronDown className="h-4 w-4" aria-hidden />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[140px]">
+                <DropdownMenuItem
+                  className="justify-end gap-1 text-[11px] font-medium text-red-700"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReject();
+                    setMenuOpen(false);
                   }}
                 >
-                  Always approve
-                  <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />
-                </MenuItem>
-              )}
-            </Menu>
+                  Reject
+                  <CircleX className="h-4 w-4" aria-hidden />
+                </DropdownMenuItem>
+                {onAlwaysApprove ? (
+                  <DropdownMenuItem
+                    className="justify-end gap-1 text-[11px] font-medium text-blue-800"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAlwaysApprove(toolCall.name);
+                      onApprove();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Always approve
+                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </span>
         )}
         {resolved && !isAutoApproved && showApprovalStatus && (

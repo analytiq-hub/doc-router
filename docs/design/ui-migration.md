@@ -183,11 +183,20 @@ Keep **React Flow**. Flow workspace chrome now uses shadcn primitives; no `@head
 
 ---
 
-### Phase 9 — Remove legacy UI packages (~1 week)
+### Phase 9 — Remove legacy UI packages — **in progress (Track A on `devel`)**
 
-When grep-clean: remove `@mui/*`, `@emotion/*`, `@headlessui/react`, redundant icon packs, duplicate toast libs, `ThemeShell` / `theme.ts`.
+**Done (app chrome off MUI):**
 
-**Exit:** `package.json` dependency story matches orchestrator’s “one styling system” rule.
+- ✅ Removed global `ThemeShell` from `AppProviders`; MUI scoped to document viewer via `MuiPdfThemeIsland`
+- ✅ Agent UI, flows chat, `InfoTooltip`, `DraggablePanel` (non-PDF), `PDFViewerControls` (layout toolbar) → Lucide / shadcn
+- ✅ Deleted unused `AuthForm`, `AuthButtonSocialMedia`, `ThemeRegistry`
+- ✅ `@headlessui/react` already removed (Phase 7)
+
+**Remaining (Phase 8 island — do not strip deps yet):**
+
+- `PDFViewer.tsx`, `PDFExtractionSidebar.tsx`, `PDFFlowsSidebar.tsx`, `styles/theme.ts`
+
+**Exit:** `package.json` dependency story matches orchestrator’s “one styling system” rule once Phase 8 PDF port completes and `@mui/*` / `@emotion/*` can be removed.
 
 ---
 

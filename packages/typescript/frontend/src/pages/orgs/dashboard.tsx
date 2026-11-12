@@ -1,14 +1,15 @@
 'use client'
 
 import Dashboard from '@/components/Dashboard';
+import { OrgPageContainer } from '@/components/OrgPageContainer';
 import { useRouteParams } from '@/utils/useRouteParams';
 
 const DashboardPage: React.FC<{ params: Promise<{ organizationId: string }> }> = (props) => {
   const { organizationId } = useRouteParams(props);
   return (
-    <div className="container mx-auto p-4">
+    <OrgPageContainer>
       <Dashboard organizationId={organizationId} />
-    </div>
+    </OrgPageContainer>
   );
 };
 

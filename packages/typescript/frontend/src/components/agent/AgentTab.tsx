@@ -1,10 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
-import StopCircleIcon from '@mui/icons-material/StopCircle';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import MicIcon from '@mui/icons-material/Mic';
+import { CircleArrowUp, ChevronUp, Mic, Square } from 'lucide-react';
 import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
@@ -208,7 +205,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
               title="Model"
             >
-              <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showModelDropUp ? '' : 'rotate-180'} />
+              <ChevronUp className={`h-3.5 w-3.5 ${showModelDropUp ? '' : 'rotate-180'}`} aria-hidden />
               <span className="max-w-[120px] truncate">{state.model}</span>
             </button>
             {showModelDropUp && (
@@ -241,7 +238,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
               title={state.autoApprovedTools.length > 0 ? `Tools (${state.autoApprovedTools.length} auto-approved)` : 'Tools'}
             >
-              <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showToolsDropUp ? '' : 'rotate-180'} />
+              <ChevronUp className={`h-3.5 w-3.5 ${showToolsDropUp ? '' : 'rotate-180'}`} aria-hidden />
               <span>Tools</span>
               {state.autoApprovedTools.length > 0 && (
                 <span className="text-[10px] text-primary-600 font-medium">({state.autoApprovedTools.length})</span>
@@ -303,7 +300,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             className="flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-700 shrink-0"
             title="Stop"
           >
-            <StopCircleIcon sx={{ fontSize: 24 }} />
+            <Square className="h-6 w-6 fill-current" aria-hidden />
           </button>
         ) : isListening ? (
           <button
@@ -312,7 +309,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             className="flex items-center justify-center w-8 h-8 text-primary-600 hover:text-primary-700 shrink-0 animate-pulse ring-2 ring-primary-400/50 rounded-full"
             title="Click to send"
           >
-            <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
+            <CircleArrowUp className="h-6 w-6" aria-hidden />
           </button>
         ) : hasText ? (
           <button
@@ -322,7 +319,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             className={`flex items-center justify-center w-8 h-8 shrink-0 ${chatDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:text-primary-600'}`}
             title="Send"
           >
-            <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
+            <CircleArrowUp className="h-6 w-6" aria-hidden />
           </button>
         ) : dictationSupported && !chatDisabled ? (
           <button
@@ -331,7 +328,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             className="flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-700 shrink-0"
             title="Voice input (Ctrl+Shift+Space)"
           >
-            <MicIcon sx={{ fontSize: 24 }} />
+            <Mic className="h-6 w-6" aria-hidden />
           </button>
         ) : (
           <button
@@ -340,7 +337,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             className="flex items-center justify-center w-8 h-8 text-gray-300 cursor-not-allowed shrink-0"
             title="Send"
           >
-            <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
+            <CircleArrowUp className="h-6 w-6" aria-hidden />
           </button>
         )}
       </div>

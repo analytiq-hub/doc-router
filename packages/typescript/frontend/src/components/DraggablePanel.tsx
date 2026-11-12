@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import DragIndicator from '@mui/icons-material/DragIndicator';
+import { GripVertical } from 'lucide-react';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
 export interface DraggablePanelProps {
@@ -68,17 +68,13 @@ export default function DraggablePanel({
         onPointerDown={handlePointerDown}
         role="presentation"
       >
-        <DragIndicator className="shrink-0 text-slate-400" fontSize="small" />
+        <GripVertical className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
         {title != null || headerActions != null ? (
           <>
             {title != null ? (
-              <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-slate-800">
-                {title}
-              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-slate-800">{title}</div>
             ) : (
-              <span className="min-w-0 flex-1 select-none text-xs font-medium text-slate-600">
-                Drag to move
-              </span>
+              <span className="min-w-0 flex-1 select-none text-xs font-medium text-slate-600">Drag to move</span>
             )}
             {headerActions != null ? <div className="flex shrink-0 items-center gap-1">{headerActions}</div> : null}
           </>

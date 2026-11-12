@@ -1,11 +1,4 @@
-import { 
-  ViewSidebar, 
-  PictureAsPdf,
-  ViewSidebarOutlined,
-  PictureAsPdfOutlined,
-  Chat as ChatIcon,
-  ChatOutlined as ChatOutlinedIcon
-} from '@mui/icons-material';
+import { FileText, MessageSquare, PanelLeft } from 'lucide-react';
 
 interface PDFViewerControlsProps {
   showLeftPanel: boolean;
@@ -42,17 +35,17 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
             : 'text-brand-foreground/70 hover:bg-brand-foreground/15 hover:text-brand-foreground'
           }
         `}
-        title={showLeftPanel ? `Hide ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel` : `Show ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel`}
+        title={
+          showLeftPanel
+            ? `Hide ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel`
+            : `Show ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel`
+        }
       >
-        {showLeftPanel ? (
-          <ViewSidebar className="w-4 h-4" />
-        ) : (
-          <ViewSidebarOutlined className="w-4 h-4" />
-        )}
+        <PanelLeft className={`h-4 w-4 ${showLeftPanel ? '' : 'opacity-50'}`} aria-hidden />
       </button>
-      
+
       <button
-        onClick={() => setShowPdfPanel(prev => !prev)}
+        onClick={() => setShowPdfPanel((prev) => !prev)}
         className={`
           flex items-center justify-center
           w-8 h-[31px]
@@ -63,18 +56,14 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
             : 'text-brand-foreground/70 hover:bg-brand-foreground/15 hover:text-brand-foreground'
           }
         `}
-        title={showPdfPanel ? "Hide PDF Panel" : "Show PDF Panel"}
+        title={showPdfPanel ? 'Hide PDF Panel' : 'Show PDF Panel'}
       >
-        {showPdfPanel ? (
-          <PictureAsPdf className="w-4 h-4" />
-        ) : (
-          <PictureAsPdfOutlined className="w-4 h-4" />
-        )}
+        <FileText className={`h-4 w-4 ${showPdfPanel ? '' : 'opacity-50'}`} aria-hidden />
       </button>
 
       {!isSmallScreen && (
         <button
-          onClick={() => setShowChatPanel(prev => !prev)}
+          onClick={() => setShowChatPanel((prev) => !prev)}
           className={`
             flex items-center justify-center
             w-8 h-[31px]
@@ -85,17 +74,13 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
               : 'text-brand-foreground/70 hover:bg-brand-foreground/15 hover:text-brand-foreground'
             }
           `}
-          title={showChatPanel ? "Hide Chat Panel" : "Show Chat Panel"}
+          title={showChatPanel ? 'Hide Chat Panel' : 'Show Chat Panel'}
         >
-          {showChatPanel ? (
-            <ChatIcon className="w-4 h-4" />
-          ) : (
-            <ChatOutlinedIcon className="w-4 h-4" />
-          )}
+          <MessageSquare className={`h-4 w-4 ${showChatPanel ? '' : 'opacity-50'}`} aria-hidden />
         </button>
       )}
     </div>
   );
 };
 
-export default PDFViewerControls; 
+export default PDFViewerControls;

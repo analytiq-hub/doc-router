@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ExtractionPanelProps {
   extraction: Record<string, unknown> | null;
@@ -30,9 +29,9 @@ export default function ExtractionPanel({ extraction, title = 'Current extractio
       >
         <span>{title}</span>
         {collapsed ? (
-          <ExpandMoreIcon fontSize="small" />
+          <ChevronDown className="h-4 w-4" aria-hidden />
         ) : (
-          <ExpandLessIcon fontSize="small" />
+          <ChevronUp className="h-4 w-4" aria-hidden />
         )}
       </button>
       {!collapsed && (
