@@ -1,570 +1,457 @@
-import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DocRouterOrgApi } from '@/utils/api';
-import { Schema, SchemaResponseFormat, SchemaProperty } from '@docrouter/sdk';
-import { SchemaField } from '@/types/ui';
-import { getApiErrorMsg } from '@/utils/api';
-import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import DownloadIcon from '@mui/icons-material/Download';
-import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import BadgeIcon from '@mui/icons-material/Badge';
-import { designTokens } from '@/lib/designTokens';
-import { useRouter } from '@/utils/appRouter';
-import { Link } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import { formatLocalDate } from '@/utils/date';
-import SchemaNameModal from './SchemaNameModal';
-import SchemaInfoModal from './SchemaInfoModal';
-import { useOrgCapability } from '@/hooks/useOrgPermissions';
-import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
+'use client'
+
+import { Copy, Download, Info, Pencil, PencilLine, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
+import type { Schema, SchemaProperty, SchemaResponseFormat } from '@docrouter/sdk'
+import { SchemaField } from '@/types/ui'
+
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { DataTable, type DataTableColumn, type PaginationModel, type SortModel } from '@/components/data-table'
+import { ErrorAlert } from '@/components/ErrorAlert'
+import {
+  activeFields,
+  type FilterField,
+  FilterBuilder,
+  type FilterItem,
+  isActiveFilter,
+  withFilterFields,
+} from '@/components/FilterBuilder'
+import { FormDialog } from '@/components/FormDialog'
+import { PropertiesDialog } from '@/components/PropertiesDialog'
+import { RowActionsMenu } from '@/components/RowActionsMenu'
+import { SearchInput } from '@/components/SearchInput'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { useDebounced } from '@/lib/useDebounced'
+import { shortName } from '@/lib/shortName'
+import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
+import { formatLocalDate } from '@/utils/date'
+import { useOrgCapability } from '@/hooks/useOrgPermissions'
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities'
 
 const jsonStringifyForQuery = (value: unknown): string =>
-  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v))
+
+function jsonSchemaToFields(responseFormat: SchemaResponseFormat): SchemaField[] {
+  const fields: SchemaField[] = []
+  const properties = responseFormat.json_schema.schema.properties
+
+  const processProperty = (name: string, prop: SchemaProperty): SchemaField => {
+    let fieldType: SchemaField['type']
+    switch (prop.type) {
+      case 'string':
+        fieldType = 'str'
+        break
+      case 'integer':
+        fieldType = 'int'
+        break
+      case 'number':
+        fieldType = 'float'
+        break
+      case 'boolean':
+        fieldType = 'bool'
+        break
+      case 'array':
+        fieldType = 'array'
+        break
+      case 'object':
+        fieldType = 'object'
+        break
+      default:
+        fieldType = 'str'
+    }
+    return { name, type: fieldType, description: prop.description }
+  }
+
+  Object.entries(properties).forEach(([name, prop]) => {
+    fields.push(processProperty(name, prop))
+  })
+  return fields
+}
+
+type SchemaRow = Schema & { created_by?: string }
+
+function SchemaNameDialog({
+  organizationId,
+  originalName,
+  isCloning,
+  onClose,
+  onSubmit,
+}: {
+  organizationId: string
+  originalName: string
+  isCloning: boolean
+  onClose: () => void
+  onSubmit: (name: string) => Promise<void>
+}) {
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+  const [name, setName] = useState(originalName)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [existingNames, setExistingNames] = useState<string[]>([])
+
+  useEffect(() => {
+    setName(originalName)
+  }, [originalName])
+
+  useEffect(() => {
+    void docRouterOrgApi.listSchemas({ limit: 100 }).then((res) => {
+      setExistingNames(res.schemas.map((s) => s.name.toLowerCase()))
+    })
+  }, [docRouterOrgApi])
+
+  const save = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setError('Schema name cannot be empty')
+      return
+    }
+    if (
+      trimmed.toLowerCase() !== originalName.toLowerCase() &&
+      existingNames.includes(trimmed.toLowerCase())
+    ) {
+      setError('A schema with this name already exists')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await onSubmit(trimmed)
+      toast.success(isCloning ? 'Schema cloned' : 'Schema renamed')
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Request failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <FormDialog
+      title={isCloning ? 'Clone schema' : 'Rename schema'}
+      submitLabel={isCloning ? 'Clone' : 'Save'}
+      submitDisabled={!name.trim() || (!isCloning && name.trim() === originalName)}
+      busy={busy}
+      error={error}
+      onSubmit={() => void save()}
+      onClose={onClose}
+    >
+      <Field>
+        <FieldLabel htmlFor="schema-name">Name</FieldLabel>
+        <Input id="schema-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </Field>
+    </FormDialog>
+  )
+}
+
+function SchemaPropertiesPanel({ schema, onClose }: { schema: SchemaRow; onClose: () => void }) {
+  const [createdByName, setCreatedByName] = useState<string | null>(null)
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
+  const fieldCount = jsonSchemaToFields(schema.response_format).length
+
+  useEffect(() => {
+    let cancelled = false
+    if (!schema.created_by) {
+      setCreatedByName(null)
+      return
+    }
+    void docRouterAccountApi
+      .getUser(schema.created_by)
+      .then((user) => {
+        if (!cancelled) setCreatedByName(user.name ?? schema.created_by!)
+      })
+      .catch(() => {
+        if (!cancelled) setCreatedByName(schema.created_by!)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [schema.created_by, docRouterAccountApi])
+
+  return (
+    <PropertiesDialog
+      title={schema.name}
+      description="Schema properties"
+      onClose={onClose}
+      columns={2}
+      properties={[
+        { label: 'Name', value: schema.name },
+        { label: 'Version', value: `v${schema.schema_version}` },
+        { label: 'Fields', value: fieldCount },
+        { label: 'Created', value: schema.created_at ? formatLocalDate(String(schema.created_at)) : '—' },
+        { label: 'Created by', value: schema.created_by ? (createdByName ?? '…') : '—' },
+        { label: 'Schema ID', value: <span className="font-mono text-xs">{schema.schema_id}</span> },
+        { label: 'Revision ID', value: <span className="font-mono text-xs">{schema.schema_revid}</span> },
+      ]}
+    />
+  )
+}
 
 const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
-  const router = useRouter();
-  const { hasCapability: canConfigWrite, loading: permissionsLoading } = useOrgCapability(
-    organizationId,
-    CAP_CONFIG_WRITE,
-  );
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [schemas, setSchemas] = useState<Schema[]>([]);
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
-  const [total, setTotal] = useState(0);
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
-  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedSchema, setSelectedSchema] = useState<Schema | null>(null);
-  const [isNameModalOpen, setIsNameModalOpen] = useState(false);
-  const [isCloning, setIsCloning] = useState(false);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+
+  const [schemas, setSchemas] = useState<Schema[]>([])
+  const [loadError, setLoadError] = useState<unknown>(null)
+  const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
+  const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
+  const [filters, setFilters] = useState<FilterItem[]>([])
+  const [filterRequest, setFilterRequest] = useState<{ field: string } | null>(null)
+  const [search, setSearch] = useState('')
+  const nameSearch = useDebounced(search.trim())
+  const activeFilters = filters.filter(isActiveFilter)
+
+  const [viewing, setViewing] = useState<SchemaRow | null>(null)
+  const [nameEdit, setNameEdit] = useState<{ schema: Schema; cloning: boolean } | null>(null)
+  const [deleting, setDeleting] = useState<Schema | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<unknown>(null)
 
   const loadSchemas = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
     try {
-      setIsLoading(true);
-      const sortForApi = sortModel.filter(
-        (s) => s.field !== 'schema_version' && s.field !== 'fields'
-      );
-      const filterForApi: GridFilterModel = {
-        ...filterModel,
-        items: filterModel.items.filter(
-          (i) => i.field !== 'schema_version' && i.field !== 'fields'
-        ),
-      };
+      const sortForApi = sortModel.filter((s) => s.field !== 'fields' && s.field !== 'actions')
       const response = await docRouterOrgApi.listSchemas({
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize,
-        nameSearch: searchTerm || undefined,
+        skip: pagination.page * pagination.pageSize,
+        limit: pagination.pageSize,
+        nameSearch: nameSearch || undefined,
         sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
-      });
-      setSchemas(response.schemas);
-      setTotal(response.total_count);
+        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+      })
+      setSchemas(response.schemas)
+      setTotal(response.total_count ?? response.schemas.length)
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading schemas';
-      setMessage('Error: ' + errorMsg);
+      setLoadError(error)
     } finally {
-      setIsLoading(false);
+      setLoading(false)
     }
-  }, [paginationModel, docRouterOrgApi, searchTerm, sortModel, filterModel]);
-
-  const handleDelete = async (schemaId: string) => {
-    try {
-      setIsLoading(true);
-      await docRouterOrgApi.deleteSchema({ schemaId });
-      setSchemas(schemas.filter(schema => schema.schema_id !== schemaId));
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error deleting schema';
-      setMessage('Error: ' + errorMsg);
-      toastActionError('Failed to delete schema', error);
-    } finally {
-      setIsLoading(false);
-      handleMenuClose();
-    }
-  };
+  }, [docRouterOrgApi, pagination, nameSearch, sortModel, activeFilters])
 
   useEffect(() => {
-    loadSchemas();
-  }, [loadSchemas]);
+    void loadSchemas()
+  }, [loadSchemas])
 
-  useEffect(() => {
-    setAnchorEl(null);
-  }, [organizationId, permissionsLoading, canConfigWrite]);
-
-  // Update the edit handler
-  const handleEdit = (schema: Schema) => {
-    if (!canConfigWrite) return;
-    router.push(`/orgs/${organizationId}/schemas/${schema.schema_revid}`);
-    handleMenuClose();
-  };
-
-  const openSchemaProperties = (schema: Schema) => {
-    setAnchorEl(null);
-    setSelectedSchema(schema);
-    setIsInfoModalOpen(true);
-  };
-
-  // Add a function to handle schema name change
-  const handleNameSchema = (schema: Schema) => {
-    setSelectedSchema(schema);
-    setIsCloning(false);
-    setIsNameModalOpen(true);
-    handleMenuClose();
-  };
+  const editPath = (schema: Schema) => `/orgs/${organizationId}/schemas/${schema.schema_revid}`
 
   const handleNameSubmit = async (newName: string) => {
-    if (!selectedSchema) return;
-    
-    try {
-      // Create a new schema config with the updated name
-      const schemaConfig = {
-        name: newName,
-        response_format: selectedSchema.response_format
-      };
-      
-      if (isCloning) {
-        // For cloning, create a new schema
-        await docRouterOrgApi.createSchema(schemaConfig);
-      } else {
-        // For renaming, update existing schema
-        await docRouterOrgApi.updateSchema({
-          schemaId: selectedSchema.schema_id,
-          schema: schemaConfig
-        });
-      }
-      
-      // Refresh the schema list
-      await loadSchemas();
-    } catch (error) {
-      console.error(`Error ${isCloning ? 'cloning' : 'renaming'} schema:`, error);
-      toastActionError(`Failed to ${isCloning ? 'clone' : 'rename'} schema`, error);
-      throw error;
+    if (!nameEdit) return
+    const { schema, cloning } = nameEdit
+    const schemaConfig = { name: newName, response_format: schema.response_format }
+    if (cloning) {
+      await docRouterOrgApi.createSchema(schemaConfig)
+    } else {
+      await docRouterOrgApi.updateSchema({ schemaId: schema.schema_id, schema: schemaConfig })
     }
-  };
+    await loadSchemas()
+  }
 
-  const handleCloseNameModal = () => {
-    setIsNameModalOpen(false);
-    setSelectedSchema(null);
-    setIsCloning(false);
-  };
-
-  // Add a function to handle schema download
   const handleDownload = (schema: Schema) => {
     try {
-      // Create a JSON blob from the schema
-      const schemaJson = JSON.stringify(schema.response_format.json_schema, null, 2);
-      const blob = new Blob([schemaJson], { type: 'application/json' });
-      
-      // Create a URL for the blob
-      const url = URL.createObjectURL(blob);
-      
-      // Create a temporary anchor element to trigger the download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${schema.name.replace(/\s+/g, '_')}_schema.json`;
-      
-      // Append to the document, click, and remove
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-      
-      handleMenuClose();
-    } catch (error) {
-      console.error('Error downloading schema:', error);
-      setMessage('Error: Failed to download schema');
+      const schemaJson = JSON.stringify(schema.response_format.json_schema, null, 2)
+      const blob = new Blob([schemaJson], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${schema.name.replace(/\s+/g, '_')}_schema.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Download started')
+    } catch {
+      toast.error('Failed to download schema')
     }
-  };
+  }
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, schema: Schema) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedSchema(schema);
-  };
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await docRouterOrgApi.deleteSchema({ schemaId: deleting.schema_id })
+      toast.success('Schema deleted')
+      setDeleting(null)
+      void loadSchemas()
+    } catch (error) {
+      setDeleteError(error)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const filterFields: FilterField[] = [
+    { field: 'name', label: 'Name', kind: 'text' },
+    { field: 'schema_version', label: 'Version', kind: 'text' },
+    { field: 'created_at', label: 'Created', kind: 'date' },
+  ]
 
-  // Add a new function to handle clone operation
-  const handleCloneOperation = (schema: Schema) => {
-    setSelectedSchema(schema);
-    setIsCloning(true);
-    setIsNameModalOpen(true);
-    handleMenuClose();
-  };
-
-  // Server-side filtering; no client-side filter
-  const filteredSchemas = schemas;
-
-  // Helper function to convert JSON schema to fields for display
-  const jsonSchemaToFields = (responseFormat: SchemaResponseFormat): SchemaField[] => {
-    const fields: SchemaField[] = [];
-    const properties = responseFormat.json_schema.schema.properties;
-
-    const processProperty = (name: string, prop: SchemaProperty): SchemaField => {
-      let fieldType: SchemaField['type'];
-
-      switch (prop.type) {
-        case 'string':
-          fieldType = 'str';
-          break;
-        case 'integer':
-          fieldType = 'int';
-          break;
-        case 'number':
-          fieldType = 'float';
-          break;
-        case 'boolean':
-          fieldType = 'bool';
-          break;
-        case 'array':
-          fieldType = 'array';
-          break;
-        case 'object':
-          fieldType = 'object';
-          break;
-        default:
-          fieldType = 'str';
-      }
-
-      return { 
-        name, 
-        type: fieldType,
-        description: prop.description
-      };
-    };
-
-    Object.entries(properties).forEach(([name, prop]) => {
-      fields.push(processProperty(name, prop));
-    });
-
-    return fields;
-  };
-
-  // Define columns for the data grid
-  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
-  const columns = useMemo<GridColDef[]>(() => [
+  const columns: DataTableColumn<Schema>[] = [
     {
       field: 'name',
-      headerName: 'Schema Name',
+      headerName: 'Schema',
       flex: 1,
-      minWidth: 140,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => (
-        <div
-          className={`text-primary-600 truncate ${canConfigWrite ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
-          title={params.row.name}
-          onClick={() => {
-            if (canConfigWrite) {
-              handleEdit(params.row);
-            } else {
-              openSchemaProperties(params.row);
-            }
-          }}
-        >
-          {params.row.name}
-        </div>
-      ),
+      minWidth: 160,
+      renderCell: ({ row }) =>
+        canConfigWrite ? (
+          <Link to={editPath(row)} className="text-primary hover:underline">
+            <span className="line-clamp-2" title={row.name}>
+              {row.name}
+            </span>
+          </Link>
+        ) : (
+          <button type="button" className="text-left hover:underline" onClick={() => setViewing(row)}>
+            {row.name}
+          </button>
+        ),
     },
     {
       field: 'fields',
       headerName: 'Fields',
       flex: 2,
+      minWidth: 200,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => {
-        // Convert JSON Schema to fields for display
-        const fields = jsonSchemaToFields(params.row.response_format);
+      hideable: false,
+      renderCell: ({ row }) => {
+        const fields = jsonSchemaToFields(row.response_format)
         return (
-          <div className="flex flex-col justify-center w-full h-full">
-            {fields.map((field, index) => (
-              <div key={index} className="text-sm text-gray-600 leading-6 truncate" title={`${field.name}: ${field.type}`}>
+          <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+            {fields.map((field) => (
+              <li key={field.name} className="truncate" title={`${field.name}: ${field.type}`}>
                 {`${field.name}: ${field.type}`}
-              </div>
+              </li>
             ))}
-          </div>
-        );
-      },
-    },
-    {
-      field: 'created_at',
-      headerName: 'Created',
-      type: 'dateTime',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      valueGetter: (value: unknown, row: { created_at?: unknown }) => {
-        const v = (row?.created_at ?? value) as string | Date | null | undefined;
-        if (!v) return null;
-        if (v instanceof Date) return v;
-        const d = new Date(v);
-        return Number.isNaN(d.getTime()) ? null : d;
-      },
-      valueFormatter: (params: GridRenderCellParams) => {
-        const p = params as unknown as { value?: unknown } | null;
-        if (!p?.value) return '';
-        const v = p.value as Date | string;
-        const iso = v instanceof Date ? v.toISOString() : String(v);
-        return formatLocalDate(iso);
-      },
-      renderCell: (params: GridRenderCellParams) => {
-        const anyParams = params as unknown as { row?: { created_at?: unknown } };
-        if (!anyParams?.row?.created_at) return '';
-        return <div className="flex items-center h-full min-w-0 text-gray-600">
-          <span className="truncate">{formatLocalDate(anyParams.row.created_at as string)}</span>
-        </div>;
+          </ul>
+        )
       },
     },
     {
       field: 'schema_version',
       headerName: 'Version',
-      width: 120,
+      width: 90,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => (
-        <div className="flex items-center gap-2 h-full">
-          <span className="text-gray-600">v{params.row.schema_version}</span>
-        </div>
-      ),
+      renderCell: ({ row }) => <span className="text-sm">v{row.schema_version}</span>,
+    },
+    {
+      field: 'created_at',
+      headerName: 'Created',
+      width: 120,
+      renderCell: ({ row }) =>
+        row.created_at ? (
+          <span className="text-sm text-muted-foreground">{formatLocalDate(String(row.created_at))}</span>
+        ) : (
+          ''
+        ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
-      headerAlign: 'center' as const,
-      align: 'center' as const,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <div className="flex gap-2 items-center h-full">
-          <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row as Schema)}
-            disabled={permissionsLoading}
-            className="text-gray-600 hover:bg-gray-50"
-          >
-            <MoreVertIcon />
-          </IconButton>
-        </div>
+      hideable: false,
+      resizable: false,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            { label: 'Properties', icon: Info, onSelect: () => setViewing(row) },
+            canConfigWrite && { label: 'Edit', icon: Pencil, to: editPath(row) },
+            canConfigWrite && {
+              label: 'Rename',
+              icon: PencilLine,
+              onSelect: () => setNameEdit({ schema: row, cloning: false }),
+            },
+            canConfigWrite && {
+              label: 'Clone',
+              icon: Copy,
+              onSelect: () => setNameEdit({ schema: row, cloning: true }),
+            },
+            { label: 'Download', icon: Download, onSelect: () => handleDownload(row) },
+            canConfigWrite && {
+              label: 'Delete',
+              icon: Trash2,
+              destructive: true,
+              onSelect: () => setDeleting(row),
+            },
+          ]}
+        />
       ),
     },
-  ], [router, organizationId, canConfigWrite, permissionsLoading]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  ]
 
   return (
-    <div className="p-4 mx-auto">
-      <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
-        <p className="text-sm">
-          Schemas define the structure for extracting key data fields from your documents. Below is a list of your existing schemas.
-          {canConfigWrite ? (
-            <>
-              {' '}
-              If none are available,{' '}
-              <Link to={`/orgs/${organizationId}/schemas?tab=schema-create`} className="text-primary-600 font-medium hover:underline">
-                click here
-              </Link>{' '}
-              or use the tab above to create a new schema.
-            </>
-          ) : (
-            <> {CONFIG_WRITE_VIEW_ONLY_HINT}</>
-          )}
-        </p>
-      </div>
-      <h2 className="text-xl font-bold mb-4 hidden md:block">Schemas</h2>
-      
-      {/* Search Box */}
-      <div className="mb-4">
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Search schemas..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </div>
-
-      {/* Message */}
-      {message && (
-        <div className={`mb-4 p-3 rounded ${
-          message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
-        }`}>
-          {message}
+    <>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={(value) => {
+              setSearch(value)
+              setPagination((p) => ({ ...p, page: 0 }))
+            }}
+            placeholder="Search schemas"
+          />
+          <FilterBuilder
+            fields={filterFields}
+            value={filters}
+            request={filterRequest}
+            onChange={(items) => {
+              setFilters(items)
+              setPagination((p) => ({ ...p, page: 0 }))
+            }}
+          />
         </div>
-      )}
-
-      {/* Data Grid */}
-      <div style={{ height: 400, width: '100%' }}>
-        <DataGrid
-          rows={filteredSchemas}
-          columns={columns}
-          getRowId={(row) => row.schema_revid}
-          sortingMode="server"
-          sortModel={sortModel}
-          onSortModelChange={(model) => {
-            setSortModel(
-              model.filter((s) => s.field !== 'schema_version' && s.field !== 'fields')
-            );
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
-          }}
-          filterMode="server"
-          filterModel={filterModel}
-          onFilterModelChange={(model) => {
-            setFilterModel({
-              ...model,
-              items: model.items.filter(
-                (i) => i.field !== 'schema_version' && i.field !== 'fields'
-              ),
-            });
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
-          }}
-          pageSizeOptions={[5, 10, 20]}
-          disableRowSelectionOnClick
-          loading={isLoading}
-          paginationMode="server"
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          rowCount={total}
-          getRowHeight={({ model }) => {
-            const fields = jsonSchemaToFields(model.response_format);
-            const numFields = fields.length;
-            return Math.max(52, 24 * numFields + 16);
-          }}
-          sx={{
-            '& .MuiDataGrid-cell': {
-              padding: 'px',
-              display: 'flex',
-              alignItems: 'center',
-            },
-            '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: designTokens.secondary,  // Using Tailwind colors
-            },
-            '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${designTokens.border} !important`,  // Using Tailwind colors
-            },
-          }}
-        />
+        <ErrorAlert error={loadError} />
+        <div className="h-150 min-h-[24rem]">
+          <DataTable
+            aria-label="Schemas"
+            rows={schemas}
+            getRowId={(row) => row.schema_revid}
+            columns={withFilterFields(columns, filterFields)}
+            activeFilterFields={activeFields(filters)}
+            onFilterColumn={(field) => setFilterRequest({ field })}
+            rowCount={total}
+            loading={loading}
+            paginationModel={pagination}
+            onPaginationModelChange={setPagination}
+            sortModel={sortModel}
+            onSortModelChange={(model) =>
+              setSortModel(model.filter((s) => s.field !== 'fields' && s.field !== 'actions'))
+            }
+            pageSizeOptions={[10, 25, 50]}
+            autoRowHeight
+          />
+        </div>
       </div>
-      
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        {canConfigWrite && (
-          <MenuItem
-            onClick={() => {
-              if (selectedSchema) handleEdit(selectedSchema);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-primary-600" />
-            <span>Edit</span>
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => {
-            if (selectedSchema) openSchemaProperties(selectedSchema);
-          }}
-          className="flex items-center gap-2"
-        >
-          <BadgeIcon fontSize="small" className="text-primary-600" />
-          <span>Properties</span>
-        </MenuItem>
-        {canConfigWrite && (
-          <>
-            <MenuItem
-              onClick={() => {
-                if (selectedSchema) handleNameSchema(selectedSchema);
-              }}
-              className="flex items-center gap-2"
-            >
-              <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
-              <span>Rename</span>
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                if (selectedSchema) handleCloneOperation(selectedSchema);
-              }}
-              className="flex items-center gap-2"
-            >
-              <ContentCopyIcon fontSize="small" className="text-purple-600" />
-              <span>Clone</span>
-            </MenuItem>
-          </>
-        )}
-        <MenuItem
-          onClick={() => {
-            if (selectedSchema) handleDownload(selectedSchema);
-          }}
-          className="flex items-center gap-2"
-        >
-          <DownloadIcon fontSize="small" className="text-green-600" />
-          <span>Download</span>
-        </MenuItem>
-        {canConfigWrite && (
-          <MenuItem
-            onClick={() => {
-              if (selectedSchema) handleDelete(selectedSchema.schema_id);
-            }}
-            className="flex items-center gap-2"
-          >
-            <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-            <span>Delete</span>
-          </MenuItem>
-        )}
-      </Menu>
-      
-      {/* Rename/Clone Modal */}
-      {selectedSchema && (
-        <SchemaNameModal
-          isOpen={isNameModalOpen}
-          onClose={handleCloseNameModal}
-          schemaName={isCloning ? `${selectedSchema.name} (Copy)` : selectedSchema.name}
-          onSubmit={handleNameSubmit}
-          isCloning={isCloning}
-          organizationId={organizationId}
-        />
-      )}
-      
-      {/* Info Modal */}
-      {selectedSchema && (
-        <SchemaInfoModal
-          isOpen={isInfoModalOpen}
-          onClose={() => {
-            setIsInfoModalOpen(false);
-            setSelectedSchema(null);
-          }}
-          schema={selectedSchema}
-        />
-      )}
-    </div>
-  );
-};
 
-export default SchemaList;
+      {viewing ? <SchemaPropertiesPanel schema={viewing} onClose={() => setViewing(null)} /> : null}
+      {nameEdit ? (
+        <SchemaNameDialog
+          organizationId={organizationId}
+          originalName={nameEdit.cloning ? `${nameEdit.schema.name} (Copy)` : nameEdit.schema.name}
+          isCloning={nameEdit.cloning}
+          onClose={() => setNameEdit(null)}
+          onSubmit={handleNameSubmit}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete schema"
+        message={`Delete the schema "${shortName(deleting?.name)}" and all its versions?`}
+        busy={deleteBusy}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => {
+          setDeleting(null)
+          setDeleteError(null)
+        }}
+      />
+    </>
+  )
+}
+
+export default SchemaList

@@ -27,7 +27,6 @@ import TourGuide from '@/components/TourGuide';
 import LicenseBanner from '@/components/LicenseBanner';
 import { appName } from '@/config/branding';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -259,17 +258,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             open ? 'w-52' : 'w-16 overflow-visible',
           )}
         >
-          <nav className={cn('flex h-full flex-col py-1', open ? 'overflow-hidden' : 'overflow-visible')}>
+          <nav
+            aria-label="Main"
+            className={cn(
+              'flex h-full flex-col justify-between gap-1 p-2',
+              open ? 'overflow-hidden' : 'overflow-visible',
+            )}
+          >
             {status === 'authenticated' ? (
-              <>
-                <div>{fileMenuItems.slice(0, 1).map(renderMenuItem)}</div>
-                <Separator className="my-1" />
-                <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
-                  {fileMenuItems.slice(1).map(renderMenuItem)}
-                </div>
-              </>
-            ) : null}
-            <Separator className="my-1" />
+              <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+                {fileMenuItems.map(renderMenuItem)}
+              </div>
+            ) : (
+              <div />
+            )}
             <div>{systemMenuItems.map(renderMenuItem)}</div>
           </nav>
         </aside>

@@ -89,6 +89,8 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 **Prompts (`frontend-shadcn`):** ✅ same list stack; `TagCell` + tag filter popover; rename/clone via `FormDialog`; create stays `?tab=prompt-create` (Monaco).
 
+**Schemas (`frontend-shadcn`):** ✅ `DataTable` + `autoRowHeight` fields column; rename/clone with name uniqueness; create stays `?tab=schema-create`.
+
 Per entity (start with **Tags** or **Prompts**):
 
 1. List: MUI Data Grid → orchestrator-style **DataTable** (TanStack Table + shadcn table)
