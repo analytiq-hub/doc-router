@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { ChevronDownIcon } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAppSession } from '@/contexts/AppSessionContext';
@@ -22,20 +21,8 @@ const typeBadgeVariant = {
 } as const;
 
 export default function OrganizationSwitcher() {
-  const { currentOrganization, switchOrganization, organizations, isLoading, refreshOrganizations } =
-    useOrganization();
-  const { session, status } = useAppSession();
-
-  useEffect(() => {
-    let mounted = true;
-    if (status === 'authenticated' && session?.user && mounted) {
-      refreshOrganizations();
-    }
-    return () => {
-      mounted = false;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  const { currentOrganization, switchOrganization, organizations, isLoading } = useOrganization();
+  const { status } = useAppSession();
 
   if (status === 'loading' || isLoading || !organizations) {
     return (

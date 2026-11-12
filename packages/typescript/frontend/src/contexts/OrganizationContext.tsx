@@ -7,6 +7,8 @@ import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import { AppSession } from '@/types/AppSession'
 import { usePathname } from '@/utils/appRouter'
+import { organizationSwitchNavigation, rememberOrganization } from '@/utils/organizationSwitch'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 interface OrganizationContextType {
   organizations: Organization[]
@@ -59,22 +61,11 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [persona, setPersona] = useState<string | null>(null)
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false)
   const pathname = usePathname()
+  const location = useLocation()
+  const navigate = useNavigate()
   const { session, status, apiAccessToken } = useAppSession()
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
   const fetchInFlightRef = useRef(false)
-
-  // Extract organization ID from pathname if we're on an organization-specific page
-  const getOrganizationIdFromPath = useCallback(() => {
-    // Check for /orgs/[organizationId] paths (telemetry, analytics, etc.)
-    const orgsMatch = pathname.match(/^\/orgs\/([^\/]+)/)
-    if (orgsMatch) {
-      return orgsMatch[1]
-    }
-    
-    // Check for /settings/organizations/[organizationId] paths
-    const settingsMatch = pathname.match(/^\/settings\/organizations\/([^\/]+)/)
-    return settingsMatch ? settingsMatch[1] : null
-  }, [pathname])
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -159,21 +150,21 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     })
   }, [organizations, pathname])
 
-  const switchOrganization = useCallback((organizationId: string) => {
-    const organization = organizations.find(w => w.id === organizationId)
-    if (organization) {
+  const switchOrganization = useCallback(
+    (organizationId: string) => {
+      const organization = organizations.find((w) => w.id === organizationId)
+      if (!organization) return
+
       setCurrentOrganization(organization)
-      localStorage.setItem('currentOrganizationId', organizationId)
-      
-      // If we're on an organization-specific page, go to the new org's dashboard
-      const orgIdFromPath = getOrganizationIdFromPath()
-      if (orgIdFromPath && orgIdFromPath !== organizationId) {
-        if (pathname.startsWith('/orgs/') || pathname.startsWith('/settings/organizations/')) {
-          window.location.href = `/orgs/${organizationId}/dashboard`
-        }
+      rememberOrganization(organizationId)
+
+      const next = organizationSwitchNavigation(location.pathname, location.search, organizationId)
+      if (next.type === 'navigate') {
+        navigate(next.path, { replace: next.replace ?? false })
       }
-    }
-  }, [organizations, getOrganizationIdFromPath, pathname])
+    },
+    [organizations, location.pathname, location.search, navigate],
+  )
 
   const refreshOrganizations = useCallback(async () => {
     try {
