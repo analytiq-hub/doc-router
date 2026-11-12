@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Form } from '@docrouter/sdk';
 import { toastActionError } from '@/utils/toastActionError';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { ArrowLeftRight } from 'lucide-react';
 
 interface FormVersionCompareModalProps {
   isOpen: boolean;
@@ -130,7 +130,7 @@ const FormVersionCompareModal: React.FC<FormVersionCompareModalProps> = ({
               </div>
 
               <div className="pt-6">
-                <CompareArrowsIcon className="text-gray-400" />
+                <ArrowLeftRight className="size-4 text-muted-foreground" />
               </div>
 
               {/* Right Version Dropdown */}

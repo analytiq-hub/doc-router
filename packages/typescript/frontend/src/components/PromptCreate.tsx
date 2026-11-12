@@ -5,7 +5,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi } from '@/utils/api';
 import type {
   LLMChatModel,
-  Tag,
   Prompt,
   Schema,
   SchemaResponseFormat,
@@ -19,20 +18,18 @@ type PromptConfig = Omit<
 >;
 import { getApiErrorMsg } from '@/utils/api';
 import InfoTooltip from '@/components/InfoTooltip';
-import TagSelector from './TagSelector';
+import { TagCheckboxList } from '@/components/TagCheckboxList';
+import { MetadataKeysInput } from '@/components/MetadataKeysInput';
+import { useOrgAllTags } from '@/api/orgQueries';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'react-toastify';
 import { useRouter } from '@/utils/appRouter';
 import Editor from "@monaco-editor/react";
-import BadgeIcon from '@mui/icons-material/Badge';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { ArrowLeftRight, IdCard } from 'lucide-react';
 import PromptInfoModal from './PromptInfoModal';
 import PromptVersionSelector from './PromptVersionSelector';
 import PromptVersionCompareModal from './PromptVersionCompareModal';
 import PromptDiffView from './PromptDiffView';
-
-import Autocomplete from '@mui/material/Autocomplete';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
 
 // Define default model constant
 const DEFAULT_LLM_MODEL = 'gemini-2.0-flash';
@@ -67,7 +64,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [schemas, setSchemas] = useState<Schema[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>('');
   const [selectedSchemaDetails, setSelectedSchemaDetails] = useState<Schema | null>(null);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const { data: availableTags = [] } = useOrgAllTags(organizationId);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [llmModels, setLLMModels] = useState<LLMChatModel[]>([]);
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
@@ -276,15 +273,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     }
   }, [docRouterOrgApi]);
 
-  const loadTags = useCallback(async () => {
-    try {
-      const response = await docRouterOrgApi.listTags({ limit: 100 });
-      setAvailableTags(response.tags);
-    } catch (error) {
-      toastActionError('Failed to load tags', error);
-    }
-  }, [docRouterOrgApi]);
-
   const loadLLMModels = useCallback(async () => {
     try {
       const response = await docRouterAccountApi.listLLMModels({
@@ -312,10 +300,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
 
   useEffect(() => {
     loadSchemas();
-    loadTags();
     loadLLMModels();
     loadKnowledgeBases();
-  }, [loadSchemas, loadTags, loadLLMModels, loadKnowledgeBases]);
+  }, [loadSchemas, loadLLMModels, loadKnowledgeBases]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -423,7 +410,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 onClick={() => setIsCompareModalOpen(true)}
                 className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50 transition-colors"
               >
-                <CompareArrowsIcon className="text-base" />
+                <ArrowLeftRight className="size-4" />
                 <span>Compare Versions</span>
               </button>
             </>
@@ -434,7 +421,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
               title="Prompt Properties"
             >
-              <BadgeIcon className="text-lg" />
+              <IdCard className="size-5" />
             </button>
           )}
           <InfoTooltip 
@@ -659,9 +646,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 <label className="block text-sm font-medium text-gray-700">
                   Tags
                 </label>
-                <TagSelector
-                  availableTags={availableTags}
-                  selectedTagIds={selectedTagIds}
+                <TagCheckboxList
+                  tags={availableTags}
+                  selectedIds={selectedTagIds}
                   onChange={setSelectedTagIds}
                   disabled={isLoading || isReadOnly}
                 />
@@ -688,13 +675,11 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 <h3 className="text-sm font-medium text-gray-700">Document context</h3>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <input
+                    <Checkbox
                       id="include-ocr-text"
-                      type="checkbox"
                       checked={includeOcrText}
-                      onChange={(e) => setIncludeOcrText(e.target.checked)}
+                      onCheckedChange={(next) => setIncludeOcrText(next === true)}
                       disabled={isLoading || isReadOnly}
-                      className="h-4 w-4 text-primary-600 border-gray-300 rounded"
                     />
                     <label htmlFor="include-ocr-text" className="text-xs text-gray-700">
                       Include OCR text in LLM context
@@ -705,49 +690,19 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Metadata keys to include (use * for all)
                     </label>
-                    <Autocomplete
-                      multiple
-                      freeSolo
-                      options={[]}
+                    <MetadataKeysInput
                       value={metadataKeys}
-                      onChange={(_, next) => setMetadataKeys(next as string[])}
+                      onChange={setMetadataKeys}
                       disabled={isLoading || isReadOnly}
-                      renderTags={(value, getTagProps) =>
-                        value.map((option, index) => (
-                          (() => {
-                            const tagProps = getTagProps({ index });
-                            // `getTagProps` returns a `key` prop; React doesn't like it being spread.
-                            const { key, ...rest } = tagProps as { key?: React.Key };
-                            return (
-                              <Chip
-                                key={key}
-                                variant="outlined"
-                                label={option}
-                                {...rest}
-                              />
-                            );
-                          })()
-                        ))
-                      }
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          variant="outlined"
-                          size="small"
-                          placeholder="* or document_type, invoice_number"
-                        />
-                      )}
                     />
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <input
+                    <Checkbox
                       id="include-pdf"
-                      type="checkbox"
                       checked={includePdf}
-                      onChange={(e) => setIncludePdf(e.target.checked)}
+                      onCheckedChange={(next) => setIncludePdf(next === true)}
                       disabled={isLoading || isReadOnly}
-                      className="h-4 w-4 text-primary-600 border-gray-300 rounded"
                     />
                     <label htmlFor="include-pdf" className="text-xs text-gray-700">
                       Include PDF in grouped prompt context

@@ -11,8 +11,12 @@ import { designTokens } from '@/lib/designTokens';
 import InfoTooltip from '@/components/InfoTooltip';
 import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
-import BadgeIcon from '@mui/icons-material/Badge';
+import { IdCard } from 'lucide-react';
 import TagInfoModal from '@/components/TagInfoModal';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldContent, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 
 const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organizationId, tagId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -96,19 +100,19 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="hidden md:flex items-center gap-2 mb-4">
-          <h2 className="text-xl font-bold">
-            {currentTag.id ? 'Edit Tag' : 'Create Tag'}
-          </h2>
+      <Card className="mb-6">
+        <CardHeader className="hidden flex-row items-center gap-2 space-y-0 md:flex">
+          <CardTitle>{currentTag.id ? 'Edit tag' : 'Create tag'}</CardTitle>
           {currentTagFull && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-              title="Tag Properties"
+              title="Tag properties"
             >
-              <BadgeIcon className="text-lg" />
-            </button>
+              <IdCard className="size-5" />
+            </Button>
           )}
           <InfoTooltip 
             title="About Tags"
@@ -125,71 +129,60 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
               </>
             }
           />
-        </div>
+        </CardHeader>
+        <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex flex-1 min-w-[300px] gap-2 items-center">
-              {/* Tag Name label to the left */}
-              <label htmlFor="tag-name" className="w-28 text-sm font-medium text-gray-700">
-                Tag Name
-              </label>
-              <input
-                id="tag-name"
-                type="text"
-                className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                value={currentTag.name}
-                onChange={e => setCurrentTag({ ...currentTag, name: e.target.value })}
-                placeholder="Tag Name"
-                disabled={isLoading}
-              />
-              <div className="w-20 flex flex-col justify-end">
-                <input
-                  type="color"
-                  className="w-full h-10 p-1 border rounded cursor-pointer"
-                  value={currentTag.color}
-                  onChange={e => setCurrentTag({ ...currentTag, color: e.target.value })}
+          <div className="flex flex-wrap items-end gap-4">
+            <Field className="min-w-[200px] flex-1">
+              <FieldLabel htmlFor="tag-name">Tag name</FieldLabel>
+              <FieldContent className="flex gap-2">
+                <Input
+                  id="tag-name"
+                  value={currentTag.name}
+                  onChange={(e) => setCurrentTag({ ...currentTag, name: e.target.value })}
+                  placeholder="Tag name"
                   disabled={isLoading}
                 />
-              </div>
-            </div>
-            <div className="flex gap-2 ml-auto">
-              <button
+                <Input
+                  type="color"
+                  className="h-9 w-14 shrink-0 cursor-pointer p-1"
+                  value={currentTag.color}
+                  onChange={(e) => setCurrentTag({ ...currentTag, color: e.target.value })}
+                  disabled={isLoading}
+                  aria-label="Tag color"
+                />
+              </FieldContent>
+            </Field>
+            <div className="flex gap-2">
+              <Button
                 type="button"
-                onClick={() => {
-                  setCurrentTag({ name: '', color: designTokens.brand, description: '' });
-                }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                variant="outline"
+                onClick={() => setCurrentTag({ name: '', color: designTokens.brand, description: '' })}
                 disabled={isLoading}
               >
                 Clear
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
-                disabled={isLoading}
-              >
-                {currentTag.id ? 'Update Tag' : 'Save Tag'}
-              </button>
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {currentTag.id ? 'Update tag' : 'Save tag'}
+              </Button>
             </div>
           </div>
 
-          {/* Description label to the left */}
-          <div className="flex items-center gap-2">
-            <label htmlFor="tag-description" className="w-28 text-sm font-medium text-gray-700">
-              Description
-            </label>
-            <input
-              id="tag-description"
-              type="text"
-              className="flex-1 p-2 border rounded"
-              value={currentTag.description}
-              onChange={e => setCurrentTag({ ...currentTag, description: e.target.value })}
-              placeholder="Description (optional)"
-              disabled={isLoading}
-            />
-          </div>
+          <Field>
+            <FieldLabel htmlFor="tag-description">Description</FieldLabel>
+            <FieldContent>
+              <Input
+                id="tag-description"
+                value={currentTag.description}
+                onChange={(e) => setCurrentTag({ ...currentTag, description: e.target.value })}
+                placeholder="Description (optional)"
+                disabled={isLoading}
+              />
+            </FieldContent>
+          </Field>
         </form>
-      </div>
+        </CardContent>
+      </Card>
       
       {/* Info Modal */}
       {currentTagFull && (

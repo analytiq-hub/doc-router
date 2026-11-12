@@ -2,13 +2,16 @@
 
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
-import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { Tag } from '@docrouter/sdk';
-import TagSelector from './TagSelector';
+import { DocRouterOrgApi } from '@/utils/api';
 import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
-import { fetchAllOrgTags } from '@/utils/fetchAllOrgTags';
+import { useOrgAllTags } from '@/api/orgQueries';
+import { TagCheckboxList } from '@/components/TagCheckboxList';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 
 const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   organizationId,
@@ -17,19 +20,11 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const { data: availableTags = [] } = useOrgAllTags(organizationId);
   const [caseIdInput, setCaseIdInput] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([]);
-
-  useEffect(() => {
-    void fetchAllOrgTags(docRouterOrgApi)
-      .then(setAvailableTags)
-      .catch((error) => {
-        toastActionError('Failed to load tags', error);
-      });
-  }, [docRouterOrgApi]);
 
   useEffect(() => {
     async function load() {
@@ -102,9 +97,9 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow max-w-3xl">
-      <div className="flex items-center gap-2 mb-4">
-        <h2 className="text-xl font-bold">{editCaseId ? 'Edit case' : 'Create case'}</h2>
+    <Card className="max-w-3xl">
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <CardTitle>{editCaseId ? 'Edit case' : 'Create case'}</CardTitle>
         <InfoTooltip
           title="About cases"
           content={
@@ -114,92 +109,106 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
             </p>
           }
         />
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Case ID</label>
-          <input
-            type="text"
-            className="w-full p-2 border rounded disabled:bg-gray-100"
-            value={caseIdInput}
-            onChange={(e) => setCaseIdInput(e.target.value)}
-            disabled={isLoading || Boolean(editCaseId)}
-            placeholder="CLM-123"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Case Name</label>
-          <input
-            type="text"
-            className="w-full p-2 border rounded"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            disabled={isLoading}
-            placeholder="Optional; lists use Case ID when empty"
-          />
-        </div>
-        <div>
-          <h3 className="text-sm font-medium text-gray-900 mb-2">Tags</h3>
-          <TagSelector
-            availableTags={availableTags}
-            selectedTagIds={selectedTagIds}
-            onChange={setSelectedTagIds}
-          />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-900">Metadata</h3>
-            <button
-              type="button"
-              className="text-sm text-primary-600"
-              onClick={() =>
-                setMetadataFields((prev) => [...prev, { id: `field_${Date.now()}`, key: '', value: '' }])
-              }
-            >
-              Add field
-            </button>
-          </div>
-          {metadataFields.map((field) => (
-            <div key={field.id} className="flex gap-2 mb-2">
-              <input
-                className="flex-1 p-2 border rounded text-sm"
-                placeholder="Key"
-                value={field.key}
-                onChange={(e) =>
-                  setMetadataFields((prev) =>
-                    prev.map((f) => (f.id === field.id ? { ...f, key: e.target.value } : f))
-                  )
-                }
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Field>
+            <FieldLabel htmlFor="case-id">Case ID</FieldLabel>
+            <FieldContent>
+              <Input
+                id="case-id"
+                value={caseIdInput}
+                onChange={(e) => setCaseIdInput(e.target.value)}
+                disabled={isLoading || Boolean(editCaseId)}
+                placeholder="CLM-123"
               />
-              <input
-                className="flex-1 p-2 border rounded text-sm"
-                placeholder="Value"
-                value={field.value}
-                onChange={(e) =>
-                  setMetadataFields((prev) =>
-                    prev.map((f) => (f.id === field.id ? { ...f, value: e.target.value } : f))
-                  )
-                }
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="case-name">Case name</FieldLabel>
+            <FieldContent>
+              <Input
+                id="case-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={isLoading}
+                placeholder="Optional; lists use Case ID when empty"
               />
-              <button
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel>Tags</FieldLabel>
+            <FieldContent>
+              <TagCheckboxList
+                tags={availableTags}
+                selectedIds={selectedTagIds}
+                onChange={setSelectedTagIds}
+                disabled={isLoading}
+              />
+            </FieldContent>
+          </Field>
+          <Field>
+            <div className="flex items-center justify-between">
+              <FieldLabel>Metadata</FieldLabel>
+              <Button
                 type="button"
-                className="text-red-600 text-sm px-2"
-                onClick={() => setMetadataFields((prev) => prev.filter((f) => f.id !== field.id))}
+                variant="link"
+                size="sm"
+                className="h-auto px-0"
+                onClick={() =>
+                  setMetadataFields((prev) => [...prev, { id: `field_${Date.now()}`, key: '', value: '' }])
+                }
               >
-                Remove
-              </button>
+                Add field
+              </Button>
             </div>
-          ))}
-        </div>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
-          disabled={isLoading}
-        >
-          {editCaseId ? 'Save changes' : 'Create case'}
-        </button>
-      </form>
-    </div>
+            <FieldContent className="space-y-2">
+              {metadataFields.map((field) => (
+                <div key={field.id} className="flex gap-2">
+                  <Input
+                    className="flex-1"
+                    placeholder="Key"
+                    value={field.key}
+                    onChange={(e) =>
+                      setMetadataFields((prev) =>
+                        prev.map((f) => (f.id === field.id ? { ...f, key: e.target.value } : f))
+                      )
+                    }
+                    disabled={isLoading}
+                  />
+                  <Input
+                    className="flex-1"
+                    placeholder="Value"
+                    value={field.value}
+                    onChange={(e) =>
+                      setMetadataFields((prev) =>
+                        prev.map((f) => (f.id === field.id ? { ...f, value: e.target.value } : f))
+                      )
+                    }
+                    disabled={isLoading}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive shrink-0"
+                    onClick={() => setMetadataFields((prev) => prev.filter((f) => f.id !== field.id))}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+              {!metadataFields.length ? (
+                <FieldDescription>No metadata fields yet.</FieldDescription>
+              ) : null}
+            </FieldContent>
+          </Field>
+          <Button type="submit" disabled={isLoading}>
+            {editCaseId ? 'Save changes' : 'Create case'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 };
 

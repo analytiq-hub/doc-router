@@ -7,14 +7,7 @@ import { KBChatRequest, LLMMessage, KBChatStreamChunk, KBChatStreamError, Tag } 
 import { toast } from 'react-toastify';
 import ThreadDropdown from '@/components/agent/ThreadDropdown';
 import type { AgentThreadSummary } from '@/components/agent/useAgentChat';
-import SendIcon from '@mui/icons-material/Send';
-import ClearIcon from '@mui/icons-material/Clear';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import CloseIcon from '@mui/icons-material/Close';
-import { CircularProgress } from '@mui/material';
+import { ChevronDown, ChevronUp, Filter, Loader2, Search, Send, Trash2, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { isColorLight } from '@/utils/colors';
@@ -434,12 +427,35 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
     <div className="flex flex-col h-full w-full sm:max-w-6xl sm:mx-auto bg-white sm:rounded-lg sm:shadow-lg">
       {/* Header */}
       <div className="bg-gradient-to-r bg-primary-600 px-3 sm:px-6 py-2 sm:py-4 sm:rounded-t-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
-            <h2 className="text-base sm:text-xl font-semibold text-white truncate min-w-0">
+        <div className="flex flex-col gap-2 sm:gap-3">
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="min-w-0 text-base font-semibold text-white sm:text-xl">
               Chat with Knowledge Base
             </h2>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                disabled={isStreaming}
+                className={`rounded-full p-1.5 text-white transition-colors hover:bg-white/20 hover:text-gray-100 disabled:opacity-50 ${hasActiveFilters ? 'bg-white/30' : ''}`}
+                title="Toggle filters"
+              >
+                <Filter className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleClear}
+                disabled={isStreaming}
+                className="rounded-full p-1.5 text-white transition-colors hover:bg-white/20 hover:text-gray-100 disabled:opacity-50"
+                title="Clear conversation"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <ThreadDropdown
+              className="shrink-0"
               threads={threads}
               threadId={threadId}
               threadsLoading={threadsLoading}
@@ -450,36 +466,20 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 if (threads.length === 0) void loadThreads();
               }}
             />
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0 sm:ml-2">
             {availableModels.length > 0 && (
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isStreaming}
-                className="flex-1 sm:flex-none min-w-0 sm:max-w-[18rem] truncate px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                className="h-9 min-w-0 max-w-full shrink-0 truncate rounded-md border border-gray-300 bg-white px-2.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:opacity-50 sm:w-44 sm:max-w-[11rem] sm:text-sm"
               >
-                {availableModels.map(model => (
-                  <option key={model} value={model}>{model}</option>
+                {availableModels.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
                 ))}
               </select>
             )}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              disabled={isStreaming}
-              className={`text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20 disabled:opacity-50 flex-shrink-0 ${hasActiveFilters ? 'bg-white bg-opacity-30' : ''}`}
-              title="Toggle filters"
-            >
-              <FilterListIcon fontSize="small" />
-            </button>
-            <button
-              onClick={handleClear}
-              disabled={isStreaming}
-              className="text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20 disabled:opacity-50 flex-shrink-0"
-              title="Clear conversation"
-            >
-              <ClearIcon fontSize="small" />
-            </button>
           </div>
         </div>
       </div>
@@ -495,7 +495,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                   onClick={handleClearFilters}
                   className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
                 >
-                  <CloseIcon fontSize="small" />
+                  <X className="size-4" />
                   Clear All
                 </button>
               )}
@@ -569,7 +569,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                         onClick={() => setSelectedTags(selectedTags.filter(t => t.id !== tag.id))}
                         className="ml-1 hover:opacity-70"
                       >
-                        <CloseIcon fontSize="small" />
+                        <X className="size-4" />
                       </button>
                     </span>
                   );
@@ -645,13 +645,13 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                         onClick={() => toggleToolCallExpansion(toolCall.id)}
                         className="flex items-center gap-1 text-primary-600 hover:text-primary-800 w-full text-left"
                       >
-                        {expandedToolCalls.has(toolCall.id) ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                        <SearchIcon fontSize="small" />
+                        {expandedToolCalls.has(toolCall.id) ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                        <Search className="size-4" />
                         <span className="font-medium truncate">
                           {toolCall.toolName} <span className="hidden sm:inline">(Iteration {toolCall.iteration})</span>
                         </span>
                         {toolCall.status === 'pending' && (
-                          <CircularProgress size={12} className="ml-2" />
+                          <Loader2 className="ml-2 size-3 animate-spin" />
                         )}
                         {toolCall.status === 'completed' && toolCall.resultsCount !== undefined && (
                           <span className="ml-2 text-green-600">✓ {toolCall.resultsCount} results</span>
@@ -706,11 +706,11 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               {currentToolCalls.map((toolCall) => (
                 <div key={toolCall.id} className="mb-2 text-xs">
                   <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                    <SearchIcon fontSize="small" className="text-primary-600 flex-shrink-0" />
+                    <Search className="size-4 shrink-0 text-primary-600" />
                     <span className="font-medium truncate">{toolCall.toolName}</span>
                     {toolCall.status === 'pending' && (
                       <>
-                        <CircularProgress size={12} className="flex-shrink-0" />
+                        <Loader2 className="size-3 shrink-0 animate-spin" />
                         <span className="text-gray-600 text-xs">Searching...</span>
                       </>
                     )}
@@ -769,7 +769,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 disabled={!currentInput.trim() || !selectedModel || isStreaming}
                 className="px-4 sm:px-6 py-2 sm:py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center justify-center gap-1 sm:gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                <SendIcon sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }} />
+                <Send className="size-4 sm:size-5" />
                 <span className="hidden sm:inline">Send</span>
               </button>
             )}

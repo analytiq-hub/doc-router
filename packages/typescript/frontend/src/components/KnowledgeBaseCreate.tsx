@@ -6,7 +6,6 @@ import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/ap
 import {
   KnowledgeBaseConfig,
   KnowledgeBaseUpdate,
-  Tag,
   ChunkerType,
   ChunkingPreset,
   ChunkingPreprocessConfig,
@@ -16,7 +15,8 @@ import {
 import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
-import TagSelector from '@/components/TagSelector';
+import { useOrgAllTags } from '@/api/orgQueries';
+import { TagCheckboxList } from '@/components/TagCheckboxList';
 
 const CHUNKER_TYPES: ChunkerType[] = ['token', 'word', 'sentence', 'recursive'];
 const CHUNKING_PRESET_OPTIONS: { value: ChunkingPreset; label: string }[] = [
@@ -50,22 +50,9 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
     reconcile_interval_seconds: undefined,
     min_vector_score: undefined,
   });
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const { data: availableTags = [] } = useOrgAllTags(organizationId);
   const [availableEmbeddingModels, setAvailableEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-
-  // Load available tags
-  useEffect(() => {
-    async function loadTags() {
-      try {
-        const response = await docRouterOrgApi.listTags({ limit: 100 });
-        setAvailableTags(response.tags);
-      } catch (error) {
-        console.error('Error loading tags:', error);
-      }
-    }
-    loadTags();
-  }, [docRouterOrgApi]);
 
   // Load available embedding models
   useEffect(() => {
@@ -273,9 +260,9 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
               Tags
             </label>
             <div className="flex-1">
-              <TagSelector
-                availableTags={availableTags}
-                selectedTagIds={currentKB.tag_ids || []}
+              <TagCheckboxList
+                tags={availableTags}
+                selectedIds={currentKB.tag_ids || []}
                 onChange={handleTagChange}
                 disabled={isLoading}
               />

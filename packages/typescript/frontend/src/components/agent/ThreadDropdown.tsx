@@ -17,6 +17,7 @@ interface ThreadDropdownProps {
   newChatLabel?: string;
   /** Called when the dropdown is opened (e.g. to load threads on first open) */
   onOpen?: () => void;
+  className?: string;
 }
 
 function relativeTime(iso: string): string {
@@ -86,6 +87,7 @@ export default function ThreadDropdown({
   onDeleteThread,
   newChatLabel = 'New chat',
   onOpen,
+  className = '',
 }: ThreadDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -103,14 +105,14 @@ export default function ThreadDropdown({
   const triggerSub = currentThread ? relativeTime(currentThread.updated_at) : '';
 
   return (
-    <div className="relative min-w-0 max-w-full" ref={ref}>
+    <div className={`relative max-w-full min-w-0 ${className}`.trim()} ref={ref}>
       <button
         type="button"
         onClick={() => {
           if (!open) onOpen?.();
           setOpen((o) => !o);
         }}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 min-w-0 max-w-full sm:max-w-[200px]"
+        className="flex h-9 max-w-[11rem] min-w-[7.5rem] items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 text-xs text-gray-700 hover:bg-gray-50 sm:max-w-[12.5rem] sm:text-sm"
         title="Conversation history"
       >
         <HistoryIcon sx={{ fontSize: 18 }} className="shrink-0 text-gray-500" />

@@ -107,6 +107,14 @@ Roll through: cases, schemas, forms, prompts, knowledge bases.
 
 **Exit:** at least one org hub area with zero MUI on list + create/edit modals.
 
+#### Phase 4+ hub polish — **complete** (`frontend-shadcn`)
+
+- **Create tabs:** `CaseCreate`, `KnowledgeBaseCreate`, `PromptCreate`, `FormCreate`, `TagCreate` — `TagCheckboxList` + `useOrgAllTags`; shadcn form chrome where touched; `MetadataKeysInput` on prompt create (replaces MUI Autocomplete).
+- **Properties:** `TagInfoModal`, `SchemaInfoModal`, `FormInfoModal`, `PromptInfoModal` → shared `PropertiesDialog` + `useAccountUserName`.
+- **KB detail:** `KnowledgeBaseSearch` / `KnowledgeBaseChat` — shadcn `Card`/`Badge`/`Button`, Lucide, `Loader2`; search tag filter via `TagCheckboxList`.
+- **Case detail:** `CaseResultsSidebar` kebab menu → shadcn `DropdownMenu` + Lucide.
+- **Version compare:** Lucide `ArrowLeftRight` on schema/form/prompt compare modals; `SchemaCreate` tree icons → Lucide.
+
 ---
 
 ### Phase 5 — Settings + admin (1–2 weeks)

@@ -3,12 +3,14 @@
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import DownloadIcon from '@mui/icons-material/Download';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import { Divider, Menu, MenuItem } from '@mui/material';
-import { styled, alpha } from '@mui/material/styles';
+import { Download, FileText, MoreVertical, RefreshCw } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Link } from 'react-router-dom';
 import {
   CaseLlmResultsResponse,
@@ -21,20 +23,13 @@ import { toast } from 'react-toastify';
 import DraggablePanel from '@/components/DraggablePanel';
 import LlmResultTree from '@/components/extraction/LlmResultTree';
 import { formatLocalDate } from '@/utils/date';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   organizationId: string;
   caseId: string;
   caseTagIds: string[];
 };
-
-const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
-  fontSize: '0.875rem',
-  padding: '4px 16px',
-  '& .MuiSvgIcon-root': {
-    color: alpha(theme.palette.text.primary, 0.6),
-  },
-}));
 
 function promptsMatchingCaseTags(all: Prompt[], caseTagIds: string[]): Prompt[] {
   const caseTags = new Set(caseTagIds);
@@ -79,8 +74,6 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
   const [failedPrompts, setFailedPrompts] = useState<Set<string>>(new Set());
   const [runningPrompts, setRunningPrompts] = useState<Set<string>>(new Set());
 
-  const [kebabAnchorEl, setKebabAnchorEl] = useState<HTMLElement | null>(null);
-  const [kebabPromptRevId, setKebabPromptRevId] = useState<string | null>(null);
   const [runInfoOpen, setRunInfoOpen] = useState(false);
   const [runInfoPromptRevId, setRunInfoPromptRevId] = useState<string | null>(null);
   const [runInfoResult, setRunInfoResult] = useState<GetLLMResultResponse | null>(null);
@@ -206,15 +199,9 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
   };
 
   const handleOpenRunInfo = (promptRevId: string) => {
-    handleCloseKebabMenu();
     setRunInfoPromptRevId(promptRevId);
     setRunInfoResult(llmResults[promptRevId] ?? null);
     setRunInfoOpen(true);
-  };
-
-  const handleCloseKebabMenu = () => {
-    setKebabAnchorEl(null);
-    setKebabPromptRevId(null);
   };
 
   const renderPromptBody = (prompt: Prompt) => {
@@ -307,20 +294,55 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
                       {runningPrompts.has(revId) ? (
                         <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
                       ) : (
-                        <RefreshIcon fontSize="small" className="text-gray-600" />
+                        <RefreshCw className="size-4 text-gray-600" />
                       )}
                     </div>
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setKebabAnchorEl(e.currentTarget);
-                        setKebabPromptRevId(revId);
-                      }}
-                      className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                      title="More actions"
-                    >
-                      <MoreVertIcon fontSize="small" className="text-gray-600" />
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="rounded-full"
+                            title="More actions"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        }
+                      >
+                        <MoreVertical className="size-4 text-gray-600" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-40">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(revId);
+                          }}
+                        >
+                          <Download className="size-4" />
+                          Download
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleRunPrompt(prompt);
+                          }}
+                        >
+                          <RefreshCw className="size-4" />
+                          Reload
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenRunInfo(revId);
+                          }}
+                        >
+                          <FileText className="size-4" />
+                          Run info
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <ChevronDownIcon
                       className={`w-5 h-5 text-gray-600 transition-transform ${
                         isExpanded ? 'rotate-180' : ''
@@ -336,47 +358,6 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
           })
         )}
       </div>
-
-      <Menu
-        anchorEl={kebabAnchorEl}
-        open={Boolean(kebabAnchorEl)}
-        onClose={handleCloseKebabMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        MenuListProps={{ dense: true }}
-      >
-        <StyledMenuItem
-          onClick={() => {
-            if (!kebabPromptRevId) return;
-            handleCloseKebabMenu();
-            handleDownload(kebabPromptRevId);
-          }}
-        >
-          <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
-          Download
-        </StyledMenuItem>
-        <StyledMenuItem
-          onClick={() => {
-            const prompt = kebabPromptRevId ? promptByRevId.get(kebabPromptRevId) : undefined;
-            if (!prompt) return;
-            handleCloseKebabMenu();
-            void handleRunPrompt(prompt);
-          }}
-        >
-          <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-          Reload
-        </StyledMenuItem>
-        <Divider />
-        <StyledMenuItem
-          onClick={() => {
-            if (!kebabPromptRevId) return;
-            handleOpenRunInfo(kebabPromptRevId);
-          }}
-        >
-          <DescriptionOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-          Run Info
-        </StyledMenuItem>
-      </Menu>
 
       {runInfoOpen && runInfoResult && (
         <>
@@ -395,7 +376,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
             ariaLabel="Run info"
             title={
               <>
-                <DescriptionOutlinedIcon className="shrink-0 text-primary-600" fontSize="small" />
+                <FileText className="size-4 shrink-0 text-primary-600" />
                 <span className="truncate">Run Info</span>
               </>
             }

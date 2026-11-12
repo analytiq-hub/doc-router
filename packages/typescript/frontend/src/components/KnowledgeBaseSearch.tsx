@@ -1,17 +1,19 @@
 "use client";
 
 import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { KBSearchResult, Tag } from '@docrouter/sdk';
+import { KBSearchResult } from '@docrouter/sdk';
 import { toast } from 'react-toastify';
-import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import CloseIcon from '@mui/icons-material/Close';
-import { Card, CardContent, Typography, Chip, CircularProgress } from '@mui/material';
+import { Filter, Loader2, Search, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { isColorLight } from '@/utils/colors';
+import { useOrgAllTags } from '@/api/orgQueries';
+import { TagCheckboxList } from '@/components/TagCheckboxList';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 
 interface KnowledgeBaseSearchProps {
   organizationId: string;
@@ -37,36 +39,19 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
   
   // Filter states
   const [showFilters, setShowFilters] = useState(false);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const { data: availableTags = [] } = useOrgAllTags(organizationId);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [uploadDateFrom, setUploadDateFrom] = useState('');
   const [uploadDateTo, setUploadDateTo] = useState('');
-  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
-
-  // Load tags and documents for filters
-  useEffect(() => {
-    const loadFilterData = async () => {
-      try {
-        // Load tags
-        const tagsResponse = await docRouterOrgApi.listTags({ limit: 100 });
-        setAvailableTags(tagsResponse.tags);
-      } catch (error) {
-        console.error('Error loading tags:', error);
-        // Tags are optional for filtering, continue without them
-      }
-      
-    };
-    loadFilterData();
-  }, [docRouterOrgApi, kbId]);
 
   const buildMetadataFilter = useCallback((): Record<string, unknown> | undefined => {
-    if (selectedTags.length > 0) {
+    if (selectedTagIds.length > 0) {
       return {
-        tag_ids: selectedTags.map(tag => tag.id)
+        tag_ids: selectedTagIds,
       };
     }
     return undefined;
-  }, [selectedTags]);
+  }, [selectedTagIds]);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -119,7 +104,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
   };
 
   const handleClearFilters = () => {
-    setSelectedTags([]);
+    setSelectedTagIds([]);
     setUploadDateFrom('');
     setUploadDateTo('');
   };
@@ -131,68 +116,68 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
     }
   };
 
-  const hasActiveFilters = selectedTags.length > 0 || 
-    uploadDateFrom !== '' ||
-    uploadDateTo !== '';
+  const hasActiveFilters =
+    selectedTagIds.length > 0 || uploadDateFrom !== '' || uploadDateTo !== '';
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <div className="bg-white p-6 rounded-lg shadow mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Search Knowledge Base</h2>
-          <button
+          <Button
+            type="button"
+            variant={hasActiveFilters ? 'default' : 'outline'}
+            size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className={`px-3 py-1.5 text-sm border rounded-md transition-colors flex items-center gap-2 ${
-              hasActiveFilters
-                ? 'border-primary-600 text-primary-600 bg-primary-50 hover:bg-primary-100'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
           >
-            <FilterListIcon fontSize="small" />
-            Filters {hasActiveFilters && `(${selectedTags.length + (uploadDateFrom ? 1 : 0) + (uploadDateTo ? 1 : 0)})`}
-          </button>
+            <Filter className="size-4" />
+            Filters{' '}
+            {hasActiveFilters &&
+              `(${selectedTagIds.length + (uploadDateFrom ? 1 : 0) + (uploadDateTo ? 1 : 0)})`}
+          </Button>
         </div>
         
         <div className="space-y-4">
-          {/* Search Input */}
-          <div className="flex gap-4">
-            <div className="flex-1 relative">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
                 type="text"
                 placeholder="Enter your search query..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 disabled={isSearching}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="h-9 pl-9"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <label className="absolute -top-2 left-2 px-1 text-xs text-gray-600 bg-white">Top K</label>
-                <input
+            <div className="flex shrink-0 items-end gap-2">
+              <div className="flex w-20 flex-col gap-1">
+                <label htmlFor="kb-search-top-k" className="text-xs font-medium text-muted-foreground">
+                  Top K
+                </label>
+                <Input
+                  id="kb-search-top-k"
                   type="number"
                   min={1}
                   max={20}
                   value={topK}
-                  onChange={(e) => setTopK(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+                  onChange={(e) =>
+                    setTopK(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 5)))
+                  }
                   disabled={isSearching}
-                  className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="h-9 w-20 tabular-nums"
                 />
               </div>
-              <button
+              <Button
+                type="button"
+                className="h-9"
                 onClick={handleSearch}
                 disabled={isSearching || !query.trim()}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {isSearching ? (
-                  <CircularProgress size={20} color="inherit" />
-                ) : (
-                  <SearchIcon fontSize="small" />
-                )}
+                {isSearching ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
                 Search
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -202,87 +187,21 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold text-gray-900">Search Filters</h3>
                 {hasActiveFilters && (
-                  <button
-                    onClick={handleClearFilters}
-                    className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
-                  >
-                    <CloseIcon fontSize="small" />
-                    Clear All
-                  </button>
+                  <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters}>
+                    <X className="size-4" />
+                    Clear all
+                  </Button>
                 )}
               </div>
 
-              {/* Tag Filter */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Tags</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
-                    className="w-full px-3 py-2 text-left border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent flex items-center justify-between"
-                  >
-                    <span className="text-gray-500">
-                      {selectedTags.length > 0 ? `${selectedTags.length} selected` : 'Select tags'}
-                    </span>
-                    <span className={`transform transition-transform ${tagDropdownOpen ? 'rotate-180' : ''}`}>▼</span>
-                  </button>
-                  {tagDropdownOpen && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setTagDropdownOpen(false)}
-                      />
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        {availableTags.map((tag) => {
-                          const isSelected = selectedTags.some(t => t.id === tag.id);
-                          return (
-                            <label
-                              key={tag.id}
-                              className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedTags([...selectedTags, tag]);
-                                  } else {
-                                    setSelectedTags(selectedTags.filter(t => t.id !== tag.id));
-                                  }
-                                }}
-                                className="mr-2"
-                              />
-                              <span>{tag.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-                {selectedTags.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {selectedTags.map((tag) => {
-                      const bgColor = tag.color;
-                      const textColor = isColorLight(bgColor) ? 'text-gray-800' : 'text-white';
-                      return (
-                        <span
-                          key={tag.id}
-                          className="px-2 py-1 rounded text-xs flex items-center gap-1"
-                          style={{ backgroundColor: bgColor, color: textColor }}
-                        >
-                          {tag.name}
-                          <button
-                            onClick={() => setSelectedTags(selectedTags.filter(t => t.id !== tag.id))}
-                            className="ml-1 hover:opacity-70"
-                          >
-                            <CloseIcon fontSize="small" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Filter by tags</label>
+                <TagCheckboxList
+                  tags={availableTags}
+                  selectedIds={selectedTagIds}
+                  onChange={setSelectedTagIds}
+                  disabled={isSearching}
+                />
               </div>
 
               {/* Date Range Filters */}
@@ -321,37 +240,24 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
           {results.length > 0 && (
             <div className="space-y-4 mt-6">
               {results.map((result, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow">
-                  <CardContent>
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Typography variant="subtitle2" className="font-semibold">
-                          {result.source}
-                        </Typography>
-                        {result.is_matched && (
-                          <Chip 
-                            label="Matched" 
-                            size="small" 
-                            color="primary"
-                            className="text-xs"
-                          />
-                        )}
-                        {!result.is_matched && (
-                          <Chip 
-                            label="Context" 
-                            size="small" 
-                            variant="outlined"
-                            className="text-xs"
-                          />
+                <Card key={index} className="transition-shadow hover:shadow-md">
+                  <CardContent className="pt-6">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold">{result.source}</span>
+                        {result.is_matched ? (
+                          <Badge variant="default">Matched</Badge>
+                        ) : (
+                          <Badge variant="outline">Context</Badge>
                         )}
                       </div>
                       {result.relevance != null && (
-                        <Chip
-                          label={`Relevance: ${formatRelevanceScore(result.relevance)}`}
-                          size="small"
-                          className="bg-primary-100 text-primary-800"
+                        <Badge
+                          variant="secondary"
                           title="Fused score from hybrid search (RRF), or vector similarity when vector-only fallback is used"
-                        />
+                        >
+                          Relevance: {formatRelevanceScore(result.relevance)}
+                        </Badge>
                       )}
                     </div>
                     <div className="markdown-prose">

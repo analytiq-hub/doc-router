@@ -7,14 +7,10 @@ import { SchemaField } from '@/types/ui';
 // Type alias for schema creation/update (without id and timestamps)
 type SchemaConfig = Omit<Schema, 'schema_revid' | 'schema_id' | 'schema_version' | 'created_at' | 'created_by'>;
 import { getApiErrorMsg } from '@/utils/api';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import Editor from "@monaco-editor/react";
 import InfoTooltip from '@/components/InfoTooltip';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import BadgeIcon from '@mui/icons-material/Badge';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { ArrowLeftRight, ChevronDown, ChevronRight, GripVertical, IdCard } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useRouter } from '@/utils/appRouter';
 import SchemaInfoModal from './SchemaInfoModal';
@@ -150,8 +146,8 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
               >
                 <span className="mr-1 inline-flex items-center justify-center w-4">
                   {expandedFields[index] ?
-                    <ExpandMoreIcon fontSize="small" /> :
-                    <ChevronRightIcon fontSize="small" />
+                    <ChevronDown className="size-4 shrink-0" /> :
+                    <ChevronRight className="size-4 shrink-0" />
                   }
                 </span>
                 <span>Nested Fields</span>
@@ -176,8 +172,8 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
               >
                 <span className="mr-1 inline-flex items-center justify-center w-4">
                   {expandedArrayFields[index] ?
-                    <ExpandMoreIcon fontSize="small" /> :
-                    <ChevronRightIcon fontSize="small" />
+                    <ChevronDown className="size-4 shrink-0" /> :
+                    <ChevronRight className="size-4 shrink-0" />
                   }
                 </span>
                 <span>Array Item Type</span>
@@ -1277,7 +1273,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 onClick={() => setIsCompareModalOpen(true)}
                 className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50 transition-colors"
               >
-                <CompareArrowsIcon className="text-base" />
+                <ArrowLeftRight className="size-4" />
                 <span>Compare Versions</span>
               </button>
             </>
@@ -1288,7 +1284,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
               className="h-8 w-8 mb-2 items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
               title="Schema Properties"
             >
-              <BadgeIcon className="text-lg" />
+              <IdCard className="size-5" />
             </button>
           )}
           <InfoTooltip 
@@ -1452,7 +1448,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                       {...provided.dragHandleProps}
                                       className="flex items-center text-gray-400 cursor-grab p-1"
                                     >
-                                      <DragIndicatorIcon fontSize="small" />
+                                      <GripVertical className="size-4 shrink-0" />
                                     </div>
                                     <input
                                       type="text"
@@ -1525,8 +1521,8 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                       >
                                         <span className="mr-1 inline-flex items-center justify-center w-4">
                                           {expandedNestedFields[index] ? 
-                                            <ExpandMoreIcon fontSize="small" /> : 
-                                            <ChevronRightIcon fontSize="small" />
+                                            <ChevronDown className="size-4 shrink-0" /> : 
+                                            <ChevronRight className="size-4 shrink-0" />
                                           }
                                         </span>
                                         <span>Nested Fields</span>
@@ -1552,8 +1548,8 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                       >
                                         <span className="mr-1 inline-flex items-center justify-center w-4">
                                           {expandedArrayFields[index] ? 
-                                            <ExpandMoreIcon fontSize="small" /> : 
-                                            <ChevronRightIcon fontSize="small" />
+                                            <ChevronDown className="size-4 shrink-0" /> : 
+                                            <ChevronRight className="size-4 shrink-0" />
                                           }
                                         </span>
                                         <span>Array Item Type</span>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Schema } from '@docrouter/sdk';
 import { toastActionError } from '@/utils/toastActionError';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { ArrowLeftRight } from 'lucide-react';
 
 interface SchemaVersionCompareModalProps {
   isOpen: boolean;
@@ -130,7 +130,7 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
               </div>
 
               <div className="pt-6">
-                <CompareArrowsIcon className="text-gray-400" />
+                <ArrowLeftRight className="size-4 text-muted-foreground" />
               </div>
 
               {/* Right Version Dropdown */}

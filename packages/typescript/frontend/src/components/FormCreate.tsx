@@ -7,9 +7,9 @@ import { Form } from '@docrouter/sdk';
 
 // Type alias for form creation/update (without id and timestamps)
 type FormConfig = Omit<Form, 'form_revid' | 'form_id' | 'form_version' | 'created_at' | 'created_by'>;
-import { Tag } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
-import TagSelector from './TagSelector';
+import { TagCheckboxList } from '@/components/TagCheckboxList';
+import { useOrgAllTags } from '@/api/orgQueries';
 import { toast } from 'react-toastify';
 import { useRouter } from '@/utils/appRouter';
 import dynamic from '@/utils/dynamicImport';
@@ -30,8 +30,7 @@ const Editor = dynamic(() => import("@monaco-editor/react"), {
 });
 import InfoTooltip from '@/components/InfoTooltip';
 import { FormComponent } from '@/types/ui';
-import BadgeIcon from '@mui/icons-material/Badge';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { ArrowLeftRight, IdCard } from 'lucide-react';
 import FormInfoModal from './FormInfoModal';
 import FormVersionSelector from './FormVersionSelector';
 import FormVersionCompareModal from './FormVersionCompareModal';
@@ -53,7 +52,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
     tag_ids: [] // Initialize with empty array
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const { data: availableTags = [] } = useOrgAllTags(organizationId);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'builder' | 'mapper' | 'json'>('builder');
   const [jsonForm, setJsonForm] = useState('');
@@ -94,19 +93,6 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
     };
     loadForm();
   }, [formId, docRouterOrgApi]);
-
-  const loadTags = useCallback(async () => {
-    try {
-      const response = await docRouterOrgApi.listTags({});
-      setAvailableTags(response.tags);
-    } catch (error) {
-      toastActionError('Failed to load tags', error);
-    }
-  }, [docRouterOrgApi]);
-
-  useEffect(() => {
-    loadTags();
-  }, [loadTags]);
 
   // Update jsonForm when currentForm changes
   useEffect(() => {
@@ -226,7 +212,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 onClick={() => setIsCompareModalOpen(true)}
                 className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50 transition-colors"
               >
-                <CompareArrowsIcon className="text-base" />
+                <ArrowLeftRight className="size-4" />
                 <span>Compare Versions</span>
               </button>
             </>
@@ -237,7 +223,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
               className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
               title="Form Properties"
             >
-              <BadgeIcon className="text-lg" />
+              <IdCard className="size-5" />
             </button>
           )}
           <InfoTooltip 
@@ -459,9 +445,9 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
               Tags
             </label>
             <div className="w-full md:w-1/4">
-              <TagSelector
-                availableTags={availableTags}
-                selectedTagIds={selectedTagIds}
+              <TagCheckboxList
+                tags={availableTags}
+                selectedIds={selectedTagIds}
                 onChange={setSelectedTagIds}
                 disabled={isLoading || isReadOnly}
               />
