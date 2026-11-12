@@ -75,29 +75,27 @@ function NavLinkItem({
       aria-current={active ? 'page' : undefined}
       aria-disabled={disabled || undefined}
       className={cn(
-        'flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium outline-none transition-colors',
+        'flex h-10 w-full items-center gap-3.5 rounded-md px-3 text-sm font-medium outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring',
         active && 'bg-primary-soft text-primary',
-        !active && !disabled && 'text-foreground hover:bg-accent',
+        !active && !disabled && 'text-foreground',
         disabled && 'pointer-events-none cursor-not-allowed opacity-60',
       )}
       onClick={disabled ? (e) => e.preventDefault() : undefined}
     >
       <Icon className="size-5 shrink-0" aria-hidden />
-      {open ? <span className="truncate">{item.text}</span> : <span className="sr-only">{item.text}</span>}
+      <span className={cn('truncate', !open && 'sr-only')}>{item.text}</span>
     </Link>
   );
 
   if (open) {
-    return <span className="block px-2 py-0.5">{link}</span>;
+    return link;
   }
 
   return (
-    <span className="block px-2 py-0.5">
-      <Tooltip>
-        <TooltipTrigger render={link} />
-        <TooltipContent side="right">{disabled ? 'Select an organization' : item.tooltip}</TooltipContent>
-      </Tooltip>
-    </span>
+    <Tooltip>
+      <TooltipTrigger render={link} />
+      <TooltipContent side="right">{disabled ? 'Select an organization' : item.tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -221,22 +219,30 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b-2 border-primary bg-brand pr-3 pl-2 text-brand-foreground">
+      {/*
+        Shell alignment (matches doc-orchestrator Layout):
+        - Burger center and nav icons: 30px from the left (header pl-3 + half of 36px button;
+          nav p-2 + link px-3 + half of 20px icon).
+        - App title and nav labels start at 54px when the drawer is open.
+        - With the drawer closed, title shifts ml-7.5 (30px) so it lines up with main content
+          (collapsed nav w-15 + typical page inset).
+      */}
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b-2 border-primary bg-brand pr-4 pl-3 text-brand-foreground">
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="size-9 text-brand-foreground hover:bg-brand-foreground/10 hover:text-brand-foreground"
+          className="-mr-1.5 size-9 text-brand-foreground hover:bg-brand-foreground/10 hover:text-brand-foreground"
           onClick={toggleSidebar}
           aria-label="Toggle navigation"
         >
-          <Menu className="size-5" />
+          <Menu />
         </Button>
         <Link
           to={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
           className={cn(
             'flex min-w-0 flex-1 items-center text-lg font-semibold transition-[margin]',
-            !open && 'ml-4',
+            !open && 'ml-7.5',
           )}
         >
           <span className="truncate">{appName}</span>
@@ -252,19 +258,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {status === 'authenticated' ? <LicenseBanner /> : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside
+        <nav
+          aria-label="Main"
           className={cn(
-            'flex shrink-0 flex-col border-r border-border bg-card transition-[width] duration-300 ease-in-out',
-            open ? 'w-52' : 'w-16 overflow-visible',
+            'flex h-full shrink-0 flex-col justify-between gap-1 border-r border-border bg-card p-2 transition-[width] duration-300 ease-in-out',
+            open ? 'w-56 overflow-hidden' : 'w-15 overflow-visible',
           )}
         >
-          <nav
-            aria-label="Main"
-            className={cn(
-              'flex h-full flex-col justify-between gap-1 p-2',
-              open ? 'overflow-hidden' : 'overflow-visible',
-            )}
-          >
             {status === 'authenticated' ? (
               <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                 {fileMenuItems.map(renderMenuItem)}
@@ -273,8 +273,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div />
             )}
             <div>{systemMenuItems.map(renderMenuItem)}</div>
-          </nav>
-        </aside>
+        </nav>
 
         <main className="min-w-0 flex-1 overflow-auto bg-background">{children}</main>
       </div>
