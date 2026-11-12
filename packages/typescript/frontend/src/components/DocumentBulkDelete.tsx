@@ -5,6 +5,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { toast } from 'sonner'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 import { Document, Tag } from '@docrouter/sdk';
+import { DocumentBulkProgress } from './DocumentBulkProgress'
 
 interface DocumentBulkDeleteProps {
   organizationId: string
@@ -179,20 +180,8 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
 
       {isDeleting && (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-red-700">
-              Deleting Documents...
-            </span>
-            <span className="text-sm text-red-600">
-              {deletedCount} / {totalDocuments}
-            </span>
-          </div>
-          <div className="w-full bg-red-200 rounded-full h-2">
-            <div
-              className="bg-red-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${totalDocuments > 0 ? (deletedCount / totalDocuments) * 100 : 0}%` }}
-            ></div>
-          </div>
+          <p className="mb-2 text-sm font-medium text-destructive">Deleting documents…</p>
+          <DocumentBulkProgress done={deletedCount} total={totalDocuments} />
           <p className="text-xs text-red-500 mt-2">
             {deletedCount === totalDocuments && deletedCount > 0
               ? 'Finalizing deletion...'

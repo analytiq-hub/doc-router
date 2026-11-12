@@ -102,6 +102,7 @@ import { DocumentBulkRunLLM, DocumentBulkRunLLMRef } from './DocumentBulkRunLLM'
 import { DocumentBulkRunOCR, DocumentBulkRunOCRRef } from './DocumentBulkRunOCR';
 import { DocumentBulkRunFlows, DocumentBulkRunFlowsRef } from './DocumentBulkRunFlows';
 import { DocumentBulkUpdateCase, DocumentBulkUpdateCaseRef } from './DocumentBulkUpdateCase';
+import { DocumentBulkProgress } from './DocumentBulkProgress';
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery';
 
 function activeFilterSummary(filtersJson?: string): string | null {
@@ -923,20 +924,11 @@ export function DocumentBulkUpdate({
             <DialogTitle>Processing documents</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">Progress</span>
-              <span className="text-muted-foreground">
-                {processedDocuments} / {totalDocuments}
-              </span>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{
-                  width: `${totalDocuments > 0 ? (processedDocuments / totalDocuments) * 100 : 0}%`,
-                }}
-              />
-            </div>
+            <DocumentBulkProgress
+              done={processedDocuments}
+              total={totalDocuments}
+              label="Progress"
+            />
             <p className="text-xs text-muted-foreground">
               {pendingOperation?.operation === 'runLLMOperations'
                 ? isLLMOperationData(operationData) && operationData.isCancelling

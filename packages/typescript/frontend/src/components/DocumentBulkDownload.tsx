@@ -4,6 +4,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { Document, Tag } from '@docrouter/sdk';
 import { toast } from 'sonner'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
+import { DocumentBulkProgress } from './DocumentBulkProgress'
 
 interface DocumentBulkDownloadProps {
   organizationId: string
@@ -196,20 +197,8 @@ export const DocumentBulkDownload = forwardRef<DocumentBulkDownloadRef, Document
 
       {isDownloading && (
         <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-md">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-primary-700">
-              Downloading Documents...
-            </span>
-            <span className="text-sm text-primary-600">
-              {downloadedCount} / {totalDocuments}
-            </span>
-          </div>
-          <div className="w-full bg-primary-200 rounded-full h-2">
-            <div
-              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${totalDocuments > 0 ? (downloadedCount / totalDocuments) * 100 : 0}%` }}
-            ></div>
-          </div>
+          <p className="mb-2 text-sm font-medium text-foreground">Downloading documents…</p>
+          <DocumentBulkProgress done={downloadedCount} total={totalDocuments} />
         </div>
       )}
 

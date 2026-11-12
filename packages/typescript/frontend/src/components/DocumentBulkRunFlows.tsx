@@ -11,6 +11,7 @@ import {
 import type { BulkAnalyzeFlowsResponse, FlowListItem, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { DocumentListSearchParameters } from '@/utils/documentListQuery';
+import { DocumentBulkProgress } from './DocumentBulkProgress';
 import { pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
 import {
   persistBulkFlowRerunModeToSession,
@@ -783,20 +784,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
             </div>
             {(isExecuting || isCompleted) && totalExecutions > 0 && (
               <div className="mt-2">
-                <div className="flex justify-between text-xs">
-                  <span>Progress</span>
-                  <span>
-                    {completedExecutions} / {totalExecutions}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                  <div
-                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${totalExecutions > 0 ? (completedExecutions / totalExecutions) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
+                <DocumentBulkProgress done={completedExecutions} total={totalExecutions} />
               </div>
             )}
           </div>

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
 import { DocumentListSearchParameters } from '@/utils/documentListQuery';
+import { DocumentBulkProgress } from './DocumentBulkProgress';
 
 const DEFAULT_PARALLEL_RUNS = 10;
 const MIN_PARALLEL_RUNS = 1;
@@ -647,18 +648,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
               </button>
             </div>
             {totalAnalysisItems > 0 && (
-              <div>
-                <div className="flex items-center justify-between text-xs text-primary-700 mb-1">
-                  <span>Progress</span>
-                  <span>{analysisProgress} / {totalAnalysisItems}</span>
-                </div>
-                <div className="w-full bg-primary-200 rounded-full h-2">
-                  <div
-                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${totalAnalysisItems > 0 ? (analysisProgress / totalAnalysisItems) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
+              <DocumentBulkProgress done={analysisProgress} total={totalAnalysisItems} />
             )}
           </div>
         )}
@@ -675,16 +665,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
               </div>
               {isExecuting && (
                 <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span>Progress</span>
-                    <span>{completedExecutions} / {totalExecutions}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                    <div
-                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${totalExecutions > 0 ? (completedExecutions / totalExecutions) * 100 : 0}%` }}
-                    />
-                  </div>
+                  <DocumentBulkProgress done={completedExecutions} total={totalExecutions} />
                 </div>
               )}
             </div>

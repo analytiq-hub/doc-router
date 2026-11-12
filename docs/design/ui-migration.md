@@ -17,7 +17,7 @@
 | Primitives | **MUI**, **Headless UI**, raw HTML | **`src/components/ui/*`** (shadcn, **@base-ui/react**) |
 | Tables | MUI X Data Grid, react-table in places | **TanStack Table** + shadcn `Table` (`DataTable`) |
 | Icons | MUI, Heroicons, FontAwesome | **lucide-react** (incrementally) |
-| Toasts | react-hot-toast + react-toastify | **sonner** (shadcn wrapper) |
+| Toasts | **sonner** (shadcn wrapper) | **sonner** (orchestrator-aligned) |
 | Theme | MUI `ThemeProvider` + `theme.ts` | Tokens only; no MUI theme |
 
 Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/ui.md`** (token values derived from doc-router’s legacy blues, not ad-hoc Databricks lava in a stale `:root` block). Use **ui.md §3** as the default token table when implementing doc-router.
@@ -63,7 +63,7 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 - `components.json` — **base-nova**, lucide, `src/styles.css`
 - `styles.css`: `tw-animate-css`, `shadcn/tailwind.css`; shadcn `--primary` / `--secondary` tokens
 - `src/lib/utils.ts` (`cn`); `src/components/ui/*` (mirrored from orchestrator; CLI blocked on legacy npm peer resolution)
-- **Sonner** + `TooltipProvider` in `AppProviders.tsx` (legacy hot-toast / toastify kept until Phase 4+)
+- **Sonner** + `TooltipProvider` in `AppProviders.tsx`
 - Demo: **`/dev/ui-kit`** (`UiKitDemoPage`)
 
 **Exit:** ✅ build + typecheck.
@@ -140,11 +140,11 @@ Settings layout, users, orgs, license, development/LLM screens — shadcn form c
 
 ---
 
-### Phase 6 — Documents + dashboard (1–2 weeks)
+### Phase 6 — Documents + dashboard — **complete** (`devel`)
 
-Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — Headless → shadcn `Dialog` / `Progress`.
+Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — shadcn `Dialog` / `Progress`.
 
-**Progress on `frontend-shadcn` (documents):**
+**Progress (documents):**
 
 - ✅ Org + case document lists → `OrgDocumentList` + `DataTable` + `FilterBuilder` + React Query (`useOrgDocuments`, `useOrgAllTags`)
 - ✅ Row actions: `PropertiesDialog`, shadcn `DocumentUpdate` / `DocumentRename` slide-over & modal; tags via `TagCheckboxList` (no autocomplete)
@@ -153,7 +153,9 @@ Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — Hea
 - ✅ Upload wizard: shadcn controls + `TagCheckboxList`; removed legacy MUI `DocumentList.tsx`
 - ✅ Org dashboard: `PageHeader`, shadcn `Card`/`Button`, Lucide, React Query counts + `TagBadge`
 - ✅ Tour guide: popover-style panel with arrow pointing at `data-tour` targets (auto-flips/clamps to viewport)
-- ⏳ PDF viewer (Phase 8)
+- ✅ Bulk progress: shadcn `Progress` (`components/ui/progress.tsx`) + `DocumentBulkProgress`; bulk sheet loading dialog uses same primitive
+- ✅ Document viewer **page chrome** (`DocumentViewerPage`): MUI `Box` → Tailwind layout (PDF viewer internals remain Phase 8)
+- ⏳ PDF viewer toolbar/canvas (Phase 8)
 
 ---
 

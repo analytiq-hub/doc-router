@@ -2,7 +2,6 @@
 
 import dynamic from '@/utils/dynamicImport';
 import { useSearchParams } from '@/utils/appRouter';
-import { Box } from '@mui/material';
 import {
   Panel,
   PanelGroup,
@@ -15,6 +14,7 @@ import type { HighlightInfo } from '@/types/index';
 import type { PDFViewerControlsType } from '@/components/Layout';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { EXTRACTION_HIGHLIGHT_AUTO_CLEAR_MS } from '@/constants/extractionHighlight';
+import { cn } from 'cn';
 
 const AGENT_PANEL_BREAKPOINT = 640;
 
@@ -43,6 +43,8 @@ function getDocPagePanelLayout(L: boolean, P: boolean, C: boolean): number[] {
   if (!L && !P && C) return [100];
   return [100];
 }
+
+const panelShell = 'flex h-full min-h-0 min-w-0 flex-col overflow-hidden';
 
 export default function DocumentViewerPage({ organizationId, id }: DocumentViewerPageProps) {
   const searchParams = useSearchParams();
@@ -117,18 +119,18 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
   const pdfId = Array.isArray(id) ? id[0] : id;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+    <div className={cn('flex h-full min-h-0 flex-col overflow-hidden')}>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <PanelGroup
           ref={panelGroupRef}
           id={`doc-page-panels-${pdfId}`}
           direction="horizontal"
-          style={{ width: '100%', height: '100%' }}
+          className="h-full w-full"
         >
           {showLeftPanel && (
             <>
               <Panel id="doc-sidebar" defaultSize={leftPanelSize!} minSize={15} order={1}>
-                <Box sx={{ height: '100%', overflow: 'auto' }}>
+                <div className={cn(panelShell, 'overflow-auto')}>
                   <Suspense fallback={<div className="h-64 flex items-center justify-center">Loading sidebar...</div>}>
                     <PDFSidebar
                       organizationId={organizationId}
@@ -137,15 +139,15 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
                       onHighlight={setHighlightInfo}
                     />
                   </Suspense>
-                </Box>
+                </div>
               </Panel>
-              <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+              <PanelResizeHandle className="w-1 cursor-col-resize bg-border" />
             </>
           )}
 
           {showPdfPanel && (
             <Panel id="doc-pdf" defaultSize={mainPanelSize!} minSize={20} order={2}>
-              <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
+              <div className={panelShell}>
                 <PDFViewer
                   organizationId={organizationId}
                   id={pdfId}
@@ -153,22 +155,22 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
                   initialShowBoundingBoxes={showBoundingBoxesFromUrl}
                   onPdfDocumentReady={setPdfDocument}
                 />
-              </Box>
+              </div>
             </Panel>
           )}
 
           {showChatPanel && (
             <>
-              <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+              <PanelResizeHandle className="w-1 cursor-col-resize bg-border" />
               <Panel id="doc-chat" defaultSize={rightPanelSize!} minSize={20} order={3}>
-                <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div className={panelShell}>
                   <AgentTab organizationId={organizationId} documentId={pdfId} />
-                </Box>
+                </div>
               </Panel>
             </>
           )}
         </PanelGroup>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
