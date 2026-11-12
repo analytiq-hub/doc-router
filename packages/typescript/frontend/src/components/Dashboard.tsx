@@ -1,49 +1,48 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from '@/utils/appRouter';
-import { useDropzone } from 'react-dropzone';
-import { DocRouterOrgApi } from '@/utils/api';
-import { isColorLight } from '@/utils/colors';
-import { Link } from 'react-router-dom';
-import { 
-  Description as DocumentIcon,
-  DataObject as SchemaIcon,
-  Chat as PromptIcon,
-  LocalOffer as TagIcon,
-  Assignment as FormIcon,
-  MenuBook as KnowledgeBaseIcon,
-  CloudUpload as UploadIcon,
-  Add as AddIcon,
-  Search as SearchIcon,
-  Schedule as ScheduleIcon,
-  CheckCircle as CheckIcon,
-  Error as ErrorIcon
-} from '@mui/icons-material';
-import { Button, TextField, InputAdornment, Card, CardContent, Typography, CircularProgress } from '@mui/material';
-import { formatLocalDate } from '@/utils/date';
+import type { LucideIcon } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  Braces,
+  CheckCircle2,
+  CircleAlert,
+  Clock,
+  CloudUpload,
+  FileText,
+  FormInput,
+  Loader2,
+  MessageSquare,
+  Plus,
+  Tags,
+} from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { useDropzone } from 'react-dropzone'
+import { Link } from 'react-router-dom'
+
+import {
+  useInvalidateOrgLists,
+  useOrgDocuments,
+  useOrgForms,
+  useOrgKnowledgeBases,
+  useOrgPrompts,
+  useOrgSchemas,
+  useOrgAllTags,
+} from '@/api/orgQueries'
+import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
+import { TagBadge } from '@/components/TagBadge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
+import { useRouter } from '@/utils/appRouter'
+import { DocRouterOrgApi } from '@/utils/api'
+import { formatLocalDate } from '@/utils/date'
 
 interface DashboardProps {
-  organizationId: string;
+  organizationId: string
 }
-
-interface DashboardStats {
-  documents: number;
-  schemas: number;
-  prompts: number;
-  tags: number;
-  forms: number;
-  knowledgeBases: number;
-}
-
-interface RecentDocument {
-  id: string;
-  document_name: string;
-  upload_date: string;
-  state: string;
-  tag_ids: string[];
-}
-
 
 const DASHBOARD_ACCEPT = {
   'application/pdf': ['.pdf'],
@@ -59,419 +58,365 @@ const DASHBOARD_ACCEPT = {
   'image/gif': ['.gif'],
   'image/webp': ['.webp'],
   'image/bmp': ['.bmp'],
-  'image/tiff': ['.tiff', '.tif']
-};
+  'image/tiff': ['.tiff', '.tif'],
+}
+
+type StatWidget = {
+  title: string
+  href: string
+  icon: LucideIcon
+  iconClassName: string
+  count: number | undefined
+}
+
+function StatCard({ widget }: { widget: StatWidget }) {
+  const Icon = widget.icon
+  return (
+    <Link
+      to={widget.href}
+      className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      aria-label={
+        widget.count === undefined
+          ? widget.title
+          : `${widget.count.toLocaleString()} ${widget.title.toLowerCase()}`
+      }
+    >
+      <Card className="h-full transition-colors group-hover:bg-muted/50">
+        <CardContent className="flex items-center gap-3">
+          <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', widget.iconClassName)}>
+            <Icon className="size-4" aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm text-muted-foreground">{widget.title}</p>
+            <p className="text-xl font-semibold tabular-nums">
+              {widget.count === undefined ? '…' : widget.count.toLocaleString()}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
+function documentStateIcon(state: string) {
+  const normalized = state.toLowerCase()
+  if (normalized === 'ready' || normalized === 'processed' || normalized === 'completed') {
+    return <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+  }
+  if (normalized === 'error' || normalized === 'failed') {
+    return <CircleAlert className="size-4 shrink-0 text-destructive" aria-hidden />
+  }
+  return <Clock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+}
+
+function MoreLink({ to, children }: { to: string; children: React.ReactNode }) {
+  return (
+    <Link to={to} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+      {children}
+      <ArrowRight className="size-4" aria-hidden />
+    </Link>
+  )
+}
 
 const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
-  const router = useRouter();
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [stats, setStats] = useState<DashboardStats>({
-    documents: 0,
-    schemas: 0,
-    prompts: 0,
-    tags: 0,
-    forms: 0,
-    knowledgeBases: 0
-  });
-  const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([]);
-  const [availableTags, setAvailableTags] = useState<Array<{id: string; name: string; color: string}>>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dashboardUploading, setDashboardUploading] = useState(false);
-  const [dashboardUploadError, setDashboardUploadError] = useState<string | null>(null);
+  const router = useRouter()
+  const invalidate = useInvalidateOrgLists(organizationId)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [dashboardUploading, setDashboardUploading] = useState(false)
+  const [dashboardUploadError, setDashboardUploadError] = useState<string | null>(null)
 
-  const onDashboardDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    setDashboardUploadError(null);
-    setDashboardUploading(true);
-    try {
-      const results = await Promise.all(
-        acceptedFiles.map((file) =>
-          docRouterOrgApi.uploadDocumentMultipart({ name: file.name, file, tag_ids: [], metadata: {} })
+  const countParams = { skip: 0, limit: 1 } as const
+  const documentsRecent = useOrgDocuments(organizationId, { skip: 0, limit: 5 })
+  const documentsCount = useOrgDocuments(organizationId, countParams)
+  const schemasCount = useOrgSchemas(organizationId, countParams)
+  const promptsCount = useOrgPrompts(organizationId, countParams)
+  const formsCount = useOrgForms(organizationId, countParams)
+  const knowledgeBasesCount = useOrgKnowledgeBases(organizationId, countParams)
+  const { data: allTags = [] } = useOrgAllTags(organizationId)
+
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+
+  const onDashboardDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      if (acceptedFiles.length === 0) return
+      setDashboardUploadError(null)
+      setDashboardUploading(true)
+      try {
+        const results = await Promise.all(
+          acceptedFiles.map((file) =>
+            docRouterOrgApi.uploadDocumentMultipart({ name: file.name, file, tag_ids: [], metadata: {} }),
+          ),
         )
-      );
-      const firstId = results[0]?.document?.document_id;
-      if (firstId) {
-        router.push(`/orgs/${organizationId}/docs/${firstId}?bbox`);
-      } else {
-        setDashboardUploadError('Upload succeeded but no document ID returned.');
+        const firstId = results[0]?.document?.document_id
+        if (firstId) {
+          void invalidate.documents()
+          router.push(`/orgs/${organizationId}/docs/${firstId}?bbox`)
+        } else {
+          setDashboardUploadError('Upload succeeded but no document ID returned.')
+        }
+      } catch (err) {
+        console.error('Dashboard upload error:', err)
+        setDashboardUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      } finally {
+        setDashboardUploading(false)
       }
-    } catch (err) {
-      console.error('Dashboard upload error:', err);
-      setDashboardUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
-    } finally {
-      setDashboardUploading(false);
-    }
-  }, [organizationId, docRouterOrgApi, router]);
+    },
+    [docRouterOrgApi, invalidate, organizationId, router],
+  )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDashboardDrop,
     accept: DASHBOARD_ACCEPT,
     multiple: true,
-    disabled: dashboardUploading
-  });
+    disabled: dashboardUploading,
+  })
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        const [documentsRes, schemasRes, promptsRes, tagsRes, formsRes, knowledgeBasesRes] = await Promise.all([
-          docRouterOrgApi.listDocuments({ limit: 5 }),
-          docRouterOrgApi.listSchemas({ limit: 1 }),
-          docRouterOrgApi.listPrompts({ limit: 1 }),
-          docRouterOrgApi.listTags({ limit: 10 }),
-          docRouterOrgApi.listForms({ limit: 1 }),
-          docRouterOrgApi.listKnowledgeBases({ limit: 1 })
-        ]);
+  const widgets: StatWidget[] = useMemo(
+    () => [
+      {
+        title: 'Documents',
+        count: documentsCount.data?.total_count,
+        href: `/orgs/${organizationId}/docs`,
+        icon: FileText,
+        iconClassName: 'bg-primary/15 text-primary',
+      },
+      {
+        title: 'Schemas',
+        count: schemasCount.data?.total_count,
+        href: `/orgs/${organizationId}/schemas`,
+        icon: Braces,
+        iconClassName: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+      },
+      {
+        title: 'Prompts',
+        count: promptsCount.data?.total_count,
+        href: `/orgs/${organizationId}/prompts`,
+        icon: MessageSquare,
+        iconClassName: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
+      },
+      {
+        title: 'Tags',
+        count: allTags.length,
+        href: `/orgs/${organizationId}/tags`,
+        icon: Tags,
+        iconClassName: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+      },
+      {
+        title: 'Forms',
+        count: formsCount.data?.total_count,
+        href: `/orgs/${organizationId}/forms`,
+        icon: FormInput,
+        iconClassName: 'bg-rose-500/15 text-rose-700 dark:text-rose-400',
+      },
+      {
+        title: 'Knowledge bases',
+        count: knowledgeBasesCount.data?.total_count,
+        href: `/orgs/${organizationId}/knowledge-bases`,
+        icon: BookOpen,
+        iconClassName: 'bg-teal-500/15 text-teal-700 dark:text-teal-400',
+      },
+    ],
+    [
+      allTags.length,
+      documentsCount.data?.total_count,
+      formsCount.data?.total_count,
+      knowledgeBasesCount.data?.total_count,
+      organizationId,
+      promptsCount.data?.total_count,
+      schemasCount.data?.total_count,
+    ],
+  )
 
-        setStats({
-          documents: documentsRes.total_count,
-          schemas: schemasRes.total_count,
-          prompts: promptsRes.total_count,
-          tags: tagsRes.total_count,
-          forms: formsRes.total_count,
-          knowledgeBases: knowledgeBasesRes.total_count
-        });
-
-        setRecentDocuments(documentsRes.documents);
-        setAvailableTags(tagsRes.tags);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
-  }, [docRouterOrgApi]);
-
-  const widgets = [
-    {
-      title: 'Documents',
-      count: stats.documents,
-      icon: DocumentIcon,
-      href: `/orgs/${organizationId}/docs`,
-      color: 'bg-primary-500',
-      description: 'Uploaded documents'
-    },
-    {
-      title: 'Schemas',
-      count: stats.schemas,
-      icon: SchemaIcon,
-      href: `/orgs/${organizationId}/schemas`,
-      color: 'bg-green-500',
-      description: 'Data schemas'
-    },
-    {
-      title: 'Prompts',
-      count: stats.prompts,
-      icon: PromptIcon,
-      href: `/orgs/${organizationId}/prompts`,
-      color: 'bg-purple-500',
-      description: 'AI prompts'
-    },
-    {
-      title: 'Tags',
-      count: stats.tags,
-      icon: TagIcon,
-      href: `/orgs/${organizationId}/tags`,
-      color: 'bg-orange-500',
-      description: 'Document tags'
-    },
-    {
-      title: 'Forms',
-      count: stats.forms,
-      icon: FormIcon,
-      href: `/orgs/${organizationId}/forms`,
-      color: 'bg-red-500',
-      description: 'Data forms'
-    },
-    {
-      title: 'Knowledge Bases',
-      count: stats.knowledgeBases,
-      icon: KnowledgeBaseIcon,
-      href: `/orgs/${organizationId}/knowledge-bases`,
-      color: 'bg-teal-500',
-      description: 'Knowledge bases'
-    }
-  ];
-
-  const getDocumentStatusIcon = (state: string) => {
-    switch (state.toLowerCase()) {
-      case 'ready':
-      case 'processed':
-        return <CheckIcon className="h-4 w-4 text-green-500" />;
-      case 'processing':
-        return <ScheduleIcon className="h-4 w-4 text-yellow-500" />;
-      case 'error':
-      case 'failed':
-        return <ErrorIcon className="h-4 w-4 text-red-500" />;
-      default:
-        return <ScheduleIcon className="h-4 w-4 text-gray-500" />;
-    }
-  };
+  const recentDocuments = documentsRecent.data?.documents ?? []
+  const recentLoading = documentsRecent.isPending
 
   const filteredDocuments = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return recentDocuments;
-    }
-    return recentDocuments.filter(doc => 
-      doc.document_name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [recentDocuments, searchQuery]);
+    if (!searchQuery.trim()) return recentDocuments
+    const q = searchQuery.toLowerCase()
+    return recentDocuments.filter((doc) => doc.document_name.toLowerCase().includes(q))
+  }, [recentDocuments, searchQuery])
+
+  const tagById = useMemo(() => new Map(allTags.map((t) => [t.id, t])), [allTags])
+  const tagsForDisplay = useMemo(() => allTags.slice(0, 12), [allTags])
+
+  const docsListUrl = `/orgs/${organizationId}/docs${
+    searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery)}` : ''
+  }`
+
+  const quickActions = [
+    { label: 'Upload document', href: `/orgs/${organizationId}/docs?tab=upload`, icon: CloudUpload },
+    { label: 'Create schema', href: `/orgs/${organizationId}/schemas?tab=schema-create`, icon: Plus },
+    { label: 'Create prompt', href: `/orgs/${organizationId}/prompts?tab=prompt-create`, icon: Plus },
+    { label: 'Manage tags', href: `/orgs/${organizationId}/tags`, icon: Tags },
+    { label: 'Create form', href: `/orgs/${organizationId}/forms?tab=form-create`, icon: Plus },
+    { label: 'Create knowledge base', href: `/orgs/${organizationId}/knowledge-bases?tab=kb-create`, icon: Plus },
+  ]
 
   return (
-    <div className="space-y-6">
-      {/* Header with Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Dashboard</h2>
-          <p className="text-gray-600">
-            Overview of your organization&apos;s resources.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <TextField
-            size="small"
-            placeholder="Search documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon className="h-5 w-5 text-gray-400" />
-                </InputAdornment>
-              ),
-            }}
-            className="min-w-[250px]"
-          />
-          <Link to={`/orgs/${organizationId}/docs?tab=upload`}>
-            <Button
-              variant="contained"
-              startIcon={<UploadIcon />}
-              className="bg-primary-600 hover:bg-primary-700"
-            >
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Overview of your organization’s resources."
+        actions={
+          <>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search recent documents…"
+              className="min-w-[220px] sm:min-w-[260px]"
+            />
+            <Button render={<Link to={`/orgs/${organizationId}/docs?tab=upload`} />}>
+              <CloudUpload data-icon="inline-start" />
               Upload
             </Button>
-          </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {/* Dashboard dropzone: upload (no tags) → OCR + default extraction → document page */}
-      <Card className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors">
-        <CardContent className="py-8">
+      <Card className="border-dashed">
+        <CardContent>
           <div
             {...getRootProps()}
-            className={`
-              flex flex-col items-center justify-center cursor-pointer rounded-lg py-10 px-6
-              transition-colors min-h-[140px]
-              ${isDragActive ? 'bg-primary-50 border-2 border-primary-400' : 'bg-gray-50/80 hover:bg-gray-100'}
-            `}
+            className={cn(
+              'flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-lg px-6 py-10 transition-colors',
+              isDragActive ? 'bg-primary-soft ring-2 ring-primary/40' : 'bg-muted/40 hover:bg-muted/60',
+            )}
           >
             <input {...getInputProps()} />
             {dashboardUploading ? (
               <>
-                <CircularProgress size={40} className="mb-3" />
-                <Typography className="text-gray-500">Uploading and starting extraction…</Typography>
+                <Loader2 className="mb-3 size-10 animate-spin text-muted-foreground" aria-hidden />
+                <p className="text-sm text-muted-foreground">Uploading and starting extraction…</p>
               </>
             ) : (
               <>
-                <UploadIcon className="h-12 w-12 text-gray-500 mb-3" />
-                <Typography variant="subtitle1" className="font-medium text-gray-700">
-                  {isDragActive
-                    ? 'Drop document(s) here'
-                    : 'Drop a document here or click to upload'}
-                </Typography>
-                <Typography variant="body2" className="mt-1 text-gray-500">
+                <CloudUpload className="mb-3 size-12 text-muted-foreground" aria-hidden />
+                <p className="text-sm font-medium">
+                  {isDragActive ? 'Drop document(s) here' : 'Drop a document here or click to upload'}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   OCR and default extraction will run; you’ll be taken to the document page.
-                </Typography>
+                </p>
               </>
             )}
           </div>
-          {dashboardUploadError && (
-            <Typography color="error" variant="body2" className="mt-3 text-center text-red-600">
-              {dashboardUploadError}
-            </Typography>
-          )}
+          {dashboardUploadError ? (
+            <Alert variant="destructive" className="mt-3">
+              <AlertDescription>{dashboardUploadError}</AlertDescription>
+            </Alert>
+          ) : null}
         </CardContent>
       </Card>
 
-      {/* Stats: grid with 1, 2, 3, or 6 columns; equal-width cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        {widgets.map((widget) => {
-          const Icon = widget.icon;
-          return (
-            <Link
-              key={widget.title}
-              to={widget.href}
-              className="flex items-center gap-2 min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 shadow-sm hover:border-gray-300 hover:shadow transition-colors"
-            >
-              <div className={`flex-shrink-0 p-1 rounded-md ${widget.color}`}>
-                <Icon className="h-4 w-4 text-white" />
-              </div>
-              <span className="flex-shrink-0 text-sm font-bold text-gray-900 tabular-nums">
-                {loading ? '...' : widget.count}
-              </span>
-              <span className="text-sm font-medium text-gray-700 truncate min-w-0">
-                {widget.title}
-              </span>
-            </Link>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        {widgets.map((widget) => (
+          <StatCard key={widget.title} widget={widget} />
+        ))}
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Documents */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
+          <CardHeader>
+            <CardTitle>Recent documents</CardTitle>
+            <CardAction>
+              <MoreLink to={docsListUrl}>View all</MoreLink>
+            </CardAction>
+          </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between mb-4">
-              <Typography variant="h6" className="font-semibold">
-                Recent Documents
-              </Typography>
-              <Link
-                to={`/orgs/${organizationId}/docs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery)}` : ''}`}
-                className="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                View All
-              </Link>
-            </div>
-            <div className="space-y-3">
-              {loading ? (
-                <div className="text-center py-4 text-gray-500">Loading...</div>
-              ) : filteredDocuments.length > 0 ? (
-                filteredDocuments.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            {recentLoading ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+            ) : filteredDocuments.length > 0 ? (
+              <ul className="divide-y divide-border">
+                {filteredDocuments.map((doc) => (
+                  <li key={doc.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0">
                     <Link
                       to={`/orgs/${organizationId}/docs/${doc.id}`}
-                      className="flex items-center gap-3 min-w-0 flex-1 hover:bg-gray-100 rounded -m-1 p-1 transition-colors"
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
                     >
-                      {getDocumentStatusIcon(doc.state)}
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm text-gray-900 truncate">{doc.document_name}</div>
-                        <div className="text-xs text-gray-500">{formatLocalDate(doc.upload_date)}</div>
-                      </div>
+                      {documentStateIcon(doc.state)}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{doc.document_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {doc.upload_date ? formatLocalDate(String(doc.upload_date)) : '—'}
+                        </span>
+                      </span>
                     </Link>
-                    <div className="flex gap-1 items-center flex-shrink-0 ml-2">
+                    <div className="flex max-w-full flex-wrap items-center gap-1">
                       {doc.tag_ids.slice(0, 2).map((tagId) => {
-                        const tag = availableTags.find(t => t.id === tagId);
+                        const tag = tagById.get(tagId)
                         return tag ? (
-                          <Link
-                            key={tagId}
-                            to={`/orgs/${organizationId}/tags/${tag.id}`}
-                            className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-90 ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
-                            style={{ backgroundColor: tag.color }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {tag.name}
+                          <Link key={tagId} to={`/orgs/${organizationId}/tags/${tag.id}`} onClick={(e) => e.stopPropagation()}>
+                            <TagBadge tag={tag} />
                           </Link>
-                        ) : null;
+                        ) : null
                       })}
-                      {doc.tag_ids.length > 2 && (
-                        <span className="text-gray-500 text-sm">+{doc.tag_ids.length - 2}</span>
-                      )}
+                      {doc.tag_ids.length > 2 ? (
+                        <span className="text-xs text-muted-foreground">+{doc.tag_ids.length - 2}</span>
+                      ) : null}
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  {searchQuery.trim() ? 
-                    `No documents found matching "${searchQuery}"` : 
-                    "No documents yet. Upload your first document to get started."
-                  }
-                </div>
-              )}
-            </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                {searchQuery.trim()
+                  ? `No recent documents match “${searchQuery}”.`
+                  : 'No documents yet. Upload your first document to get started.'}
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Second Column: Stacked Quick Actions and Tag Usage */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
+        <div className="flex flex-col gap-6">
           <Card>
+            <CardHeader>
+              <CardTitle>Quick actions</CardTitle>
+            </CardHeader>
             <CardContent>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <Link
-                  to={`/orgs/${organizationId}/docs?tab=upload`}
-                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
-                >
-                  <UploadIcon className="h-4 w-4" />
-                  Upload Document
-                </Link>
-                <Link
-                  to={`/orgs/${organizationId}/schemas?tab=schema-create`}
-                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
-                >
-                  <AddIcon className="h-4 w-4" />
-                  Create Schema
-                </Link>
-                <Link
-                  to={`/orgs/${organizationId}/prompts?tab=prompt-create`}
-                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
-                >
-                  <AddIcon className="h-4 w-4" />
-                  Create Prompt
-                </Link>
-                <Link
-                  to={`/orgs/${organizationId}/tags`}
-                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
-                >
-                  <AddIcon className="h-4 w-4" />
-                  Create Tag
-                </Link>
-                <Link
-                  to={`/orgs/${organizationId}/forms?tab=form-create`}
-                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
-                >
-                  <AddIcon className="h-4 w-4" />
-                  Create Form
-                </Link>
-                <Link
-                  to={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`}
-                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
-                >
-                  <AddIcon className="h-4 w-4" />
-                  Create Knowledge Base
-                </Link>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {quickActions.map(({ label, href, icon: Icon }) => (
+                  <Button
+                    key={label}
+                    variant="outline"
+                    className="h-auto justify-start gap-2 py-2.5"
+                    render={<Link to={href} />}
+                  >
+                    <Icon className="size-4 shrink-0" aria-hidden />
+                    <span className="truncate">{label}</span>
+                  </Button>
+                ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Tag Usage */}
-          {availableTags.length > 0 && (
+          {tagsForDisplay.length > 0 ? (
             <Card>
+              <CardHeader>
+                <CardTitle>Tags</CardTitle>
+                <CardAction>
+                  <MoreLink to={`/orgs/${organizationId}/tags`}>Manage tags</MoreLink>
+                </CardAction>
+              </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  <Typography variant="h6" className="font-semibold">
-                    Tag Usage
-                  </Typography>
-                  <Link
-                    to={`/orgs/${organizationId}/tags`}
-                    className="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Manage Tags
-                  </Link>
-                </div>
                 <div className="flex flex-wrap gap-2">
-                  {availableTags.map((tag) => (
-                    <Link
-                      key={tag.id}
-                      to={`/orgs/${organizationId}/tags/${tag.id}`}
-                      className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-90 ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
-                      style={{ backgroundColor: tag.color }}
-                    >
-                      {tag.name}
+                  {tagsForDisplay.map((tag) => (
+                    <Link key={tag.id} to={`/orgs/${organizationId}/tags/${tag.id}`}>
+                      <TagBadge tag={tag} />
                     </Link>
                   ))}
+                  {allTags.length > tagsForDisplay.length ? (
+                    <span className="self-center text-xs text-muted-foreground">
+                      +{allTags.length - tagsForDisplay.length} more
+                    </span>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default Dashboard;
+export default Dashboard

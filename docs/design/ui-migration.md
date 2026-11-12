@@ -126,7 +126,8 @@ Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — Hea
 - ✅ Bulk actions sheet (`DocumentBulkUpdate`): inset panel, confirm dialogs, bulk tag add/remove checklists
 - ✅ Bulk LLM/OCR/Flows: single tag via shadcn `TagSelect` / `SingleTagSelector` wrapper
 - ✅ Upload wizard: shadcn controls + `TagCheckboxList`; removed legacy MUI `DocumentList.tsx`
-- ⏳ Dashboard widgets; tour guide; case delete / KB info modals; PDF viewer (Phase 8)
+- ✅ Org dashboard: `PageHeader`, shadcn `Card`/`Button`, Lucide, React Query counts + `TagBadge`
+- ⏳ Tour guide; case delete / KB info modals; PDF viewer (Phase 8)
 
 ---
 
