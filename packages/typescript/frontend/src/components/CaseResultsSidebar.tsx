@@ -362,7 +362,7 @@ const CaseResultsSidebar: React.FC<Props> = ({ organizationId, caseId, caseTagId
       {runInfoOpen && runInfoResult && (
         <>
           <div
-            className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+            className="fixed inset-0 z-[70] bg-black/50"
             onClick={() => setRunInfoOpen(false)}
             role="presentation"
           />

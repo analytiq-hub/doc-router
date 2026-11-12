@@ -19,7 +19,7 @@ const PromptDiffView: React.FC<PromptDiffViewProps> = ({
   const rightContent = rightPrompt.content || '';
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div 
         className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}

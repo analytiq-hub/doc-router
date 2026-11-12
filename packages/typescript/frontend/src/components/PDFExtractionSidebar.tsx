@@ -1265,7 +1265,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       {runInfoOpen && (
         <>
           <div
-            className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+            className="fixed inset-0 z-[70] bg-black/50"
             onClick={() => {
               setRunInfoOpen(false);
               setRunInfoPromptId(null);

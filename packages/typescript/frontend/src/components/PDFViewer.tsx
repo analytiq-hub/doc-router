@@ -1804,7 +1804,7 @@ const PDFViewer = ({
       {ocrPanelKind && (
             <>
               <div
-                className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+                className="fixed inset-0 z-[70] bg-black/50"
                 onClick={() => setOcrPanelKind(null)}
                 role="presentation"
               />
