@@ -2,7 +2,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { DocRouterOrgApi } from '@/utils/api';
 import { Document, Tag } from '@docrouter/sdk';
-import { toast } from 'react-hot-toast'
+import { toast } from 'sonner'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 
 interface DocumentBulkDownloadProps {

@@ -10,7 +10,7 @@ import SubscriptionUsage from './SubscriptionUsage';
 import SubscriptionCredits from './SubscriptionCredits';
 import SubscriptionPurchase from './SubscriptionPurchase';
 import { Button } from '@/components/ui/button';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 
 interface SubscriptionProps {
   organizationId: string;

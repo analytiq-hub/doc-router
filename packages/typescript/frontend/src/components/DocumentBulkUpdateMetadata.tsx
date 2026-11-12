@@ -3,7 +3,7 @@ import { useState, useEffect, forwardRef, useImperativeHandle, useCallback, useM
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
-import { toast } from 'react-hot-toast'
+import { toast } from 'sonner'
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery'
 
 // Type definitions for metadata operations

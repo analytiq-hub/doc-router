@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { DocRouterAccountApi } from '@/utils/api';
 import type { AppSession } from '@/types/AppSession';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { toastActionError } from '@/utils/toastActionError';
 
 /**

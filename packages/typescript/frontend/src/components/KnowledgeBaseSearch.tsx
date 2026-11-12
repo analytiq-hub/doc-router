@@ -4,7 +4,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo, useCallback } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KBSearchResult } from '@docrouter/sdk';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { Filter, Loader2, Search, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

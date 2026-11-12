@@ -10,7 +10,7 @@ type TagConfig = Omit<Tag, 'id' | 'created_at' | 'updated_at'>;
 import { designTokens } from '@/lib/designTokens';
 import InfoTooltip from '@/components/InfoTooltip';
 import { useRouter } from '@/utils/appRouter';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { IdCard } from 'lucide-react';
 import TagInfoModal from '@/components/TagInfoModal';
 import { Button } from '@/components/ui/button';

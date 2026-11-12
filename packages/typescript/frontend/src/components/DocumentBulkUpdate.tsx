@@ -93,7 +93,7 @@ const isFlowsOperationData = (data: OperationData): data is FlowsOperationData =
   return data !== null && typeof data === 'object' && 'selectedFlowIds' in data;
 };
 import { isColorLight } from '@/utils/colors';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { DocumentBulkUpdateTags, DocumentBulkUpdateTagsRef } from './DocumentBulkUpdateTags';
 import { DocumentBulkUpdateMetadata, DocumentBulkUpdateMetadataRef } from './DocumentBulkUpdateMetadata';
 import { DocumentBulkDownload, DocumentBulkDownloadRef } from './DocumentBulkDownload';

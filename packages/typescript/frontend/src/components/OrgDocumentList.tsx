@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 import type { Document } from '@docrouter/sdk'
 
 import { useInvalidateOrgLists, useOrgAllTags, useOrgDocuments } from '@/api/orgQueries'
@@ -373,9 +373,9 @@ export default function OrgDocumentList({
             Welcome! Upload your documents to begin transforming unstructured data into structured insights. If no
             documents are visible,{' '}
             <Link to={uploadTabHref} className="font-medium text-primary hover:underline">
-              click here
+              upload documents
             </Link>{' '}
-            or use the tab above to upload and start extracting key data fields effortlessly.
+            to start extracting key data fields effortlessly.
           </div>
         )}
         <div

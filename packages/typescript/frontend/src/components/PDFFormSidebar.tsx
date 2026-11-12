@@ -16,7 +16,7 @@ const FormioRenderer = dynamic(() => import('./FormioRenderer'), {
   ssr: false,
   loading: () => <div className="h-32 flex items-center justify-center">Loading form...</div>
 });
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { getApiErrorMsg } from '@/utils/api';
 import type { FormSubmission, FieldMapping, FieldMappingSource } from '@docrouter/sdk';
 import type { GetLLMResultResponse } from '@docrouter/sdk';

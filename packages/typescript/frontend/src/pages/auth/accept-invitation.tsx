@@ -3,7 +3,7 @@
 import React from 'react';
 import { useSearchParams, useRouter } from '@/utils/appRouter';
 import UserAcceptInvitation from '@/components/UserAcceptInvitation';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 
 const AcceptInvitationPage = () => {
   const searchParams = useSearchParams();

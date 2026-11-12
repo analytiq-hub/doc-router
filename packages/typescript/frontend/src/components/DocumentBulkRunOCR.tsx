@@ -11,7 +11,7 @@ import {
 import type { BulkAnalyzeOCRResponse, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { DocumentListSearchParameters } from '@/utils/documentListQuery';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import SingleTagSelector from './SingleTagSelector';
 
 const DEFAULT_PARALLEL_RUNS = 3;

@@ -70,10 +70,8 @@ function TagSaveDialog({
       }
       if (existing?.id) {
         await docRouterOrgApi.updateTag({ tagId: existing.id, tag: payload })
-        toast.success('Tag saved')
       } else {
         await docRouterOrgApi.createTag({ tag: payload })
-        toast.success('Tag created')
       }
       onSaved()
       onClose()

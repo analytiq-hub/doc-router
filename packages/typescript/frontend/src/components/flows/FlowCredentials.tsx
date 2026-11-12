@@ -11,7 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
 import {

@@ -26,7 +26,7 @@ const DOCUMENT_ERROR_STATES = ['ocr_failed', 'llm_failed'] as const;
 function isDocumentErrorState(state: string | null): boolean {
   return state != null && (DOCUMENT_ERROR_STATES as readonly string[]).includes(state);
 }
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { BoltIcon } from '@heroicons/react/24/outline';
 import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Tabs, Tab, Box, Paper } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';

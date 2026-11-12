@@ -3,7 +3,7 @@
 import debounce from 'lodash/debounce'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Organization } from '@docrouter/sdk'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 
 import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'

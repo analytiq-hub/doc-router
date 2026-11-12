@@ -4,7 +4,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
 import { KBChatRequest, LLMMessage, KBChatStreamChunk, KBChatStreamError, Tag } from '@docrouter/sdk';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import ThreadDropdown from '@/components/agent/ThreadDropdown';
 import type { AgentThreadSummary } from '@/components/agent/useAgentChat';
 import { ChevronDown, ChevronUp, Filter, Loader2, Search, Send, Trash2, X } from 'lucide-react';

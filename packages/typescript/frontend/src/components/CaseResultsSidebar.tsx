@@ -19,7 +19,7 @@ import {
   Prompt,
 } from '@docrouter/sdk';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import DraggablePanel from '@/components/DraggablePanel';
 import LlmResultTree from '@/components/extraction/LlmResultTree';
 import { formatLocalDate } from '@/utils/date';

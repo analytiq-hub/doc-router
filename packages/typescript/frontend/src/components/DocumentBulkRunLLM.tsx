@@ -3,7 +3,7 @@ import { forwardRef, useImperativeHandle, useState, useEffect, useCallback, useR
 import { Prompt, BulkAnalyzeLLMResponse } from '@docrouter/sdk';
 import { Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
 import { DocumentListSearchParameters } from '@/utils/documentListQuery';

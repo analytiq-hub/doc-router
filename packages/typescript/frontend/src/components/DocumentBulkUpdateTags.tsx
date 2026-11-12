@@ -3,7 +3,7 @@ import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { Tag } from '@docrouter/sdk';
 import { TagCheckboxList } from '@/components/TagCheckboxList'
 import { DocRouterOrgApi } from '@/utils/api';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery';
 
 interface DocumentBulkUpdateTagsProps {

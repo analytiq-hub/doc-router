@@ -4,7 +4,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { useRouter } from '@/utils/appRouter';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import InfoTooltip from '@/components/InfoTooltip';
 import { useOrgAllTags } from '@/api/orgQueries';
 import { TagCheckboxList } from '@/components/TagCheckboxList';
@@ -75,7 +75,6 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
             metadata,
           },
         });
-        toast.success('Case updated');
         router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(decodeURIComponent(editCaseId))}`);
       } else {
         const name = displayName.trim();
@@ -91,7 +90,6 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
             metadata,
           },
         });
-        toast.success('Case created');
         router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(created.case_id)}`);
       }
     } catch (error) {

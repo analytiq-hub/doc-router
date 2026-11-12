@@ -3,7 +3,7 @@
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient, getApiErrorMsg } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isOrgAdmin, isSysAdmin } from '@/utils/roles';
 import { Copy, Plus, RefreshCw, RotateCcw, Send, Trash2, X } from 'lucide-react';

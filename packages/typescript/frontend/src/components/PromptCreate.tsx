@@ -22,7 +22,7 @@ import { TagCheckboxList } from '@/components/TagCheckboxList';
 import { MetadataKeysInput } from '@/components/MetadataKeysInput';
 import { useOrgAllTags } from '@/api/orgQueries';
 import { Checkbox } from '@/components/ui/checkbox';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { useRouter } from '@/utils/appRouter';
 import Editor from "@monaco-editor/react";
 import { ArrowLeftRight, IdCard } from 'lucide-react';

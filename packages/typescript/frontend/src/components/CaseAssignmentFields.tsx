@@ -13,7 +13,7 @@ import { useDebounced } from '@/lib/useDebounced'
 import { DocRouterOrgApi } from '@/utils/api'
 import { caseDisplayName } from '@/utils/caseDisplayName'
 import { toastActionError } from '@/utils/toastActionError'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 
 const CASE_SEARCH_LIMIT = 25
 
@@ -129,7 +129,6 @@ export function CaseAssignmentFields({
       onCaseIdChange(created.case_id)
       setSelectedCase(created)
       setNewCaseName(trimmed)
-      toast.success('Case created and selected for assignment')
     } catch (error) {
       toastActionError('Failed to create case', error)
     } finally {

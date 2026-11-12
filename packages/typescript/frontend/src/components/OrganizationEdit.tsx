@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 import { useOrganizationData } from '@/hooks/useOrganizationData'
 import { isSysAdmin, isOrgAdmin } from '@/utils/roles'
 import {

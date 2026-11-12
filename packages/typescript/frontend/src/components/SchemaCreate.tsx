@@ -11,7 +11,7 @@ import Editor from "@monaco-editor/react";
 import InfoTooltip from '@/components/InfoTooltip';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { ArrowLeftRight, ChevronDown, ChevronRight, GripVertical, IdCard } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { useRouter } from '@/utils/appRouter';
 import SchemaInfoModal from './SchemaInfoModal';
 import SchemaVersionSelector from './SchemaVersionSelector';

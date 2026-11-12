@@ -13,7 +13,7 @@ import {
   LLMEmbeddingModel,
 } from '@docrouter/sdk';
 import { useRouter } from '@/utils/appRouter';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import InfoTooltip from '@/components/InfoTooltip';
 import { useOrgAllTags } from '@/api/orgQueries';
 import { TagCheckboxList } from '@/components/TagCheckboxList';
@@ -157,7 +157,6 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           kbId,
           update,
         });
-        toast.success('Knowledge base updated successfully');
       } else {
         await docRouterOrgApi.createKnowledgeBase({ kb: currentKB });
       }

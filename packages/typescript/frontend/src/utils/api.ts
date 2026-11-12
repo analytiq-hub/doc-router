@@ -55,7 +55,7 @@ export function invalidateSessionCache(): void {
 }
 
 import { publicFastApiFrontendUrl } from '@/config/publicEnv';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 
 /** Same-origin API prefix for browser calls (compose/nginx proxy at `/fastapi`). */
 export function fastApiBrowserBase(): string {
@@ -130,8 +130,7 @@ const processQueue = (error: Error | null = null) => {
   failedQueue = [];
 };
 
-// Store the toast ID outside the interceptor
-let sessionExpiredToastId: string | number | null = null;
+const SESSION_EXPIRED_TOAST_ID = 'session-expired';
 
 // Add a response interceptor that handles all errors
 api.interceptors.response.use(
@@ -142,8 +141,8 @@ api.interceptors.response.use(
     // Handle 402 errors (payment required)
     if (error.response?.status === 402) {
       toast.error('Insufficient credits. Please upgrade your plan to continue using AI features.', {
-        toastId: 'payment-required', // Prevent duplicate toasts
-        autoClose: 8000
+        id: 'payment-required',
+        duration: 8000,
       });
       return Promise.reject(error);
     }
@@ -156,10 +155,7 @@ api.interceptors.response.use(
         })
           .then(() => api(originalRequest))
           .catch(() => {
-            // Only show session expiration toast once
-            if (!sessionExpiredToastId || !toast.isActive(sessionExpiredToastId)) {
-              sessionExpiredToastId = toast.error('Your session has expired. Please login again.');
-            }
+            toast.error('Your session has expired. Please login again.', { id: SESSION_EXPIRED_TOAST_ID });
             return Promise.reject(new Error('Session expired'));
           });
       }
@@ -180,9 +176,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError instanceof Error ? refreshError : new Error('Token refresh failed'));
-        if (!sessionExpiredToastId || !toast.isActive(sessionExpiredToastId)) {
-          sessionExpiredToastId = toast.error('Your session has expired. Please login again.');
-        }
+        toast.error('Your session has expired. Please login again.', { id: SESSION_EXPIRED_TOAST_ID });
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

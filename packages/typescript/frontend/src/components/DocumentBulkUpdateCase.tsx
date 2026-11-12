@@ -1,7 +1,7 @@
 import { toastActionError } from '@/utils/toastActionError';
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { CaseAssignmentFields } from './CaseAssignmentFields';
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery';
 

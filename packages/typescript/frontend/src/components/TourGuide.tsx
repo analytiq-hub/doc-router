@@ -161,7 +161,7 @@ const TourGuide = () => {
         content: 'Upload your documents for processing.',
         selector: '[data-tour="upload-documents"]',
         placement: 'bottom',
-        page: `/orgs/${org}/docs?tab=upload`,
+        page: `/orgs/${org}/docs`,
       },
       {
         id: 'documents',
@@ -169,7 +169,7 @@ const TourGuide = () => {
         content: 'Click on a document to view the extracted data.',
         selector: '[data-tour="documents"]',
         placement: 'bottom',
-        page: `/orgs/${org}/docs?tab=documents`,
+        page: `/orgs/${org}/docs`,
       },
       {
         id: 'tags',

@@ -5,11 +5,10 @@ import { useDropzone } from 'react-dropzone'
 import { CloudUpload, Loader2, Plus, Trash2 } from 'lucide-react'
 import type { Tag } from '@docrouter/sdk'
 
-import { useOrgAllTags } from '@/api/orgQueries'
+import { useInvalidateOrgLists, useOrgAllTags } from '@/api/orgQueries'
 import { CaseAssignmentFields } from './CaseAssignmentFields'
 import { TagBadge } from '@/components/TagBadge'
 import { TagCheckboxList } from '@/components/TagCheckboxList'
-import InfoTooltip from '@/components/InfoTooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,9 +16,11 @@ import { Label } from '@/components/ui/label'
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities'
 import { DocRouterOrgApi } from '@/utils/api'
 import { randomUUID } from '@/utils/uuid'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 import { toastActionError } from '@/utils/toastActionError'
 import { useOrgCapability } from '@/hooks/useOrgPermissions'
+import { useRouter } from '@/utils/appRouter'
+import { docsListPath } from '@/utils/documentsRoutes'
 
 interface DocumentUploadProps {
   organizationId: string
@@ -32,6 +33,8 @@ interface PendingUploadFile {
 }
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, defaultCaseId }) => {
+  const router = useRouter()
+  const invalidate = useInvalidateOrgLists(organizationId)
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
   const { hasCapability: canUpload, loading: capabilitiesLoading } = useOrgCapability(
     organizationId,
@@ -107,24 +110,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
         ),
       )
 
-      const fileNames = files.map((row) => row.file.name).join(', ')
-      const tagNames =
-        selectedTags.length > 0
-          ? availableTags
-              .filter((tag) => selectedTags.includes(tag.id))
-              .map((tag) => tag.name)
-              .join(', ')
-          : 'no tags'
-
-      toast.success(
-        `Uploaded ${files.length} file(s): ${fileNames}${tagNames !== 'no tags' ? ` (${tagNames})` : ''}`,
-      )
-
-      setFiles([])
-      setSelectedTags([])
-      setMetadataFields([])
-      setCaseId(defaultCaseId ?? '')
-      setActiveStep(0)
+      invalidate.documents()
+      const assignedCaseId = caseId.trim() || defaultCaseId
+      router.push(docsListPath(organizationId, assignedCaseId))
     } catch (error) {
       console.error('Error uploading files:', error)
       toastActionError('Upload failed', error)
@@ -234,42 +222,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 hidden items-center gap-2 md:flex">
-        <h2 className="text-xl font-bold">Upload Documents</h2>
-        <InfoTooltip
-          title="Document Upload"
-          content={
-            <>
-              <p className="mb-2">Upload documents to be processed by AI prompts. Supported file formats:</p>
-              <ul className="mb-2 list-inside list-disc space-y-1">
-                <li>
-                  <strong>PDF files</strong> (.pdf)
-                </li>
-                <li>
-                  <strong>Word documents</strong> (.doc, .docx)
-                </li>
-                <li>
-                  <strong>Excel files</strong> (.xls, .xlsx)
-                </li>
-                <li>
-                  <strong>CSV files</strong> (.csv)
-                </li>
-                <li>
-                  <strong>Text files</strong> (.txt, .md)
-                </li>
-                <li>
-                  <strong>Image files</strong> (.jpg, .jpeg, .png, .gif, .webp, .bmp, .tiff, .tif)
-                </li>
-              </ul>
-              <p className="mb-2">
-                <strong>Note:</strong> Select appropriate tags for your documents to control which prompts are run.
-                Images will be processed using OCR to extract text.
-              </p>
-            </>
-          }
-        />
-      </div>
-
       <div className="mb-6">
         <div className="flex items-center justify-between">
           {stepButton(0, 'Select Files', true)}

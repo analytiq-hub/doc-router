@@ -3,7 +3,7 @@
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 
 interface SubscriptionAdminCreditProps {
   organizationId: string;

@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
 import { Link } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import OrgDocumentList from './OrgDocumentList';
 import CaseResultsSidebar from './CaseResultsSidebar';
 import { isColorLight } from '@/utils/colors';

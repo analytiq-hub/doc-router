@@ -4,7 +4,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { UsageRangeRequest, UsageRangeResponse, UsageDataPoint } from '@/types/payments';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { formatLocalDate } from '@/utils/date';
 
 interface SubscriptionSPUUsageChartProps {

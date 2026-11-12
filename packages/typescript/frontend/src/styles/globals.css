@@ -9,7 +9,6 @@
 /* Formio theme before Tailwind utilities so our utilities (e.g. sm: breakpoints) take precedence */
 @import "@tsed/tailwind-formio/styles/index.css";
 @import './formio-custom.css';
-@import 'react-toastify/dist/ReactToastify.css';
 
 @tailwind utilities;
 

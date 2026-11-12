@@ -10,7 +10,7 @@ type FormConfig = Omit<Form, 'form_revid' | 'form_id' | 'form_version' | 'create
 import { getApiErrorMsg } from '@/utils/api';
 import { TagCheckboxList } from '@/components/TagCheckboxList';
 import { useOrgAllTags } from '@/api/orgQueries';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { useRouter } from '@/utils/appRouter';
 import dynamic from '@/utils/dynamicImport';
 

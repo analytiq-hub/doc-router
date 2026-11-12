@@ -4,7 +4,7 @@ import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '@/utils/appRouter';
 import { DocRouterAccountApi } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { loginWithPassword, persistSessionToken } from '@/utils/backendAuth';
 

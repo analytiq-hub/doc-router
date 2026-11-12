@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { DocRouterOrgApi } from '@/utils/api'
 import { toastActionError } from '@/utils/toastActionError'
 import { formatLocalDate } from '@/utils/date'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 
 interface KnowledgeBaseInfoModalProps {
   isOpen: boolean

@@ -8,7 +8,7 @@ import { FieldMapping, FieldMappingSource } from '@docrouter/sdk';
 
 import { FormComponent, FormField } from '@/types/ui';
 import { getApiErrorMsg } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import { 
   ChevronDownIcon, 
   ChevronRightIcon,

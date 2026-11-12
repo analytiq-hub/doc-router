@@ -17,7 +17,7 @@ import {
   readBulkFlowRerunModeFromSession,
   type BulkFlowRerunMode,
 } from '@/utils/bulkFlowRerunMode';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';

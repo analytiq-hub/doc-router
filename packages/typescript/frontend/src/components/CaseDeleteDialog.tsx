@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DocRouterOrgApi } from '@/utils/api'
 import { toastActionError } from '@/utils/toastActionError'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 import { caseDisplayName } from '@/utils/caseDisplayName'
 import { deleteCaseAndWait, type CaseDeleteMode } from '@/utils/caseDelete'
 
@@ -77,7 +77,7 @@ export default function CaseDeleteDialog({
     setBusy(true)
     try {
       if (mode === 'cascade') {
-        toast.info('Deleting case and documents…', { autoClose: 3000 })
+        toast.info('Deleting case and documents…', { duration: 3000 })
       }
       const result = await deleteCaseAndWait(api, caseRow.case_id, mode)
       if (result.cascade && result.polled) {

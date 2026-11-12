@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { DocRouterOrgApi } from '@/utils/api'
 import { formatLocalDate } from '@/utils/date'
 import { toastActionError } from '@/utils/toastActionError'
-import { toast } from 'react-toastify'
+import { toast } from 'sonner'
 
 interface KnowledgeBaseDocumentsProps {
   organizationId: string

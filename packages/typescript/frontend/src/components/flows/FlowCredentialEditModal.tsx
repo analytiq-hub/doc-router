@@ -15,7 +15,7 @@ import { getApiErrorMsg } from '@/utils/api';
 import type { DocRouterOrgApi } from '@/utils/api';
 import { formatRelativeTime } from '@/utils/date';
 import { copyToClipboard } from '@/utils/clipboard';
-import { toast } from 'react-toastify';
+import { toast } from 'sonner';
 import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
