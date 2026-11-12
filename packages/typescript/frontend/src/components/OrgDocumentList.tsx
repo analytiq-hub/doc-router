@@ -50,9 +50,18 @@ const NON_SORT_FIELDS = new Set(['tag_ids', 'case_id', 'actions'])
 type OrgDocumentListProps = {
   organizationId: string
   initialCaseIdFilter?: string
+  /** When set, the list is scoped to this case (e.g. case detail). */
+  fixedCaseId?: string
+  hideCaseFilter?: boolean
 }
 
-export default function OrgDocumentList({ organizationId, initialCaseIdFilter }: OrgDocumentListProps) {
+export default function OrgDocumentList({
+  organizationId,
+  initialCaseIdFilter,
+  fixedCaseId,
+  hideCaseFilter = false,
+}: OrgDocumentListProps) {
+  const isCaseScoped = Boolean(fixedCaseId)
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
   const invalidate = useInvalidateOrgLists(organizationId)
   const { hasCapability: canWriteDocuments } = useOrgCapability(organizationId, CAP_DOCUMENTS_WRITE)
@@ -70,8 +79,10 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
   const caseIdDebounced = useDebounced(caseIdFilter.trim())
 
   useEffect(() => {
-    setCaseIdFilter(initialCaseIdFilter ?? '')
-  }, [initialCaseIdFilter])
+    if (!fixedCaseId) setCaseIdFilter(initialCaseIdFilter ?? '')
+  }, [fixedCaseId, initialCaseIdFilter])
+
+  const effectiveCaseId = (fixedCaseId ?? caseIdDebounced) || undefined
 
   const activeFilters = filters.filter(isActiveFilter)
   const sortForApi = sortModel.filter((s) => !NON_SORT_FIELDS.has(s.field))
@@ -86,7 +97,7 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
     limit: pagination.pageSize,
     nameSearch: nameSearch || undefined,
     metadataSearch: metadataForApi,
-    caseId: caseIdDebounced || undefined,
+    caseId: effectiveCaseId,
     sort: sortForApiStr,
     filters: filtersForApi,
   })
@@ -108,7 +119,7 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
       searchTerm: nameSearch,
       selectedTagFilters: [],
       metadataSearch: metadataSearchDebounced,
-      caseIdFilter: caseIdDebounced || undefined,
+      caseIdFilter: effectiveCaseId,
       paginationModel: pagination,
       sort: sortForApiStr,
       filters: filtersForApi,
@@ -116,7 +127,7 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
     [
       nameSearch,
       metadataSearchDebounced,
-      caseIdDebounced,
+      effectiveCaseId,
       pagination,
       sortForApiStr,
       filtersForApi,
@@ -229,7 +240,8 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
     [tags],
   )
 
-  const columns: DataTableColumn<Document>[] = [
+  const columns: DataTableColumn<Document>[] = useMemo(() => {
+    const defs: DataTableColumn<Document>[] = [
     {
       field: 'document_name',
       headerName: 'Document name',
@@ -350,35 +362,45 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
         />
       ),
     },
-  ]
+    ]
+    return isCaseScoped ? defs.filter((col) => col.field !== 'case_id') : defs
+  }, [isCaseScoped, organizationId, tagsById, canWriteDocuments, canExecuteRuns])
 
   const uploadTabHref = `/orgs/${organizationId}/docs?tab=upload${
-    caseIdDebounced ? `&case_id=${encodeURIComponent(caseIdDebounced)}` : ''
+    effectiveCaseId ? `&case_id=${encodeURIComponent(effectiveCaseId)}` : ''
   }`
 
   return (
     <>
-      <div className="flex flex-col gap-4">
-        <div className="rounded-lg border border-primary/25 bg-primary-soft p-4 text-sm text-foreground">
-          Welcome! Upload your documents to begin transforming unstructured data into structured insights. If no documents
-          are visible,{' '}
-          <Link to={uploadTabHref} className="font-medium text-primary hover:underline">
-            click here
-          </Link>{' '}
-          or use the tab above to upload and start extracting key data fields effortlessly.
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
+      <div className={`flex flex-col gap-4 ${isCaseScoped ? 'min-h-[280px]' : ''}`}>
+        {!isCaseScoped && (
+          <div className="rounded-lg border border-primary/25 bg-primary-soft p-4 text-sm text-foreground">
+            Welcome! Upload your documents to begin transforming unstructured data into structured insights. If no
+            documents are visible,{' '}
+            <Link to={uploadTabHref} className="font-medium text-primary hover:underline">
+              click here
+            </Link>{' '}
+            or use the tab above to upload and start extracting key data fields effortlessly.
+          </div>
+        )}
+        <div
+          className={
+            isCaseScoped
+              ? 'flex flex-nowrap items-center gap-2 overflow-x-auto'
+              : 'flex flex-wrap items-center gap-3'
+          }
+        >
           <SearchInput
             value={search}
             onChange={(value) => {
               setSearch(value)
               setPagination((p) => ({ ...p, page: 0 }))
             }}
-            placeholder="Search documents..."
+            placeholder={isCaseScoped ? 'Search…' : 'Search documents...'}
           />
           <Input
-            className="h-9 w-64 max-w-full shrink-0"
-            placeholder="Metadata (key=value,...)"
+            className={`h-9 max-w-full shrink-0 ${isCaseScoped ? 'min-w-[4.5rem] flex-1' : 'w-64'}`}
+            placeholder={isCaseScoped ? 'Metadata…' : 'Metadata (key=value,...)'}
             aria-label="Search document metadata"
             value={metadataSearch}
             onChange={(e) => {
@@ -386,16 +408,18 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
               setPagination((p) => ({ ...p, page: 0 }))
             }}
           />
-          <Input
-            className="h-9 w-44 max-w-full shrink-0 font-mono text-sm"
-            placeholder="Filter by case ID"
-            aria-label="Filter by case ID"
-            value={caseIdFilter}
-            onChange={(e) => {
-              setCaseIdFilter(e.target.value)
-              setPagination((p) => ({ ...p, page: 0 }))
-            }}
-          />
+          {!hideCaseFilter && !fixedCaseId && (
+            <Input
+              className="h-9 w-44 max-w-full shrink-0 font-mono text-sm"
+              placeholder="Filter by case ID"
+              aria-label="Filter by case ID"
+              value={caseIdFilter}
+              onChange={(e) => {
+                setCaseIdFilter(e.target.value)
+                setPagination((p) => ({ ...p, page: 0 }))
+              }}
+            />
+          )}
           <FilterBuilder
             fields={filterFields}
             value={filters}
@@ -413,7 +437,7 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
           )}
         </div>
         <ErrorAlert error={documentsQuery.error} />
-        <div className="h-150 min-h-[24rem]">
+        <div className={isCaseScoped ? 'min-h-[16rem] h-96' : 'h-150 min-h-[24rem]'}>
           <DataTable
             aria-label="Documents"
             rows={documentsQuery.data?.documents ?? []}

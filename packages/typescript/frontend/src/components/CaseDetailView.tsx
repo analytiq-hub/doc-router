@@ -6,7 +6,7 @@ import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { Case, Tag } from '@docrouter/sdk';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import DocumentList from './DocumentList';
+import OrgDocumentList from './OrgDocumentList';
 import CaseResultsSidebar from './CaseResultsSidebar';
 import { isColorLight } from '@/utils/colors';
 import { formatLocalDate } from '@/utils/date';
@@ -181,7 +181,11 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
       {activeTab === 'documents' ? (
         <div className="border rounded p-4 bg-white">
           <h2 className="text-lg font-semibold mb-3">Documents in this case</h2>
-          <DocumentList organizationId={organizationId} fixedCaseId={decodedCaseId} hideCaseFilter />
+          <OrgDocumentList
+            organizationId={organizationId}
+            fixedCaseId={decodedCaseId}
+            hideCaseFilter
+          />
         </div>
       ) : (
         <div className="border rounded bg-white overflow-hidden min-h-[32rem] flex flex-col md:flex-row">
