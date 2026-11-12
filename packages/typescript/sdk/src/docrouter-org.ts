@@ -825,13 +825,15 @@ export class DocRouterOrg {
   }
 
   async listKnowledgeBases(params?: Omit<ListKnowledgeBasesParams, 'organizationId'>): Promise<ListKnowledgeBasesResponse> {
-    const { skip, limit, name_search } = params || {};
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: params?.skip || 0,
+      limit: params?.limit || 10,
+    };
+    if (params?.name_search) queryParams.name_search = params.name_search;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
     return this.http.get<ListKnowledgeBasesResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases`, {
-      params: {
-        skip: skip || 0,
-        limit: limit || 10,
-        name_search: name_search
-      }
+      params: queryParams,
     });
   }
 

@@ -1,4 +1,6 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
+
+import type { ListKnowledgeBasesResponse } from '@docrouter/sdk'
 
 import { DocRouterOrgApi } from '@/utils/api'
 
@@ -18,6 +20,9 @@ export const orgKeys = {
   cases: (organizationId: string) => ['org', organizationId, 'cases'] as const,
   caseList: (organizationId: string, params: object) =>
     [...orgKeys.cases(organizationId), 'list', params] as const,
+  knowledgeBases: (organizationId: string) => ['org', organizationId, 'knowledge-bases'] as const,
+  knowledgeBaseList: (organizationId: string, params: object) =>
+    [...orgKeys.knowledgeBases(organizationId), 'list', params] as const,
 }
 
 export type OrgPromptListParams = {
@@ -58,6 +63,14 @@ export type OrgCaseListParams = {
   caseIdSearch?: string
   tagIds?: string
   metadataSearch?: string
+  sort?: string
+  filters?: string
+}
+
+export type OrgKnowledgeBaseListParams = {
+  skip: number
+  limit: number
+  name_search?: string
   sort?: string
   filters?: string
 }
@@ -105,6 +118,19 @@ export function useOrgCases(organizationId: string, params: OrgCaseListParams) {
   })
 }
 
+export function useOrgKnowledgeBases(
+  organizationId: string,
+  params: OrgKnowledgeBaseListParams,
+  options?: Pick<UseQueryOptions<ListKnowledgeBasesResponse>, 'refetchInterval' | 'refetchOnWindowFocus'>,
+) {
+  return useQuery({
+    queryKey: orgKeys.knowledgeBaseList(organizationId, params),
+    queryFn: () => orgApi(organizationId).listKnowledgeBases(params),
+    placeholderData: (previous) => previous,
+    ...options,
+  })
+}
+
 export function useInvalidateOrgLists(organizationId: string) {
   const client = useQueryClient()
   return {
@@ -113,5 +139,6 @@ export function useInvalidateOrgLists(organizationId: string) {
     schemas: () => client.invalidateQueries({ queryKey: orgKeys.schemas(organizationId) }),
     tags: () => client.invalidateQueries({ queryKey: orgKeys.tags(organizationId) }),
     cases: () => client.invalidateQueries({ queryKey: orgKeys.cases(organizationId) }),
+    knowledgeBases: () => client.invalidateQueries({ queryKey: orgKeys.knowledgeBases(organizationId) }),
   }
 }

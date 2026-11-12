@@ -95,6 +95,8 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 **Cases (`frontend-shadcn`):** ✅ `DataTable` + `FilterBuilder` + React Query (`useOrgCases`); `TagCell`; metadata search field; `PageHeader`; create stays `?tab=case-create`. Delete dialog still MUI (Phase 4/6).
 
+**Knowledge bases (`frontend-shadcn`):** ✅ `DataTable` + filters + `useOrgKnowledgeBases` (polling while indexing); `TagCell`; `ConfirmDialog` delete; KB detail tabs unchanged; properties modal still MUI.
+
 Per entity (start with **Tags** or **Prompts**):
 
 1. List: MUI Data Grid → orchestrator-style **DataTable** (TanStack Table + shadcn table)

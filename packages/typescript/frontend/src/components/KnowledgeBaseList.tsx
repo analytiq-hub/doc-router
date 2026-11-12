@@ -1,627 +1,356 @@
-"use client";
+'use client'
 
-import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { KnowledgeBase, Tag } from '@docrouter/sdk';
-import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
-import type { ChipProps } from '@mui/material';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem, Chip, Tooltip, Box } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import BadgeIcon from '@mui/icons-material/Badge';
-import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
-import FolderIcon from '@mui/icons-material/Folder';
-import SyncIcon from '@mui/icons-material/Sync';
-import { designTokens } from '@/lib/designTokens';
-import { useRouter } from '@/utils/appRouter';
-import { toast } from 'react-toastify';
-import { Link } from 'react-router-dom';
-import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
-import { isColorLight } from '@/utils/colors';
-import { formatLocalDate } from '@/utils/date';
-import { useOrgCapability } from '@/hooks/useOrgPermissions';
-import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
+import { FolderOpen, Info, Pencil, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
+import type { KnowledgeBase, KBStatus } from '@docrouter/sdk'
+
+import { useInvalidateOrgLists, useOrgKnowledgeBases, useOrgTags } from '@/api/orgQueries'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { DataTable, type DataTableColumn, type PaginationModel, type SortModel } from '@/components/data-table'
+import { ErrorAlert } from '@/components/ErrorAlert'
+import {
+  activeFields,
+  type FilterField,
+  FilterBuilder,
+  type FilterItem,
+  isActiveFilter,
+  withFilterFields,
+} from '@/components/FilterBuilder'
+import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal'
+import { RowActionsMenu } from '@/components/RowActionsMenu'
+import { SearchInput } from '@/components/SearchInput'
+import { TagCell } from '@/components/TagCell'
+import { Badge } from '@/components/ui/badge'
+import { DocRouterOrgApi } from '@/utils/api'
+import { formatLocalDate } from '@/utils/date'
+import { useOrgCapability } from '@/hooks/useOrgPermissions'
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities'
+import { useRouter } from '@/utils/appRouter'
+import { shortName } from '@/lib/shortName'
 
 const jsonStringifyForQuery = (value: unknown): string =>
-  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v))
 
-const GRID_NON_SORT_FILTER_FIELDS = new Set(['document_count', 'chunk_count', 'actions']);
+const NON_SORT_FIELDS = new Set(['document_count', 'chunk_count', 'tag_ids', 'actions'])
 
-/** Poll while the current page has KBs not yet active; faster while any row is still indexing. */
-const KB_POLL_MS_INDEXING = 5_000;
-const KB_POLL_MS_SLOW = 30_000;
+const KB_POLL_MS_INDEXING = 5_000
+const KB_POLL_MS_SLOW = 30_000
+
+function statusVariant(status: KBStatus): 'success' | 'warning' | 'danger' | 'outline' {
+  switch (status) {
+    case 'active':
+      return 'success'
+    case 'indexing':
+      return 'warning'
+    case 'error':
+      return 'danger'
+    default:
+      return 'outline'
+  }
+}
 
 const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
-  const router = useRouter();
-  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
-  const [total, setTotal] = useState(0);
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
-  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  
-  // Add state for menu
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const router = useRouter()
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+  const invalidate = useInvalidateOrgLists(organizationId)
 
-  const loadKnowledgeBases = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    try {
-      if (!silent) {
-        setIsLoading(true);
-      }
-      const sortForApi = sortModel.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field));
-      const filterForApi: GridFilterModel = {
-        ...filterModel,
-        items: filterModel.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
-      };
-      const response = await docRouterOrgApi.listKnowledgeBases({
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize,
-        name_search: searchTerm || undefined,
-        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
-      });
-      setKnowledgeBases(response.knowledge_bases);
-      setTotal(response.total_count);
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading knowledge bases';
-      if (!silent) {
-        setMessage('Error: ' + errorMsg);
-        toastActionError('Failed to load knowledge bases', error);
-      } else {
-        console.error('Knowledge base list refresh failed:', errorMsg);
-      }
-    } finally {
-      if (!silent) {
-        setIsLoading(false);
-      }
-    }
-  }, [docRouterOrgApi, paginationModel, searchTerm, sortModel, filterModel]);
+  const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
+  const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
+  const [filters, setFilters] = useState<FilterItem[]>([])
+  const [filterRequest, setFilterRequest] = useState<{ field: string } | null>(null)
+  const [search, setSearch] = useState('')
+  const nameSearch = search.trim()
 
-  const loadTags = useCallback(async () => {
-    try {
-      const response = await docRouterOrgApi.listTags({ limit: 100 });
-      setAvailableTags(response.tags);
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
-      console.error('Error loading tags:', errorMsg);
-    }
-  }, [docRouterOrgApi]);
+  const activeFilters = filters.filter(isActiveFilter)
+  const sortForApi = sortModel.filter((s) => !NON_SORT_FIELDS.has(s.field))
+  const listParams = {
+    skip: pagination.page * pagination.pageSize,
+    limit: pagination.pageSize,
+    name_search: nameSearch || undefined,
+    sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+    filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+  }
 
-  useEffect(() => {
-    loadKnowledgeBases();
-  }, [loadKnowledgeBases]);
+  const kbQuery = useOrgKnowledgeBases(organizationId, listParams, {
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const kbs = query.state.data?.knowledge_bases ?? []
+      if (!kbs.length || kbs.every((kb) => kb.status === 'active')) return false
+      return kbs.some((kb) => kb.status === 'indexing') ? KB_POLL_MS_INDEXING : KB_POLL_MS_SLOW
+    },
+  })
 
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void loadKnowledgeBases({ silent: true });
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [loadKnowledgeBases]);
+  const tagsQuery = useOrgTags(organizationId, { skip: 0, limit: 200 })
+  const tagsById = useMemo(
+    () => new Map((tagsQuery.data?.tags ?? []).map((tag) => [tag.id, tag])),
+    [tagsQuery.data?.tags],
+  )
 
-  useEffect(() => {
-    const shouldPoll =
-      knowledgeBases.length > 0 &&
-      !knowledgeBases.every((kb) => kb.status === 'active');
-    if (!shouldPoll) {
-      return;
-    }
+  const [infoKb, setInfoKb] = useState<KnowledgeBase | null>(null)
+  const [deleting, setDeleting] = useState<KnowledgeBase | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<unknown>(null)
 
-    const hasIndexing = knowledgeBases.some((kb) => kb.status === 'indexing');
-    const intervalMs = hasIndexing ? KB_POLL_MS_INDEXING : KB_POLL_MS_SLOW;
-
-    const id = window.setInterval(() => {
-      if (document.hidden) {
-        return;
-      }
-      void loadKnowledgeBases({ silent: true });
-    }, intervalMs);
-
-    return () => window.clearInterval(id);
-  }, [knowledgeBases, loadKnowledgeBases]);
-
-  useEffect(() => {
-    loadTags();
-  }, [loadTags]);
-
-  // Menu handlers
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, kb: KnowledgeBase) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedKB(kb);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedKB(null);
-  };
-
-  const handleDelete = async (kbId: string) => {
-    if (!confirm('Are you sure you want to delete this knowledge base? This will delete all indexed documents and vectors.')) {
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      await docRouterOrgApi.deleteKnowledgeBase({ kbId });
-      await loadKnowledgeBases();
-      handleMenuClose();
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error deleting knowledge base';
-      setMessage('Error: ' + errorMsg);
-      toastActionError('Failed to delete knowledge base', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleEdit = (kb: KnowledgeBase) => {
-    if (!canConfigWrite) return;
-    router.push(`/orgs/${organizationId}/knowledge-bases?tab=edit&kbId=${kb.kb_id}`);
-    handleMenuClose();
-  };
-
-  const handleSearch = (kb: KnowledgeBase) => {
-    router.push(`/orgs/${organizationId}/knowledge-bases?tab=search&kbId=${kb.kb_id}`);
-    handleMenuClose();
-  };
-
-  const handleViewDocuments = (kb: KnowledgeBase) => {
-    router.push(`/orgs/${organizationId}/knowledge-bases?tab=documents&kbId=${kb.kb_id}`);
-    handleMenuClose();
-  };
+  const tabUrl = (tab: string, kbId: string) =>
+    `/orgs/${organizationId}/knowledge-bases?tab=${tab}&kbId=${encodeURIComponent(kbId)}`
 
   const handleReconcile = async (kb: KnowledgeBase) => {
-    handleMenuClose();
     try {
-      const result = await docRouterOrgApi.reconcileKnowledgeBase({ 
-        kbId: kb.kb_id,
-        dry_run: false 
-      });
+      const result = await docRouterOrgApi.reconcileKnowledgeBase({ kbId: kb.kb_id, dry_run: false })
       toast.success(
-        `Reconciliation complete: ${result.missing_documents.length} missing, ` +
-        `${result.stale_documents.length} stale, ${result.orphaned_vectors} orphaned vectors`
-      );
-      // Reload KBs to get updated last_reconciled_at
-      loadKnowledgeBases();
+        `Reconciliation: ${result.missing_documents.length} missing, ${result.stale_documents.length} stale, ${result.orphaned_vectors} orphaned vectors`,
+      )
+      void invalidate.knowledgeBases()
     } catch (error) {
-      toastActionError('Reconciliation failed', error);
+      toast.error('Reconciliation failed')
+      console.error(error)
     }
-  };
+  }
 
-  const getStatusColor = (status: string): NonNullable<ChipProps['color']> => {
-    switch (status) {
-      case 'active':
-        return 'success';
-      case 'indexing':
-        return 'warning';
-      case 'error':
-        return 'error';
-      default:
-        return 'default';
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await docRouterOrgApi.deleteKnowledgeBase({ kbId: deleting.kb_id })
+      toast.success('Knowledge base deleted')
+      setDeleting(null)
+      void invalidate.knowledgeBases()
+    } catch (error) {
+      setDeleteError(error)
+    } finally {
+      setDeleteBusy(false)
     }
-  };
+  }
 
-  // Define columns for the data grid
-  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
-  const columns = useMemo<GridColDef[]>(() => [
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      { field: 'name', label: 'Name', kind: 'text' as const },
+      { field: 'description', label: 'Description', kind: 'text' as const },
+      {
+        field: 'status',
+        label: 'Status',
+        kind: 'select' as const,
+        options: [
+          { value: 'active', label: 'active' },
+          { value: 'indexing', label: 'indexing' },
+          { value: 'error', label: 'error' },
+        ],
+      },
+      { field: 'embedding_model', label: 'Model', kind: 'text' as const },
+      {
+        field: 'tag_ids',
+        label: 'Tags',
+        kind: 'tag' as const,
+        single: true,
+        options: (tagsQuery.data?.tags ?? []).map((t) => ({ value: t.name, label: t.name })),
+      },
+      { field: 'created_at', label: 'Created', kind: 'date' as const },
+      { field: 'updated_at', label: 'Updated', kind: 'date' as const },
+    ],
+    [tagsQuery.data?.tags],
+  )
+
+  const columns: DataTableColumn<KnowledgeBase>[] = [
     {
       field: 'name',
       headerName: 'Name',
       flex: 1,
-      renderCell: (params) => (
-        <div
-          className="flex items-center h-full w-full cursor-pointer"
-          onClick={() => {
-            if (canConfigWrite) {
-              handleEdit(params.row);
-            } else {
-              handleSearch(params.row);
-            }
-          }}
+      minWidth: 160,
+      renderCell: ({ row }) => (
+        <Link
+          to={canConfigWrite ? tabUrl('edit', row.kb_id) : tabUrl('search', row.kb_id)}
+          className="text-primary hover:underline"
         >
-          <span className="font-medium text-primary-600 hover:text-primary-800 hover:underline">{params.row.name}</span>
-        </div>
+          <span className="line-clamp-2 font-medium" title={row.name}>
+            {row.name}
+          </span>
+        </Link>
       ),
     },
     {
       field: 'description',
       headerName: 'Description',
       flex: 1.5,
-      renderCell: (params) => (
-        <div className="flex items-center h-full w-full text-gray-600">
-          {params.row.description || '-'}
-        </div>
+      minWidth: 180,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <span className="line-clamp-2 text-sm text-muted-foreground" title={row.description ?? ''}>
+          {row.description?.trim() || '—'}
+        </span>
       ),
     },
     {
       field: 'status',
       headerName: 'Status',
-      width: 120,
-      renderCell: (params) => (
-        <div className="flex items-center h-full w-full">
-          <Chip 
-            label={params.row.status} 
-            color={getStatusColor(params.row.status)}
-            size="small"
-          />
-        </div>
+      width: 110,
+      renderCell: ({ row }) => (
+        <Badge variant={statusVariant(row.status)} className="capitalize">
+          {row.status}
+        </Badge>
       ),
     },
     {
       field: 'document_count',
       headerName: 'Documents',
-      width: 100,
+      width: 110,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      renderCell: (params) => (
-        <div className="flex items-center h-full w-full">
-          {params.row.document_count}
-        </div>
-      ),
+      renderCell: ({ row }) => <span className="text-sm tabular-nums">{row.document_count ?? 0}</span>,
     },
     {
       field: 'chunk_count',
       headerName: 'Chunks',
       width: 100,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      renderCell: (params) => (
-        <div className="flex items-center h-full w-full">
-          {params.row.chunk_count.toLocaleString()}
-        </div>
+      renderCell: ({ row }) => (
+        <span className="text-sm tabular-nums">{(row.chunk_count ?? 0).toLocaleString()}</span>
       ),
     },
     {
       field: 'embedding_model',
       headerName: 'Model',
-      width: 180,
-      renderCell: (params) => (
-        <div title={params.row.embedding_model} className="flex items-center h-full w-full min-w-0 text-sm text-gray-600">
-          <span className="truncate min-w-0">{params.row.embedding_model}</span>
-        </div>
+      flex: 1,
+      minWidth: 140,
+      renderCell: ({ row }) => (
+        <span className="truncate text-sm text-muted-foreground" title={row.embedding_model}>
+          {row.embedding_model}
+        </span>
       ),
     },
     {
       field: 'tag_ids',
       headerName: 'Tags',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => {
-        const kbTags = availableTags.filter(tag => 
-          params.row.tag_ids?.includes(tag.id)
-        );
-        const firstTag = kbTags[0];
-        const hasMoreTags = kbTags.length > 1;
-
-        const tagChip = (tag: Tag) => (
-          <div
-            key={tag.id}
-            className={`px-2 py-1 rounded text-xs ${
-              isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-            } flex items-center min-w-0 overflow-hidden whitespace-nowrap`}
-            style={{ backgroundColor: tag.color }}
-            title={tag.name}
-          >
-            <span className="truncate min-w-0">{tag.name}</span>
-          </div>
-        );
-
-        if (!firstTag) {
-          return <div className="text-gray-400 flex items-center h-full">-</div>;
-        }
-
-        const content = (
-          <div className="flex gap-1 items-center h-full w-full min-w-0">
-            {tagChip(firstTag)}
-            {hasMoreTags && (
-              <span className="text-gray-500 text-sm shrink-0">...</span>
-            )}
-          </div>
-        );
-
-        if (hasMoreTags) {
-          const tooltipContent = (
-            <Box className="flex flex-col gap-1.5 p-1">
-              {kbTags.map(tag => tagChip(tag))}
-            </Box>
-          );
-
-          return (
-            <Tooltip 
-              title={tooltipContent}
-              arrow
-              placement="top"
-              enterDelay={200}
-              componentsProps={{
-                tooltip: {
-                  sx: {
-                    bgcolor: 'white',
-                    color: 'text.primary',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    padding: '4px',
-                    maxWidth: '300px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  },
-                },
-              }}
-            >
-              <div className="w-full min-w-0 flex items-center h-full">
-                {content}
-              </div>
-            </Tooltip>
-          );
-        }
-
-        return content;
-      },
+      flex: 1,
+      minWidth: 140,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <TagCell tags={(row.tag_ids ?? []).flatMap((id) => tagsById.get(id) ?? [])} />
+      ),
     },
     {
       field: 'created_at',
       headerName: 'Created',
-      type: 'dateTime',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      valueGetter: (value: unknown, row: { created_at?: unknown }) => {
-        const v = (row?.created_at ?? value) as string | Date | null | undefined;
-        if (!v) return null;
-        if (v instanceof Date) return v;
-        const d = new Date(v);
-        return Number.isNaN(d.getTime()) ? null : d;
-      },
-      valueFormatter: (params: GridRenderCellParams) => {
-        const p = params as unknown as { value?: unknown } | null;
-        if (!p?.value) return '';
-        const v = p.value as Date | string;
-        const iso = v instanceof Date ? v.toISOString() : String(v);
-        return formatLocalDate(iso);
-      },
-      renderCell: (params: GridRenderCellParams) => {
-        const anyParams = params as unknown as { row?: { created_at?: unknown } };
-        if (!anyParams?.row?.created_at) return '';
-        return <div className="text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
-      },
+      width: 120,
+      renderCell: ({ row }) =>
+        row.created_at ? (
+          <span className="text-sm text-muted-foreground">{formatLocalDate(String(row.created_at))}</span>
+        ) : (
+          ''
+        ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      renderCell: (params) => (
-        <div className="flex gap-2 items-center h-full">
-          <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row)}
-            className="text-gray-600 hover:bg-gray-50"
-          >
-            <MoreVertIcon />
-          </IconButton>
-        </div>
+      hideable: false,
+      resizable: false,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            canConfigWrite && {
+              label: 'Edit',
+              icon: Pencil,
+              onSelect: () => router.push(tabUrl('edit', row.kb_id)),
+            },
+            { label: 'View documents', icon: FolderOpen, onSelect: () => router.push(tabUrl('documents', row.kb_id)) },
+            { label: 'Search', icon: Search, onSelect: () => router.push(tabUrl('search', row.kb_id)) },
+            { label: 'Properties', icon: Info, onSelect: () => setInfoKb(row) },
+            { label: 'Reconcile', icon: RefreshCw, onSelect: () => void handleReconcile(row) },
+            canConfigWrite && {
+              label: 'Delete',
+              icon: Trash2,
+              destructive: true,
+              onSelect: () => setDeleting(row),
+            },
+          ]}
+        />
       ),
     },
-  ], [availableTags, organizationId, router, canConfigWrite]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  ]
 
   return (
-    <div className="p-4 w-full">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
-          <p className="text-sm">
-            Knowledge Bases enable semantic search across your documents using vector embeddings.
-            Documents are automatically indexed into knowledge bases based on their tags.
-            {canConfigWrite ? (
-              <>
-                If none are available,{' '}
-                <Link to={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-primary-600 font-medium hover:underline">
-                  click here
-                </Link>{' '}
-                or use the tab above to create a new knowledge base.
-              </>
-            ) : (
-              CONFIG_WRITE_VIEW_ONLY_HINT
-            )}
-          </p>
-        </div>
-        <h2 className="text-xl font-bold mb-4">Knowledge Bases</h2>
-        
-        {/* Search Box */}
-        <div className="mb-4">
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search knowledge bases..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    <>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={(value) => {
+              setSearch(value)
+              setPagination((p) => ({ ...p, page: 0 }))
             }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
+            placeholder="Search knowledge bases"
+          />
+          <FilterBuilder
+            fields={filterFields}
+            value={filters}
+            request={filterRequest}
+            onChange={(items) => {
+              setFilters(items)
+              setPagination((p) => ({ ...p, page: 0 }))
             }}
           />
         </div>
-
-        {/* Message */}
-        {message && (
-          <div className={`mb-4 p-3 rounded ${
-            message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
-          }`}>
-            {message}
-          </div>
-        )}
-
-        {/* Data Grid */}
-        <div style={{ height: 600, width: '100%' }}>
-          <DataGrid
-            rows={knowledgeBases}
-            columns={columns}
-            pageSizeOptions={[5, 10, 20, 50]}
-            disableRowSelectionOnClick
-            loading={isLoading}
+        <ErrorAlert error={kbQuery.error} />
+        <div className="h-150 min-h-[24rem]">
+          <DataTable
+            aria-label="Knowledge bases"
+            rows={kbQuery.data?.knowledge_bases ?? []}
             getRowId={(row) => row.kb_id}
-            sortingMode="server"
+            columns={withFilterFields(columns, filterFields)}
+            activeFilterFields={activeFields(filters)}
+            onFilterColumn={(field) => setFilterRequest({ field })}
+            rowCount={kbQuery.data?.total_count ?? 0}
+            loading={kbQuery.isFetching}
+            paginationModel={pagination}
+            onPaginationModelChange={setPagination}
             sortModel={sortModel}
-            onSortModelChange={(model) => {
-              const next = model.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field));
-              if (JSON.stringify(next) === JSON.stringify(sortModel)) return;
-              setSortModel(next);
-              setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
-            }}
-            filterMode="server"
-            filterModel={filterModel}
-            onFilterModelChange={(model) => {
-              const next = {
-                ...model,
-                items: model.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
-              };
-              if (JSON.stringify(next) === JSON.stringify(filterModel)) return;
-              setFilterModel(next);
-              setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
-            }}
-            paginationMode="server"
-            paginationModel={paginationModel}
-            onPaginationModelChange={setPaginationModel}
-            rowCount={total}
-            sx={{
-              '& .MuiDataGrid-cell': {
-                padding: '8px',
-              },
-              '& .MuiDataGrid-cell[data-field="tag_ids"]': {
-                paddingTop: '8px',
-                paddingBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-              },
-              '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: designTokens.secondary,
-              },
-              '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${designTokens.border} !important`,
-              },
-            }}
+            onSortModelChange={(model) =>
+              setSortModel(model.filter((s) => !NON_SORT_FIELDS.has(s.field)))
+            }
+            pageSizeOptions={[10, 25, 50]}
+            autoRowHeight
           />
         </div>
-        
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          {canConfigWrite && (
-            <MenuItem
-              onClick={() => {
-                if (selectedKB) handleEdit(selectedKB);
-              }}
-              className="flex items-center gap-2"
-            >
-              <EditOutlinedIcon fontSize="small" className="text-primary-600" />
-              <span>Edit</span>
-            </MenuItem>
-          )}
-          <MenuItem 
-            onClick={() => {
-              if (selectedKB) handleViewDocuments(selectedKB);
-            }}
-            className="flex items-center gap-2"
-          >
-            <FolderIcon fontSize="small" className="text-primary-600" />
-            <span>View Documents</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedKB) handleSearch(selectedKB);
-            }}
-            className="flex items-center gap-2"
-          >
-            <SearchOutlinedIcon fontSize="small" className="text-primary-600" />
-            <span>Search</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedKB) {
-                setAnchorEl(null);
-                setIsInfoModalOpen(true);
-              }
-            }}
-            className="flex items-center gap-2"
-          >
-            <BadgeIcon fontSize="small" className="text-primary-600" />
-            <span>Properties</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedKB) handleReconcile(selectedKB);
-            }}
-            className="flex items-center gap-2"
-          >
-            <SyncIcon fontSize="small" className="text-primary-600" />
-            <span>Reconcile</span>
-          </MenuItem>
-          {canConfigWrite && (
-            <MenuItem
-              onClick={() => {
-                if (selectedKB) handleDelete(selectedKB.kb_id);
-              }}
-              className="flex items-center gap-2"
-            >
-              <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-              <span>Delete</span>
-            </MenuItem>
-          )}
-        </Menu>
-        
-        {/* Info Modal */}
-        {selectedKB && (
-          <KnowledgeBaseInfoModal
-            isOpen={isInfoModalOpen}
-            onClose={() => {
-              setIsInfoModalOpen(false);
-              setSelectedKB(null);
-            }}
-            kb={selectedKB}
-            organizationId={organizationId}
-            onReconcile={async () => {
-              await loadKnowledgeBases();
-              // Fetch the updated KB to get the latest last_reconciled_at
-              if (selectedKB) {
-                try {
-                  const updatedKB = await docRouterOrgApi.getKnowledgeBase({ kbId: selectedKB.kb_id });
-                  setSelectedKB(updatedKB);
-                } catch (error) {
-                  console.error('Error fetching updated KB:', error);
-                  // Fallback to reloading the list
-                  await loadKnowledgeBases();
-                }
-              }
-            }}
-          />
-        )}
       </div>
-    </div>
-  );
-};
 
-export default KnowledgeBaseList;
+      {infoKb ? (
+        <KnowledgeBaseInfoModal
+          isOpen
+          onClose={() => setInfoKb(null)}
+          kb={infoKb}
+          organizationId={organizationId}
+          onReconcile={async () => {
+            void invalidate.knowledgeBases()
+            try {
+              const updated = await docRouterOrgApi.getKnowledgeBase({ kbId: infoKb.kb_id })
+              setInfoKb(updated)
+            } catch {
+              void invalidate.knowledgeBases()
+            }
+          }}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete knowledge base"
+        message={`Delete "${shortName(deleting?.name)}"? This removes indexed vectors for this knowledge base.`}
+        destructive
+        busy={deleteBusy}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => {
+          setDeleting(null)
+          setDeleteError(null)
+        }}
+      />
+    </>
+  )
+}
+
+export default KnowledgeBaseList
