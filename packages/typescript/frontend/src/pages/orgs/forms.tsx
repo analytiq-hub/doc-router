@@ -1,69 +1,59 @@
 'use client'
 
-import FormList from '@/components/FormList';
-import { useRouteParams } from '@/utils/useRouteParams';
-import FormCreate from '@/components/FormCreate';
-import { useSearchParams, useRouter } from '@/utils/appRouter';
-import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
-import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
+import { ArrowLeft, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
+
+import FormList from '@/components/FormList'
+import { PageHeader } from '@/components/PageHeader'
+import { useRouteParams } from '@/utils/useRouteParams'
+import FormCreate from '@/components/FormCreate'
+import { useSearchParams, useRouter } from '@/utils/appRouter'
+import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions'
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities'
+import { Button } from '@/components/ui/button'
 
 export default function FormsPage(props: { params: Promise<{ organizationId: string }> }) {
-  const { organizationId } = useRouteParams(props);
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const tab = searchParams.get('tab') || 'forms';
-  const listPath = `/orgs/${organizationId}/forms`;
+  const { organizationId } = useRouteParams(props)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const tab = searchParams.get('tab') || 'forms'
+  const listPath = `/orgs/${organizationId}/forms`
   const { hasCapability: canConfigWrite, loading: capabilitiesLoading } = useOrgCapability(
     organizationId,
     CAP_CONFIG_WRITE,
-  );
-  useOrgCapabilityTabGuard(organizationId, tab, 'form-create', listPath, CAP_CONFIG_WRITE);
+  )
+  useOrgCapabilityTabGuard(organizationId, tab, 'form-create', listPath, CAP_CONFIG_WRITE)
 
-  const handleTabChange = (newValue: string) => {
-    if (newValue === 'form-create' && !canConfigWrite) {
-      return;
-    }
-    router.push(`${listPath}?tab=${newValue}`);
-  };
+  if (tab === 'form-create' && canConfigWrite) {
+    return (
+      <div className="mx-auto max-w-6xl p-4">
+        <div className="mb-6">
+          <Button variant="ghost" render={<Link to={listPath} />}>
+            <ArrowLeft data-icon="inline-start" />
+            Back to forms
+          </Button>
+        </div>
+        <PageHeader title="Create form" subtitle="Build a Form.io form for human review of extracted data." />
+        <FormCreate organizationId={organizationId} />
+      </div>
+    )
+  }
 
   return (
-      <div className="p-4">
-        <div className="border-b border-gray-200 mb-6">
-          <div className="flex gap-8">
-            <button
-              onClick={() => handleTabChange('forms')}
-              className={`pb-4 px-1 relative font-semibold text-base ${
-                tab === 'forms'
-                  ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Forms
-            </button>
-            {!capabilitiesLoading && canConfigWrite && (
-              <button
-                onClick={() => handleTabChange('form-create')}
-                className={`pb-4 px-1 relative font-semibold text-base ${
-                  tab === 'form-create'
-                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-                data-tour="form-create"
-              >
-                Create Form
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="max-w-6xl mx-auto">
-          <div role="tabpanel" hidden={tab !== 'forms'}>
-            {tab === 'forms' && <FormList organizationId={organizationId} />}
-          </div>
-          <div role="tabpanel" hidden={tab !== 'form-create'}>
-            {tab === 'form-create' && canConfigWrite && <FormCreate organizationId={organizationId} />}
-          </div>
-        </div>
-      </div>
-  );
+    <div className="mx-auto max-w-6xl p-4">
+      <PageHeader
+        title="Forms"
+        subtitle="Forms support human review and correction of extracted document data."
+        actions={
+          !capabilitiesLoading && canConfigWrite ? (
+            <Button onClick={() => router.push(`${listPath}?tab=form-create`)} data-tour="form-create">
+              <Plus data-icon="inline-start" />
+              New form
+            </Button>
+          ) : null
+        }
+      />
+      <FormList organizationId={organizationId} />
+    </div>
+  )
 }

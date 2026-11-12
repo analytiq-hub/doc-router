@@ -1,567 +1,418 @@
-import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DocRouterOrgApi } from '@/utils/api';
-import { Tag, Form } from '@docrouter/sdk';
-import { getApiErrorMsg } from '@/utils/api';
-import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem, Tooltip, Box } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import DownloadIcon from '@mui/icons-material/Download';
-import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import BadgeIcon from '@mui/icons-material/Badge';
-import { designTokens } from '@/lib/designTokens';
-import { useRouter } from '@/utils/appRouter';
-import { Link } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import FormNameModal from '@/components/FormNameModal';
-import FormInfoModal from '@/components/FormInfoModal';
-import { isColorLight } from '@/utils/colors';
-import { formatLocalDate } from '@/utils/date';
-import { useOrgCapability } from '@/hooks/useOrgPermissions';
-import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
+'use client'
+
+import { Copy, Download, Info, Pencil, PencilLine, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
+import type { Form, Tag } from '@docrouter/sdk'
+
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { DataTable, type DataTableColumn, type PaginationModel, type SortModel } from '@/components/data-table'
+import { ErrorAlert } from '@/components/ErrorAlert'
+import {
+  activeFields,
+  type FilterField,
+  FilterBuilder,
+  type FilterItem,
+  isActiveFilter,
+  withFilterFields,
+} from '@/components/FilterBuilder'
+import { FormDialog } from '@/components/FormDialog'
+import { PropertiesDialog } from '@/components/PropertiesDialog'
+import { RowActionsMenu } from '@/components/RowActionsMenu'
+import { SearchInput } from '@/components/SearchInput'
+import { TagCell } from '@/components/TagCell'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { useDebounced } from '@/lib/useDebounced'
+import { shortName } from '@/lib/shortName'
+import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
+import { formatLocalDate } from '@/utils/date'
+import { useOrgCapability } from '@/hooks/useOrgPermissions'
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities'
 
 const jsonStringifyForQuery = (value: unknown): string =>
-  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v))
 
-const GRID_NON_SORT_FILTER_FIELDS = new Set(['form_version', 'actions']);
+const NON_SORT_FIELDS = new Set(['form_version', 'tag_ids', 'actions'])
+
+type FormRow = Form & { created_by?: string }
+
+function FormNameDialog({
+  organizationId,
+  originalName,
+  isCloning,
+  onClose,
+  onSubmit,
+}: {
+  organizationId: string
+  originalName: string
+  isCloning: boolean
+  onClose: () => void
+  onSubmit: (name: string) => Promise<void>
+}) {
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+  const [name, setName] = useState(originalName)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const [existingNames, setExistingNames] = useState<string[]>([])
+
+  useEffect(() => {
+    setName(originalName)
+  }, [originalName])
+
+  useEffect(() => {
+    void docRouterOrgApi.listForms({ skip: 0, limit: 100 }).then((res) => {
+      setExistingNames(res.forms.map((f) => f.name.toLowerCase()))
+    })
+  }, [docRouterOrgApi])
+
+  const save = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setError('Form name cannot be empty')
+      return
+    }
+    if (
+      trimmed.toLowerCase() !== originalName.toLowerCase() &&
+      existingNames.includes(trimmed.toLowerCase())
+    ) {
+      setError('A form with this name already exists')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await onSubmit(trimmed)
+      toast.success(isCloning ? 'Form cloned' : 'Form renamed')
+      onClose()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <FormDialog
+      title={isCloning ? 'Clone form' : 'Rename form'}
+      submitLabel={isCloning ? 'Clone' : 'Save'}
+      submitDisabled={!name.trim() || (!isCloning && name.trim() === originalName)}
+      busy={busy}
+      error={error}
+      onSubmit={() => void save()}
+      onClose={onClose}
+    >
+      <Field>
+        <FieldLabel htmlFor="form-name">Name</FieldLabel>
+        <Input id="form-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </Field>
+    </FormDialog>
+  )
+}
+
+function FormPropertiesPanel({ form, tagsById, onClose }: { form: FormRow; tagsById: Map<string, Tag>; onClose: () => void }) {
+  const [createdByName, setCreatedByName] = useState<string | null>(null)
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
+  const tagNames = (form.tag_ids ?? []).map((id) => tagsById.get(id)?.name).filter(Boolean).join(', ') || '—'
+
+  useEffect(() => {
+    let cancelled = false
+    if (!form.created_by) {
+      setCreatedByName(null)
+      return
+    }
+    void docRouterAccountApi
+      .getUser(form.created_by)
+      .then((user) => {
+        if (!cancelled) setCreatedByName(user.name ?? form.created_by!)
+      })
+      .catch(() => {
+        if (!cancelled) setCreatedByName(form.created_by!)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [form.created_by, docRouterAccountApi])
+
+  return (
+    <PropertiesDialog
+      title={form.name}
+      description="Form properties"
+      onClose={onClose}
+      columns={2}
+      properties={[
+        { label: 'Name', value: form.name },
+        { label: 'Version', value: `v${form.form_version}` },
+        { label: 'Tags', value: tagNames },
+        { label: 'Created', value: form.created_at ? formatLocalDate(String(form.created_at)) : '—' },
+        { label: 'Created by', value: form.created_by ? (createdByName ?? '…') : '—' },
+        { label: 'Form ID', value: <span className="font-mono text-xs">{form.form_id}</span> },
+        { label: 'Revision ID', value: <span className="font-mono text-xs">{form.form_revid}</span> },
+      ]}
+    />
+  )
+}
 
 const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
-  const router = useRouter();
-  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [forms, setForms] = useState<Form[]>([]);
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
-  const [total, setTotal] = useState(0);
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
-  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedForm, setSelectedForm] = useState<Form | null>(null);
-  const [isNameModalOpen, setIsNameModalOpen] = useState(false);
-  const [isCloning, setIsCloning] = useState(false);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+
+  const [forms, setForms] = useState<Form[]>([])
+  const [loadError, setLoadError] = useState<unknown>(null)
+  const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
+  const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
+  const [filters, setFilters] = useState<FilterItem[]>([])
+  const [filterRequest, setFilterRequest] = useState<{ field: string } | null>(null)
+  const [search, setSearch] = useState('')
+  const nameSearch = useDebounced(search.trim())
+  const activeFilters = filters.filter(isActiveFilter)
+
+  const [availableTags, setAvailableTags] = useState<Tag[]>([])
+  const tagsById = useMemo(() => new Map(availableTags.map((t) => [t.id, t])), [availableTags])
+
+  const [viewing, setViewing] = useState<FormRow | null>(null)
+  const [nameEdit, setNameEdit] = useState<{ form: Form; cloning: boolean } | null>(null)
+  const [deleting, setDeleting] = useState<Form | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<unknown>(null)
 
   const loadForms = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
     try {
-      setIsLoading(true);
-      const sortForApi = sortModel.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field));
-      const filterForApi: GridFilterModel = {
-        ...filterModel,
-        items: filterModel.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
-      };
+      const sortForApi = sortModel.filter((s) => !NON_SORT_FIELDS.has(s.field))
       const response = await docRouterOrgApi.listForms({
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize,
-        name_search: searchTerm || undefined,
+        skip: pagination.page * pagination.pageSize,
+        limit: pagination.pageSize,
+        name_search: nameSearch || undefined,
         sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
-      });
-      setForms(response.forms);
-      setTotal(response.total_count);
+        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+      })
+      setForms(response.forms)
+      setTotal(response.total_count ?? response.forms.length)
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading forms';
-      setMessage('Error: ' + errorMsg);
+      setLoadError(error)
     } finally {
-      setIsLoading(false);
+      setLoading(false)
     }
-  }, [paginationModel, docRouterOrgApi, searchTerm, sortModel, filterModel]);
-
-  const loadTags = useCallback(async () => {
-    try {
-      const response = await docRouterOrgApi.listTags({ limit: 100 });
-      setAvailableTags(response.tags);
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
-      setMessage('Error: ' + errorMsg);
-    }
-  }, [docRouterOrgApi]);
+  }, [docRouterOrgApi, pagination, nameSearch, sortModel, activeFilters])
 
   useEffect(() => {
-    void loadForms();
-  }, [loadForms]);
+    void loadForms()
+  }, [loadForms])
 
   useEffect(() => {
-    void loadTags();
-  }, [loadTags]);
+    void docRouterOrgApi.listTags({ limit: 100 }).then((res) => setAvailableTags(res.tags))
+  }, [docRouterOrgApi])
 
-  // Update the edit handler
-  const handleEdit = (form: Form) => {
-    if (!canConfigWrite) return;
-    router.push(`/orgs/${organizationId}/forms/${form.form_revid}`);
-    handleMenuClose();
-  };
-
-  const openFormProperties = (form: Form) => {
-    setAnchorEl(null);
-    setSelectedForm(form);
-    setIsInfoModalOpen(true);
-  };
-
-  // Add a function to handle form name change
-  const handleNameForm = (form: Form) => {
-    setSelectedForm(form);
-    setIsCloning(false);
-    setIsNameModalOpen(true);
-    handleMenuClose();
-  };
+  const editPath = (form: Form) => `/orgs/${organizationId}/forms/${form.form_revid}`
 
   const handleNameSubmit = async (newName: string) => {
-    if (!selectedForm) return;
-    
-    try {
-      // Create a new form config with the updated name
-      const formConfig = {
-        name: newName,
-        response_format: selectedForm.response_format
-      };
-      
-      if (isCloning) {
-        // For cloning, create a new form
-        await docRouterOrgApi.createForm(formConfig);
-      } else {
-        // For renaming, update existing form
-        await docRouterOrgApi.updateForm({
-          formId: selectedForm.form_id,
-          form: formConfig
-        });
-      }
-      
-      // Refresh the form list
-      await loadForms();
-    } catch (error) {
-      console.error(`Error ${isCloning ? 'cloning' : 'renaming'} form:`, error);
-      toastActionError(`Failed to ${isCloning ? 'clone' : 'rename'} form`, error);
-      throw error;
+    if (!nameEdit) return
+    const { form, cloning } = nameEdit
+    const formConfig = { name: newName, response_format: form.response_format }
+    if (cloning) {
+      await docRouterOrgApi.createForm(formConfig)
+    } else {
+      await docRouterOrgApi.updateForm({ formId: form.form_id, form: formConfig })
     }
-  };
+    await loadForms()
+  }
 
-  // Add the missing handleDelete function
-  const handleDelete = async (formId: string) => {
-    try {
-      setIsLoading(true);
-      await docRouterOrgApi.deleteForm({ formId });
-      setForms(forms.filter(form => form.form_id !== formId));
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error deleting form';
-      setMessage('Error: ' + errorMsg);
-      toastActionError('Failed to delete form', error);
-    } finally {
-      setIsLoading(false);
-      handleMenuClose();
-    }
-  };
-
-  const handleCloseNameModal = () => {
-    setIsNameModalOpen(false);
-    setSelectedForm(null);
-    setIsCloning(false);
-  };
-
-  // Add a function to handle form download
   const handleDownload = (form: Form) => {
     try {
-      // Create a JSON blob from the form
-      const formJson = JSON.stringify(form.response_format.json_formio, null, 2);
-      const blob = new Blob([formJson], { type: 'application/json' });
-      
-      // Create a URL for the blob
-      const url = URL.createObjectURL(blob);
-      
-      // Create a temporary anchor element to trigger the download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${form.name.replace(/\s+/g, '_')}_form.json`;
-      
-      // Append to the document, click, and remove
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-      
-      handleMenuClose();
-    } catch (error) {
-      console.error('Error downloading form:', error);
-      setMessage('Error: Failed to download form');
+      const formJson = JSON.stringify(form.response_format.json_formio, null, 2)
+      const blob = new Blob([formJson], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${form.name.replace(/\s+/g, '_')}_form.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Download started')
+    } catch {
+      toast.error('Failed to download form')
     }
-  };
+  }
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, form: Form) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedForm(form);
-  };
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await docRouterOrgApi.deleteForm({ formId: deleting.form_id })
+      toast.success('Form deleted')
+      setDeleting(null)
+      void loadForms()
+    } catch (error) {
+      setDeleteError(error)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const filterFields: FilterField[] = [
+    { field: 'name', label: 'Name', kind: 'text' },
+    { field: 'form_version', label: 'Version', kind: 'text' },
+    { field: 'created_at', label: 'Created', kind: 'date' },
+  ]
 
-  // Add a new function to handle clone operation
-  const handleCloneOperation = (form: Form) => {
-    setSelectedForm(form);
-    setIsCloning(true);
-    setIsNameModalOpen(true);
-    handleMenuClose();
-  };
-
-  // Define columns for the data grid
-  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
-  const columns = useMemo<GridColDef[]>(() => [
+  const columns: DataTableColumn<Form>[] = [
     {
       field: 'name',
-      headerName: 'Form Name',
+      headerName: 'Form',
       flex: 1,
-      minWidth: 140,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => (
-        <div
-          className={`text-primary-600 ${canConfigWrite ? 'cursor-pointer hover:underline' : 'cursor-default'}`}
-          onClick={() => {
-            if (canConfigWrite) {
-              handleEdit(params.row);
-            } else {
-              openFormProperties(params.row);
-            }
-          }}
-        >
-          {params.row.name}
-        </div>
-      ),
+      minWidth: 160,
+      renderCell: ({ row }) =>
+        canConfigWrite ? (
+          <Link to={editPath(row)} className="text-primary hover:underline">
+            <span className="line-clamp-2" title={row.name}>
+              {row.name}
+            </span>
+          </Link>
+        ) : (
+          <button type="button" className="text-left hover:underline" onClick={() => setViewing(row)}>
+            {row.name}
+          </button>
+        ),
     },
     {
       field: 'form_version',
       headerName: 'Version',
-      width: 100,
+      width: 90,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => (
-        <div className="text-gray-600">
-          v{params.row.form_version}
-        </div>
-      ),
+      renderCell: ({ row }) => <span className="text-sm">v{row.form_version}</span>,
     },
     {
       field: 'tag_ids',
       headerName: 'Tags',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => {
-        const formTags = availableTags.filter(tag => 
-          params.row.tag_ids?.includes(tag.id)
-        );
-        const firstTag = formTags[0];
-        const hasMoreTags = formTags.length > 1;
-
-        const tagChip = (tag: Tag) => (
-          <div
-            key={tag.id}
-            className={`px-2 py-1 rounded text-xs ${
-              isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-            } flex items-center`}
-            style={{ backgroundColor: tag.color }}
-          >
-            {tag.name}
-          </div>
-        );
-
-        if (!firstTag) {
-          return <div className="text-gray-400 flex items-center h-full">-</div>;
-        }
-
-        const content = (
-          <div className="flex gap-1 items-center h-full">
-            {tagChip(firstTag)}
-            {hasMoreTags && (
-              <span className="text-gray-500 text-sm">...</span>
-            )}
-          </div>
-        );
-
-        if (hasMoreTags) {
-          const tooltipContent = (
-            <Box className="flex flex-col gap-1.5 p-1">
-              {formTags.map(tag => tagChip(tag))}
-            </Box>
-          );
-
-          return (
-            <Tooltip 
-              title={tooltipContent}
-              arrow
-              placement="top"
-              enterDelay={200}
-              componentsProps={{
-                tooltip: {
-                  sx: {
-                    bgcolor: 'white',
-                    color: 'text.primary',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    padding: '4px',
-                    maxWidth: '300px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  },
-                },
-              }}
-            >
-              <div className="w-full flex items-center h-full">
-                {content}
-              </div>
-            </Tooltip>
-          );
-        }
-
-        return content;
-      },
+      flex: 1,
+      minWidth: 160,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <TagCell tags={(row.tag_ids ?? []).flatMap((id) => tagsById.get(id) ?? [])} />
+      ),
     },
     {
       field: 'created_at',
       headerName: 'Created',
-      type: 'dateTime',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      valueGetter: (value: unknown, row: { created_at?: unknown }) => {
-        const v = (row?.created_at ?? value) as string | Date | null | undefined;
-        if (!v) return null;
-        if (v instanceof Date) return v;
-        const d = new Date(v);
-        return Number.isNaN(d.getTime()) ? null : d;
-      },
-      valueFormatter: (params: GridRenderCellParams) => {
-        const p = params as unknown as { value?: unknown } | null;
-        if (!p?.value) return '';
-        const v = p.value as Date | string;
-        const iso = v instanceof Date ? v.toISOString() : String(v);
-        return formatLocalDate(iso);
-      },
-      renderCell: (params: GridRenderCellParams) => {
-        const anyParams = params as unknown as { row?: { created_at?: unknown } };
-        if (!anyParams?.row?.created_at) return '';
-        return <div className="text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
-      },
+      width: 120,
+      renderCell: ({ row }) =>
+        row.created_at ? (
+          <span className="text-sm text-muted-foreground">{formatLocalDate(String(row.created_at))}</span>
+        ) : (
+          ''
+        ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
-      headerAlign: 'center' as const,
-      align: 'center' as const,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <div>
-          <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row as Form)}
-            disabled={isLoading}
-            className="text-gray-600 hover:bg-gray-50"
-          >
-            <MoreVertIcon />
-          </IconButton>
-        </div>
+      hideable: false,
+      resizable: false,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            { label: 'Properties', icon: Info, onSelect: () => setViewing(row) },
+            canConfigWrite && { label: 'Edit', icon: Pencil, to: editPath(row) },
+            canConfigWrite && {
+              label: 'Rename',
+              icon: PencilLine,
+              onSelect: () => setNameEdit({ form: row, cloning: false }),
+            },
+            canConfigWrite && {
+              label: 'Clone',
+              icon: Copy,
+              onSelect: () => setNameEdit({ form: row, cloning: true }),
+            },
+            { label: 'Download', icon: Download, onSelect: () => handleDownload(row) },
+            canConfigWrite && {
+              label: 'Delete',
+              icon: Trash2,
+              destructive: true,
+              onSelect: () => setDeleting(row),
+            },
+          ]}
+        />
       ),
     },
-  ], [router, organizationId, canConfigWrite, isLoading]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  ]
 
   return (
-    <div className="p-4 mx-auto">
-      <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
-        <p className="text-sm">
-          Forms are used to check data extracted from documents. Below is a list of your existing forms.
-          {canConfigWrite ? (
-            <>
-              {' '}
-              If none are available,{' '}
-              <Link to={`/orgs/${organizationId}/forms?tab=form-create`} className="text-primary-600 font-medium hover:underline">
-                click here
-              </Link>{' '}
-              or use the tab above to create a new form.
-            </>
-          ) : (
-            <> {CONFIG_WRITE_VIEW_ONLY_HINT}</>
-          )}
-        </p>
-      </div>
-      <h2 className="text-xl font-bold mb-4 hidden md:block">Forms</h2>
-      
-      {/* Search Box */}
-      <div className="mb-4">
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Search forms..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </div>
-
-      {/* Message */}
-      {message && (
-        <div className={`mb-4 p-3 rounded ${
-          message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
-        }`}>
-          {message}
+    <>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={(value) => {
+              setSearch(value)
+              setPagination((p) => ({ ...p, page: 0 }))
+            }}
+            placeholder="Search forms"
+          />
+          <FilterBuilder
+            fields={filterFields}
+            value={filters}
+            request={filterRequest}
+            onChange={(items) => {
+              setFilters(items)
+              setPagination((p) => ({ ...p, page: 0 }))
+            }}
+          />
         </div>
-      )}
-
-      {/* Data Grid */}
-      <div style={{ height: 400, width: '100%' }}>
-        <DataGrid
-          rows={forms}
-          columns={columns}
-          getRowId={(row) => row.form_revid}
-          sortingMode="server"
-          sortModel={sortModel}
-          onSortModelChange={(model) => {
-            setSortModel(model.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field)));
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
-          }}
-          filterMode="server"
-          filterModel={filterModel}
-          onFilterModelChange={(model) => {
-            setFilterModel({
-              ...model,
-              items: model.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
-            });
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
-          }}
-          pageSizeOptions={[5, 10, 20]}
-          disableRowSelectionOnClick
-          loading={isLoading}
-          paginationMode="server"
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          rowCount={total}
-          sx={{
-            '& .MuiDataGrid-cell': {
-              padding: 'px',
-            },
-            '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: designTokens.secondary,  // Using Tailwind colors
-            },
-            '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${designTokens.border} !important`,  // Using Tailwind colors
-            },
-          }}
-        />
+        <ErrorAlert error={loadError} />
+        <div className="h-150 min-h-[24rem]">
+          <DataTable
+            aria-label="Forms"
+            rows={forms}
+            getRowId={(row) => row.form_revid}
+            columns={withFilterFields(columns, filterFields)}
+            activeFilterFields={activeFields(filters)}
+            onFilterColumn={(field) => setFilterRequest({ field })}
+            rowCount={total}
+            loading={loading}
+            paginationModel={pagination}
+            onPaginationModelChange={setPagination}
+            sortModel={sortModel}
+            onSortModelChange={(model) => setSortModel(model.filter((s) => !NON_SORT_FIELDS.has(s.field)))}
+            pageSizeOptions={[10, 25, 50]}
+          />
+        </div>
       </div>
-      
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        {canConfigWrite && (
-          <MenuItem
-            onClick={() => {
-              if (selectedForm) handleEdit(selectedForm);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-primary-600" />
-            <span>Edit</span>
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => {
-            if (selectedForm) openFormProperties(selectedForm);
-          }}
-          className="flex items-center gap-2"
-        >
-          <BadgeIcon fontSize="small" className="text-primary-600" />
-          <span>Properties</span>
-        </MenuItem>
-        {canConfigWrite && (
-          <>
-            <MenuItem
-              onClick={() => {
-                if (selectedForm) handleNameForm(selectedForm);
-              }}
-              className="flex items-center gap-2"
-            >
-              <DriveFileRenameOutlineIcon fontSize="small" className="text-indigo-800" />
-              <span>Rename</span>
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                if (selectedForm) handleCloneOperation(selectedForm);
-              }}
-              className="flex items-center gap-2"
-            >
-              <ContentCopyIcon fontSize="small" className="text-purple-600" />
-              <span>Clone</span>
-            </MenuItem>
-          </>
-        )}
-        <MenuItem
-          onClick={() => {
-            if (selectedForm) handleDownload(selectedForm);
-          }}
-          className="flex items-center gap-2"
-        >
-          <DownloadIcon fontSize="small" className="text-green-600" />
-          <span>Download</span>
-        </MenuItem>
-        {canConfigWrite && (
-          <MenuItem
-            onClick={() => {
-              if (selectedForm) handleDelete(selectedForm.form_id);
-            }}
-            className="flex items-center gap-2"
-          >
-            <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-            <span>Delete</span>
-          </MenuItem>
-        )}
-      </Menu>
-      
-      {/* Rename/Clone Modal */}
-      {selectedForm && (
-        <FormNameModal
-          isOpen={isNameModalOpen}
-          onClose={handleCloseNameModal}
-          formName={isCloning ? `${selectedForm.name} (Copy)` : selectedForm.name}
-          onSubmit={handleNameSubmit}
-          isCloning={isCloning}
-          organizationId={organizationId}
-        />
-      )}
-      
-      {/* Info Modal */}
-      {selectedForm && (
-        <FormInfoModal
-          isOpen={isInfoModalOpen}
-          onClose={() => {
-            setIsInfoModalOpen(false);
-            setSelectedForm(null);
-          }}
-          form={selectedForm}
-        />
-      )}
-    </div>
-  );
-};
 
-export default FormList;
+      {viewing ? (
+        <FormPropertiesPanel form={viewing} tagsById={tagsById} onClose={() => setViewing(null)} />
+      ) : null}
+      {nameEdit ? (
+        <FormNameDialog
+          organizationId={organizationId}
+          originalName={nameEdit.cloning ? `${nameEdit.form.name} (Copy)` : nameEdit.form.name}
+          isCloning={nameEdit.cloning}
+          onClose={() => setNameEdit(null)}
+          onSubmit={handleNameSubmit}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete form"
+        message={`Delete the form "${shortName(deleting?.name)}" and all its versions?`}
+        busy={deleteBusy}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => {
+          setDeleting(null)
+          setDeleteError(null)
+        }}
+      />
+    </>
+  )
+}
+
+export default FormList

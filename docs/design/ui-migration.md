@@ -91,6 +91,8 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 **Schemas (`frontend-shadcn`):** ✅ `DataTable` + `autoRowHeight` fields column; rename/clone with name uniqueness; create stays `?tab=schema-create`.
 
+**Forms (`frontend-shadcn`):** ✅ `DataTable` + `TagCell`; rename/clone with name uniqueness; create stays `?tab=form-create` (Form.io builder).
+
 Per entity (start with **Tags** or **Prompts**):
 
 1. List: MUI Data Grid → orchestrator-style **DataTable** (TanStack Table + shadcn table)
