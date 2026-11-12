@@ -414,7 +414,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                   Create Prompt
                 </Link>
                 <Link
-                  to={`/orgs/${organizationId}/tags?tab=tag-create`}
+                  to={`/orgs/${organizationId}/tags`}
                   className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
                 >
                   <AddIcon className="h-4 w-4" />

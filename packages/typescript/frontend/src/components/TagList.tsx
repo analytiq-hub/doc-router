@@ -1,354 +1,367 @@
-"use client";
+'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { Tag } from '@docrouter/sdk';
-import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import BadgeIcon from '@mui/icons-material/Badge';
-import { designTokens } from '@/lib/designTokens';
-import { isColorLight } from '@/utils/colors';
-import { useRouter } from '@/utils/appRouter';
-import { Link } from 'react-router-dom';
-import TagInfoModal from '@/components/TagInfoModal';
-import { formatLocalDate } from '@/utils/date';
-import { useOrgCapability } from '@/hooks/useOrgPermissions';
-import { CAP_CONFIG_WRITE, CONFIG_WRITE_VIEW_ONLY_HINT } from '@/utils/orgCapabilities';
+import { Info, Pencil, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import type { Tag } from '@docrouter/sdk'
+
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { DataTable, type DataTableColumn, type PaginationModel, type SortModel } from '@/components/data-table'
+import { ErrorAlert } from '@/components/ErrorAlert'
+import {
+  activeFields,
+  type FilterField,
+  FilterBuilder,
+  type FilterItem,
+  isActiveFilter,
+  withFilterFields,
+} from '@/components/FilterBuilder'
+import { FormDialog } from '@/components/FormDialog'
+import { PropertiesDialog } from '@/components/PropertiesDialog'
+import { RowActionsMenu } from '@/components/RowActionsMenu'
+import { SearchInput } from '@/components/SearchInput'
+import { DEFAULT_TAG_COLOR, TagBadge } from '@/components/TagBadge'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { useDebounced } from '@/lib/useDebounced'
+import { shortName } from '@/lib/shortName'
+import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
+import { formatLocalDate } from '@/utils/date'
+import { useOrgCapability } from '@/hooks/useOrgPermissions'
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities'
+import { designTokens } from '@/lib/designTokens'
 
 const jsonStringifyForQuery = (value: unknown): string =>
-  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v))
 
-const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
-  const router = useRouter();
-  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE);
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
-  const [total, setTotal] = useState(0);
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
-  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
+type TagWithCreator = Tag & { created_by?: string }
 
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+function TagSaveDialog({
+  organizationId,
+  tag,
+  onClose,
+  onSaved,
+}: {
+  organizationId: string
+  tag: Tag | 'new'
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const existing = tag === 'new' ? null : tag
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+  const [name, setName] = useState(existing?.name ?? '')
+  const [color, setColor] = useState(existing?.color ?? designTokens.brand ?? DEFAULT_TAG_COLOR)
+  const [description, setDescription] = useState(existing?.description ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
 
-  const loadTags = useCallback(async () => {
+  const save = async () => {
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+    setBusy(true)
+    setError(null)
     try {
-      setIsLoading(true);
-      const sortForApi = sortModel.filter((s) => s.field !== 'actions');
-      const filterForApi: GridFilterModel = {
-        ...filterModel,
-        items: filterModel.items.filter((i) => i.field !== 'actions'),
-      };
-      const response = await docRouterOrgApi.listTags({
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize,
-        nameSearch: searchTerm || undefined,
-        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
-      });
-      setTags(response.tags);
-      if (response.total_count !== undefined) {
-        setTotal(response.total_count);
+      const payload = {
+        name: trimmedName,
+        color,
+        description: description.trim() || undefined,
       }
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
-      setMessage('Error: ' + errorMsg);
+      if (existing?.id) {
+        await docRouterOrgApi.updateTag({ tagId: existing.id, tag: payload })
+        toast.success('Tag saved')
+      } else {
+        await docRouterOrgApi.createTag({ tag: payload })
+        toast.success('Tag created')
+      }
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err)
     } finally {
-      setIsLoading(false);
+      setBusy(false)
     }
-  }, [docRouterOrgApi, paginationModel, searchTerm, sortModel, filterModel]);
+  }
+
+  return (
+    <FormDialog
+      title={existing ? 'Edit tag' : 'New tag'}
+      submitLabel="Save"
+      submitDisabled={!name.trim()}
+      busy={busy}
+      error={error}
+      onSubmit={() => void save()}
+      onClose={onClose}
+    >
+      <Field>
+        <FieldLabel htmlFor="tag-name">Name</FieldLabel>
+        <Input id="tag-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="tag-color">Color</FieldLabel>
+        <div>
+          <Input
+            id="tag-color"
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-9 w-20 p-1"
+          />
+        </div>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="tag-description">Description</FieldLabel>
+        <Textarea id="tag-description" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </Field>
+    </FormDialog>
+  )
+}
+
+function TagPropertiesPanel({ tag, onClose }: { tag: TagWithCreator; onClose: () => void }) {
+  const [createdByName, setCreatedByName] = useState<string | null>(null)
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
 
   useEffect(() => {
-    void loadTags();
-  }, [loadTags]);
+    let cancelled = false
+    const createdBy = tag.created_by
+    if (!createdBy) {
+      setCreatedByName(null)
+      return
+    }
+    void docRouterAccountApi
+      .getUser(createdBy)
+      .then((user) => {
+        if (!cancelled) setCreatedByName(user.name ?? createdBy)
+      })
+      .catch(() => {
+        if (!cancelled) setCreatedByName(createdBy)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tag.created_by, docRouterAccountApi])
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, tag: Tag) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedTag(tag);
-  };
+  return (
+    <PropertiesDialog
+      title={tag.name}
+      description="Tag properties"
+      onClose={onClose}
+      properties={[
+        { label: 'Name', value: tag.name },
+        { label: 'Color', value: tag.color ?? `${DEFAULT_TAG_COLOR} (default)` },
+        { label: 'Description', value: tag.description },
+        {
+          label: 'Created',
+          value: tag.created_at ? formatLocalDate(String(tag.created_at)) : '—',
+        },
+        {
+          label: 'Created by',
+          value: tag.created_by ? (createdByName ?? 'Loading…') : '—',
+        },
+        { label: 'ID', value: <span className="font-mono text-xs">{tag.id}</span> },
+      ]}
+    />
+  )
+}
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedTag(null);
-  };
+export interface TagListProps {
+  organizationId: string
+  /** Wire the page header “New tag” button to open the create dialog. */
+  registerNewTag?: (open: () => void) => void
+}
 
-  const handleDelete = async (tagId: string) => {
+const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => {
+  const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
+
+  const [tags, setTags] = useState<Tag[]>([])
+  const [loadError, setLoadError] = useState<unknown>(null)
+  const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
+  const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
+  const [filters, setFilters] = useState<FilterItem[]>([])
+  const [filterRequest, setFilterRequest] = useState<{ field: string } | null>(null)
+  const [search, setSearch] = useState('')
+  const nameSearch = useDebounced(search.trim())
+  const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+
+  const [editing, setEditing] = useState<Tag | 'new' | null>(null)
+  const [viewing, setViewing] = useState<TagWithCreator | null>(null)
+  const [deleting, setDeleting] = useState<Tag | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<unknown>(null)
+
+  const activeFilters = filters.filter(isActiveFilter)
+
+  const loadTags = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
     try {
-      setIsLoading(true);
-      await docRouterOrgApi.deleteTag({ tagId });
-      setTags(tags.filter((tag) => tag.id !== tagId));
-      setMessage('Tag deleted successfully');
-      handleMenuClose();
+      const sortForApi = sortModel.filter((s) => s.field !== 'actions')
+      const response = await docRouterOrgApi.listTags({
+        skip: pagination.page * pagination.pageSize,
+        limit: pagination.pageSize,
+        nameSearch: nameSearch || undefined,
+        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+      })
+      setTags(response.tags)
+      setTotal(response.total_count ?? response.tags.length)
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error deleting tag';
-      setMessage('Error: ' + errorMsg);
+      setLoadError(error)
     } finally {
-      setIsLoading(false);
+      setLoading(false)
     }
-  };
+  }, [docRouterOrgApi, pagination, nameSearch, sortModel, activeFilters])
 
-  const handleEdit = (tag: Tag) => {
-    if (!canConfigWrite) {
-      return;
-    }
-    router.push(`/orgs/${organizationId}/tags/${tag.id}`);
-    handleMenuClose();
-  };
+  useEffect(() => {
+    void loadTags()
+  }, [loadTags])
 
-  const openTagProperties = (tag: Tag) => {
-    setAnchorEl(null);
-    setSelectedTag(tag);
-    setIsInfoModalOpen(true);
-  };
+  const filterFields: FilterField[] = [
+    { field: 'name', label: 'Name', kind: 'text' },
+    { field: 'description', label: 'Description', kind: 'text' },
+    { field: 'created_at', label: 'Created', kind: 'date' },
+  ]
 
-  /* eslint-disable react-hooks/exhaustive-deps -- handlers only use router/org id and stable state setters */
-  const columns = useMemo<GridColDef[]>(() => [
+  useEffect(() => {
+    registerNewTag?.(() => setEditing('new'))
+  }, [registerNewTag])
+
+  const columns: DataTableColumn<Tag>[] = [
     {
       field: 'name',
-      headerName: 'Tag Name',
+      headerName: 'Name',
       flex: 1,
-      minWidth: 140,
-      renderCell: (params) => {
-        const bgColor = params.row.color;
-        const textColor = isColorLight(bgColor) ? 'text-gray-800' : 'text-white';
-
-        return (
-          <div
-            className={`flex items-center h-full w-full ${canConfigWrite ? 'cursor-pointer' : 'cursor-default'}`}
-            onClick={() => {
-              if (canConfigWrite) {
-                handleEdit(params.row);
-              } else {
-                openTagProperties(params.row);
-              }
-            }}
-          >
-            <div
-              className={`px-2 py-1 leading-none rounded shadow-sm truncate ${textColor}`}
-              title={params.row.name}
-              style={{
-                backgroundColor: bgColor,
-              }}
-            >
-              {params.row.name}
-            </div>
-          </div>
-        );
-      },
+      minWidth: 160,
+      renderCell: ({ row }) => (
+        <button
+          type="button"
+          className={`inline-flex max-w-full items-center text-left ${canConfigWrite ? 'cursor-pointer' : 'cursor-default'}`}
+          onClick={() => (canConfigWrite ? setEditing(row) : setViewing(row))}
+        >
+          <TagBadge tag={row} />
+        </button>
+      ),
     },
     {
       field: 'description',
       headerName: 'Description',
       flex: 2,
-      minWidth: 120,
-      renderCell: (params) => (
-        <div className="flex items-center h-full w-full min-w-0">
-          <span className="truncate" title={params.row.description ?? ''}>
-            {params.row.description ?? ''}
-          </span>
-        </div>
+      minWidth: 200,
+      renderCell: ({ row }) => (
+        <span className="line-clamp-2 text-sm" title={row.description ?? ''}>
+          {row.description ?? ''}
+        </span>
       ),
     },
     {
       field: 'created_at',
       headerName: 'Created',
-      type: 'dateTime',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      valueGetter: (value: unknown, row: { created_at?: unknown }) => {
-        const v = (row?.created_at ?? value) as string | Date | null | undefined;
-        if (!v) return null;
-        if (v instanceof Date) return v;
-        const d = new Date(v);
-        return Number.isNaN(d.getTime()) ? null : d;
-      },
-      valueFormatter: (params: GridRenderCellParams) => {
-        const p = params as unknown as { value?: unknown } | null;
-        if (!p?.value) return '';
-        const v = p.value as Date | string;
-        const iso = v instanceof Date ? v.toISOString() : String(v);
-        return formatLocalDate(iso);
-      },
-      renderCell: (params: GridRenderCellParams) => {
-        const anyParams = params as unknown as { row?: { created_at?: unknown } };
-        if (!anyParams?.row?.created_at) return '';
-        return <div className="flex items-center h-full min-w-0 text-gray-600">
-            <span className="truncate">{formatLocalDate(anyParams.row.created_at as string)}</span>
-          </div>;
-      },
+      width: 190,
+      valueGetter: (_value, row) => (row.created_at ? new Date(String(row.created_at)) : null),
+      renderCell: ({ row }) =>
+        row.created_at ? (
+          <span className="text-sm text-muted-foreground">{formatLocalDate(String(row.created_at))}</span>
+        ) : (
+          ''
+        ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
-      headerAlign: 'center' as const,
-      align: 'center' as const,
       sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <div className="flex gap-2 items-center h-full">
-          <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row as Tag)}
-            className="text-gray-600 hover:bg-gray-50"
-          >
-            <MoreVertIcon />
-          </IconButton>
-        </div>
+      hideable: false,
+      resizable: false,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            { label: 'Properties', icon: Info, onSelect: () => setViewing(row) },
+            canConfigWrite && { label: 'Edit', icon: Pencil, onSelect: () => setEditing(row) },
+            canConfigWrite && { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setDeleting(row) },
+          ]}
+        />
       ),
     },
-  ], [router, organizationId, canConfigWrite]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  ]
+
+  const confirmDelete = async () => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await docRouterOrgApi.deleteTag({ tagId: deleting.id })
+      toast.success('Tag deleted')
+      setDeleting(null)
+      void loadTags()
+    } catch (error) {
+      setDeleteError(error)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="mb-4 p-4 bg-primary-50 rounded-lg border border-primary-200 text-primary-800 hidden md:block">
-          <p className="text-sm">
-            Tags determine which prompts are run on which documents.
-            {canConfigWrite ? (
-              <>
-                {' '}
-                If no tags are available,{' '}
-                <Link to={`/orgs/${organizationId}/tags?tab=tag-create`} className="text-primary-600 font-medium hover:underline">
-                  click here
-                </Link>{' '}
-                or use the tab above to create a new tag.
-              </>
-            ) : (
-              <> {CONFIG_WRITE_VIEW_ONLY_HINT}</>
-            )}
-          </p>
-        </div>
-        <h2 className="text-xl font-bold mb-4 hidden md:block">Tags</h2>
-
-        <div className="mb-4">
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search tags..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  <>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={(value) => {
+              setSearch(value)
+              setPagination((p) => ({ ...p, page: 0 }))
             }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
+            placeholder="Search tags"
+          />
+          <FilterBuilder
+            fields={filterFields}
+            value={filters}
+            request={filterRequest}
+            onChange={(items) => {
+              setFilters(items)
+              setPagination((p) => ({ ...p, page: 0 }))
             }}
           />
         </div>
-
-        {message && (
-          <div
-            className={`mb-4 p-3 rounded ${
-              message.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-primary-50 text-primary-700'
-            }`}
-          >
-            {message}
-          </div>
-        )}
-
-        <div style={{ height: 400, width: '100%' }}>
-          <DataGrid
+        <ErrorAlert error={loadError} />
+        <div className="h-150 min-h-[24rem]">
+          <DataTable
+            aria-label="Tags"
             rows={tags}
-            columns={columns}
-            getRowId={(row) => row.id}
-            sortingMode="server"
-            sortModel={sortModel}
-            onSortModelChange={(model) => {
-              setSortModel(model.filter((s) => s.field !== 'actions'));
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-            }}
-            filterMode="server"
-            filterModel={filterModel}
-            onFilterModelChange={(model) => {
-              setFilterModel({
-                ...model,
-                items: model.items.filter((i) => i.field !== 'actions'),
-              });
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-            }}
-            pageSizeOptions={[5, 10, 20]}
-            disableRowSelectionOnClick
-            loading={isLoading}
-            paginationMode="server"
-            paginationModel={paginationModel}
-            onPaginationModelChange={setPaginationModel}
+            columns={withFilterFields(columns, filterFields)}
+            activeFilterFields={activeFields(filters)}
+            onFilterColumn={(field) => setFilterRequest({ field })}
             rowCount={total}
-            sx={{
-              '& .MuiDataGrid-cell': {
-                padding: '8px',
-              },
-              '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: designTokens.secondary,
-              },
-              '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${designTokens.border} !important`,
-              },
-            }}
+            loading={loading}
+            paginationModel={pagination}
+            onPaginationModelChange={setPagination}
+            sortModel={sortModel}
+            onSortModelChange={setSortModel}
+            pageSizeOptions={[10, 25, 50]}
           />
         </div>
-
-        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-          {canConfigWrite && (
-            <MenuItem
-              onClick={() => {
-                if (selectedTag) handleEdit(selectedTag);
-              }}
-              className="flex items-center gap-2"
-            >
-              <EditOutlinedIcon fontSize="small" className="text-primary-600" />
-              <span>Edit</span>
-            </MenuItem>
-          )}
-          <MenuItem
-            onClick={() => {
-              if (selectedTag) openTagProperties(selectedTag);
-            }}
-            className="flex items-center gap-2"
-          >
-            <BadgeIcon fontSize="small" className="text-primary-600" />
-            <span>Properties</span>
-          </MenuItem>
-          {canConfigWrite && (
-            <MenuItem
-              onClick={() => {
-                if (selectedTag) handleDelete(selectedTag.id);
-              }}
-              className="flex items-center gap-2"
-            >
-              <DeleteOutlineIcon fontSize="small" className="text-red-600" />
-              <span>Delete</span>
-            </MenuItem>
-          )}
-        </Menu>
-
-        {selectedTag && (
-          <TagInfoModal
-            isOpen={isInfoModalOpen}
-            onClose={() => {
-              setIsInfoModalOpen(false);
-              setSelectedTag(null);
-            }}
-            tag={selectedTag}
-          />
-        )}
       </div>
-    </div>
-  );
-};
 
-export default TagList;
+      {viewing ? <TagPropertiesPanel tag={viewing} onClose={() => setViewing(null)} /> : null}
+      {editing ? (
+        <TagSaveDialog organizationId={organizationId} tag={editing} onClose={() => setEditing(null)} onSaved={loadTags} />
+      ) : null}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete tag"
+        message={`Delete the tag "${shortName(deleting?.name)}"?`}
+        busy={deleteBusy}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => {
+          setDeleting(null)
+          setDeleteError(null)
+        }}
+      />
+    </>
+  )
+}
+
+export default TagList

@@ -78,7 +78,7 @@ const TourGuide = () => {
         content: 'With tags, you can determine which prompts are used for which documents.',
         selector: '[data-tour="tag-create"]',
         position: 'right',
-        page: `/orgs/${orgIdForTour}/tags?tab=tag-create`
+        page: `/orgs/${orgIdForTour}/tags`
       },
       {
         id: 'flows',

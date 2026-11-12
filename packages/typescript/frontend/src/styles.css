@@ -80,6 +80,7 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
+  --spacing-150: 37.5rem;
 }
 
 @layer base {
