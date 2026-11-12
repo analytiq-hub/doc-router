@@ -2,12 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
+import '@/styles.css';
 import '@/vite/vite-shell.css';
-import '@/vite/tailwind-prelude.css';
-import '@/vite/formio-tailwind';
+import '@/vite/formio-tailwind.css';
 import '@/styles/formio-custom.css';
-import '@/vite/tailwind-utilities.css';
-import '@/vite/app-theme.css';
 import '@/styles/markdown-prose.css';
 import { ensureFormioStyles } from '@/vite/ensureFormioStyles';
 import { AppProviders } from '@/vite/AppProviders';

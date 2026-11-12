@@ -12,7 +12,7 @@
 
 | Layer | doc-router today (`packages/typescript/frontend`) | Target (orchestrator) |
 |-------|---------------------------------------------------|------------------------|
-| CSS | Tailwind **3.4**, `tailwind.config.ts`, PostCSS | Tailwind **4.3**, `@tailwindcss/vite`, CSS-first `styles.css` |
+| CSS | Tailwind **3.4**, `tailwind.config.ts`, PostCSS | Tailwind **4.3**, `@tailwindcss/postcss`, CSS-first `styles.css` + shadcn |
 | Colors | `brandPalette.ts` + mixed `primary-*` / legacy `blue-*` | CSS variables (`--primary`, `--brand`, …) + semantic utilities |
 | Primitives | **MUI**, **Headless UI**, raw HTML | **`src/components/ui/*`** (shadcn, **@base-ui/react**) |
 | Tables | MUI X Data Grid, react-table in places | **TanStack Table** + shadcn `Table` (`DataTable`) |
@@ -37,47 +37,36 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 ## 3. Phased plan
 
-### Phase 0 — Baseline (½–1 day)
+### Phase 0 — Baseline — **complete** (`frontend-shadcn`)
 
-- Branch (e.g. `frontend-shadcn` from `main`).
-- Inventory: ~40+ files import `@mui/material`; ~18 use `@headlessui`; heavy MUI in **PDFViewer** and list screens.
-- Route checklist + screenshots: sign-in, org dashboard, documents, one settings page, flows list, PDF doc viewer.
-- Note orchestrator toolchain versions to align when upgrading: `tailwindcss@4.3`, `@tailwindcss/vite`, `shadcn@4`, `vite@8`, `react@19` (doc-router may upgrade Vite/React during Phase 1).
-
-**Exit:** checklist and “before” screenshots attached to the epic/PR.
+- Branch **`frontend-shadcn`** from `main`.
+- Inventory (grep, 2026-03): **~42** files import `@mui/material`; **~18** use `@headlessui`; heaviest MUI in **PDFViewer** and org list grids.
+- Smoke checklist: [`vite_smoke_test_5173.md`](../vite_smoke_test_5173.md) (re-run after UI phases).
 
 ---
 
-### Phase 1 — Tailwind 4 + design tokens (1–2 weeks)
+### Phase 1 — Tailwind 4 + design tokens — **complete**
 
-1. Add `@tailwindcss/vite`; upgrade to **Tailwind 4**.
-2. Introduce central `src/styles.css` (or equivalent):
-   - `@import "tailwindcss"`
-   - `@import "shadcn/tailwind.css"` (once Phase 2 init exists; TW4-only sub-step acceptable first)
-   - `@theme inline { … }` mapping variables to utilities
-3. Set **`:root` tokens** from orchestrator **ui.md §3** (doc-router legacy blues), e.g.:
-   - `--brand: #0078d4` — header band (legacy `bg-blue-600`)
-   - `--primary: #0754a6` — primary actions
-   - `--primary-soft: #e6f0fa` — sidebar active / soft highlights
-   - `--background` / `--card` — page gray + white panels
-4. **Bridge:** map existing `primary-*` utilities to token-backed theme during transition, or accept a short freeze on new raw color classes.
-5. **Formio:** preserve import order in `main.tsx` (Formio CSS, custom overrides) **after** the global sheet; smoke one form builder + renderer.
-6. Remove `brandPalette.ts` and MUI palette coupling when tokens are authoritative.
+1. **`tailwindcss@4.3`** + **`@tailwindcss/postcss`** (Vite `postcss.config.mjs`; Formio `index.css` in `main.tsx` + Vite `formioTailwindReference` plugin; `postinstall` patches TW3 `@apply` in `@tsed/tailwind-formio`).
+2. **`src/styles.css`**: `@import "tailwindcss"`, `@config` → existing `tailwind.config.ts` (spacing/fonts/`primary-*` scale), `@theme inline` semantic colors from **ui.md §3**.
+3. **`main.tsx`**: `styles.css` → shell → Formio theme → formio overrides → markdown.
+4. **Bridge:** legacy `primary-*` / `blue-*` still from `tailwind.config.ts` + `brandPalette.ts`; semantic `bg-background`, `bg-brand`, `text-muted-foreground`, etc. available for Phase 3.
 
-**Exit:** `npm run build` + dev smoke; Layout header/sidebar use semantic classes with visual parity to legacy blue chrome.
+**Exit:** ✅ `npm run build` + `npm run typecheck`. **Next:** Phase 2 shadcn scaffold.
+
+**Deferred (later phases):** drop `tailwind.config.ts` body into pure `@theme`; remove `brandPalette.ts`; Layout on `bg-brand` / `primary-soft`.
 
 ---
 
-### Phase 2 — shadcn scaffold (2–4 days)
+### Phase 2 — shadcn scaffold — **complete**
 
-Mirror orchestrator `packages/typescript/frontend`:
+- `components.json` — **base-nova**, lucide, `src/styles.css`
+- `styles.css`: `tw-animate-css`, `shadcn/tailwind.css`; shadcn `--primary` / `--secondary` tokens
+- `src/lib/utils.ts` (`cn`); `src/components/ui/*` (mirrored from orchestrator; CLI blocked on legacy npm peer resolution)
+- **Sonner** + `TooltipProvider` in `AppProviders.tsx` (legacy hot-toast / toastify kept until Phase 4+)
+- Demo: **`/dev/ui-kit`** (`UiKitDemoPage`)
 
-- `components.json` — style **base-nova**, lucide, `@/lib/utils`, CSS path → `styles.css`
-- CLI init + core primitives: `button`, `input`, `label`, `field`, `card`, `dialog`, `dropdown-menu`, `tooltip`, `tabs`, `badge`, `alert`, `sonner`, `spinner`, `separator`
-- `cn` + `lib/utils.ts`
-- Wire **sonner** in app root; no new usage of dual toast libraries
-
-**Exit:** demo route or internal page proving Button / Dialog / Input with tokens.
+**Exit:** ✅ build + typecheck. **Next:** Phase 3 shell + auth.
 
 ---
 

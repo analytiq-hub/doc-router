@@ -1,43 +1,42 @@
-import { createTheme, ThemeOptions} from '@mui/material/styles';
-import colors from 'tailwindcss/colors'
+import { createTheme, ThemeOptions } from '@mui/material/styles';
 
-// Extend the default theme type to include pdf_menubar
+import { designTokens, primaryScale } from '@/lib/designTokens';
+
 declare module '@mui/material/styles' {
   interface Palette {
     pdf_menubar: Palette['primary'];
   }
   interface PaletteOptions {
-    pdf_menubar: PaletteOptions['primary'];
+    pdf_menubar?: PaletteOptions['primary'];
   }
 }
 
-// Use tailwind colors so we can later intermix material ui and tailwind components
+/** MUI bridge — palette values match `styles.css` tokens (hex only; MUI cannot parse oklch). */
 const theme = createTheme({
   palette: {
     primary: {
-      main: colors.blue[600],
-      light: colors.blue[400],
-      dark: colors.blue[800],
-      contrastText: colors.white
+      main: designTokens.primary,
+      light: designTokens.brand,
+      dark: primaryScale[800],
+      contrastText: designTokens.primaryForeground,
     },
     secondary: {
-      main: colors.red[400],
-      light: colors.red[300],
-      dark: colors.red[700],
-      contrastText: colors.white
+      main: designTokens.destructive,
+      light: designTokens.destructiveSoft,
+      dark: '#9a1f2a',
+      contrastText: designTokens.white,
     },
     pdf_menubar: {
-      main: colors.gray[100],
-      contrastText: colors.black,
+      main: designTokens.secondary,
+      contrastText: designTokens.black,
     },
     background: {
-      default: colors.white,
-      paper: colors.gray[100],
+      default: designTokens.white,
+      paper: designTokens.secondary,
     },
     text: {
-      primary: colors.stone[700],
-      // MUI InputLabel and Typography use secondary; must contrast with background.paper.
-      secondary: colors.gray[600],
+      primary: designTokens.foreground,
+      secondary: designTokens.mutedForeground,
     },
   },
   components: {

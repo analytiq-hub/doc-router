@@ -15,7 +15,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import FolderIcon from '@mui/icons-material/Folder';
 import SyncIcon from '@mui/icons-material/Sync';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
@@ -515,10 +515,10 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
                 alignItems: 'center',
               },
               '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: colors.gray[100],
+                backgroundColor: designTokens.secondary,
               },
               '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${colors.gray[200]} !important`,
+                backgroundColor: `${designTokens.border} !important`,
               },
             }}
           />

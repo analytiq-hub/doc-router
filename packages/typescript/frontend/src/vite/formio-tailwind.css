@@ -1,0 +1,4 @@
+/* TW4: one entry so Formio `theme()` + `@apply` resolve via the app theme (see formio-tailwind.css in vite.config). */
+@reference '../styles.css';
+
+@import '@tsed/tailwind-formio/styles/index.css';

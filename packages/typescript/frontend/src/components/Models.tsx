@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { TextField, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 
 const Models: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,10 +80,10 @@ const Models: React.FC = () => {
               padding: '8px',
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],
+              backgroundColor: designTokens.secondary,
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,
+              backgroundColor: `${designTokens.border} !important`,
             },
           }}
         />

@@ -5,7 +5,7 @@ import { LLMProvider } from '@docrouter/sdk';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import Checkbox from '@mui/material/Checkbox';
 import Switch from '@mui/material/Switch';
 import { Link } from 'react-router-dom';
@@ -255,10 +255,10 @@ const LLMManager: React.FC = () => {
               height: '48px !important',
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],
+              backgroundColor: designTokens.secondary,
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,
+              backgroundColor: `${designTokens.border} !important`,
             },
           }}
         />

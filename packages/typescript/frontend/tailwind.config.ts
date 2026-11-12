@@ -148,12 +148,6 @@ const config: Config = {
       black: ["2px dotted black", "2px"]
     }
   },
-  variants: {
-    extend: {}
-  },
-  corePlugins: {
-    borderCollapse: true
-  },
   plugins: [],
 };
 export default config;

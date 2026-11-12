@@ -74,6 +74,10 @@ export const routes: RouteObject[] = [
       { path: '/verify-email', element: lazyRoute(() => import('@/pages/verify-email')) },
       { path: '/oauth/flow-callback', element: lazyRoute(() => import('@/pages/oauth/flow-callback')) },
       {
+        path: '/dev/ui-kit',
+        element: lazyNamedRoute(() => import('@/vite/pages/UiKitDemo'), 'UiKitDemoPage'),
+      },
+      {
         path: '/',
         element: <Outlet />,
         children: [

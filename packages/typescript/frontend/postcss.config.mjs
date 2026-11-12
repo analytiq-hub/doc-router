@@ -1,10 +1,6 @@
-/** @type {import('postcss-load-config').Config} */
-const config = {
+/** Tailwind 4 via PostCSS (Vite processes all CSS, including Formio `@apply` sheets). */
+export default {
   plugins: {
-    'tailwindcss/nesting': {},
-    tailwindcss: {},
-    autoprefixer: {},
+    '@tailwindcss/postcss': {},
   },
 };
-
-export default config;

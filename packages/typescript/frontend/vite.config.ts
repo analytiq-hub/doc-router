@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { createLogger, defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -9,7 +9,6 @@ const repoRoot = path.resolve(__dirname, '../../..');
 
 const FORMIO_CSS_MARKER = `${path.sep}@tsed${path.sep}tailwind-formio${path.sep}`;
 const STRIP_CSS_SOURCEMAP = /\/\*#\s*sourceMappingURL=[^*]+\*\//g;
-
 /** @tsed/tailwind-formio grid.css points at a .map file that is not published. */
 function stripBrokenFormioCssSourcemaps(): Plugin {
   const isFormioStyleSheet = (id: string) => {
@@ -64,12 +63,26 @@ function publicEnvDefine(mode: string): Record<string, string> {
   return define;
 }
 
+const FORMIO_TAILWIND_POSTCSS_NOISE = /@import must precede all other statements/;
+
+const viteLogger = createLogger('info', {
+  prefix: '[vite]',
+});
+const viteWarn = viteLogger.warn.bind(viteLogger);
+viteLogger.warn = (msg, options) => {
+  if (typeof msg === 'string' && FORMIO_TAILWIND_POSTCSS_NOISE.test(msg)) {
+    return;
+  }
+  viteWarn(msg, options);
+};
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const backend =
     process.env.VITE_BACKEND_URL ?? env.VITE_BACKEND_URL ?? 'http://127.0.0.1:8000';
 
   return {
+    customLogger: viteLogger,
     plugins: [react(), stripBrokenFormioCssSourcemaps()],
     envDir: repoRoot,
     resolve: {

@@ -14,7 +14,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BadgeIcon from '@mui/icons-material/Badge';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { useRouter } from '@/utils/appRouter';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -466,10 +466,10 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
               alignItems: 'center',
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],  // Using Tailwind colors
+              backgroundColor: designTokens.secondary,  // Using Tailwind colors
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,  // Using Tailwind colors
+              backgroundColor: `${designTokens.border} !important`,  // Using Tailwind colors
             },
           }}
         />

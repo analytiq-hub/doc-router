@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBaseDocument, KBChunk } from '@docrouter/sdk';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -223,10 +223,10 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   padding: '8px',
                 },
                 '& .MuiDataGrid-row:nth-of-type(odd)': {
-                  backgroundColor: colors.gray[100],
+                  backgroundColor: designTokens.secondary,
                 },
                 '& .MuiDataGrid-row:hover': {
-                  backgroundColor: `${colors.gray[200]} !important`,
+                  backgroundColor: `${designTokens.border} !important`,
                 },
               }}
             />

@@ -7,7 +7,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { DocRouterAccountApi } from '@/utils/api';
 import { Organization, CreateOrganizationRequest } from '@docrouter/sdk';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { isAxiosError } from 'axios';
 import { useRouter } from '@/utils/appRouter'
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -408,10 +408,10 @@ const OrganizationManager: React.FC = () => {
               padding: 'px'
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],
+              backgroundColor: designTokens.secondary,
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,
+              backgroundColor: `${designTokens.border} !important`,
             },
           }}
         />

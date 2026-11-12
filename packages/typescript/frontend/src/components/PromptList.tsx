@@ -12,7 +12,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BadgeIcon from '@mui/icons-material/Badge';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { isColorLight } from '@/utils/colors';
 import { useRouter } from '@/utils/appRouter';
 import { Link } from 'react-router-dom';
@@ -582,10 +582,10 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
               padding: '8px',
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],
+              backgroundColor: designTokens.secondary,
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,
+              backgroundColor: `${designTokens.border} !important`,
             },
           }}
         />

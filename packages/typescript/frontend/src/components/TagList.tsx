@@ -10,7 +10,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BadgeIcon from '@mui/icons-material/Badge';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { isColorLight } from '@/utils/colors';
 import { useRouter } from '@/utils/appRouter';
 import { Link } from 'react-router-dom';
@@ -293,10 +293,10 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                 padding: '8px',
               },
               '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: colors.gray[100],
+                backgroundColor: designTokens.secondary,
               },
               '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${colors.gray[200]} !important`,
+                backgroundColor: `${designTokens.border} !important`,
               },
             }}
           />

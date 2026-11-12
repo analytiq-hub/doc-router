@@ -7,7 +7,7 @@ import { Tag } from '@docrouter/sdk';
 
 // Type alias for tag creation/update (without id and timestamps)
 type TagConfig = Omit<Tag, 'id' | 'created_at' | 'updated_at'>;
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import InfoTooltip from '@/components/InfoTooltip';
 import { useRouter } from '@/utils/appRouter';
 import { toast } from 'react-toastify';
@@ -18,7 +18,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [currentTag, setCurrentTag] = useState<{id?: string; name: string; color: string; description?: string}>({
     name: '',
-    color: colors.blue[500], // default blue color
+    color: designTokens.brand, // default blue color
     description: ''
   });
 
@@ -49,7 +49,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
         }
       } else {
         setCurrentTagFull(null);
-        setCurrentTag({ name: '', color: colors.blue[500], description: '' });
+        setCurrentTag({ name: '', color: designTokens.brand, description: '' });
       }
     }
     loadTag();
@@ -73,7 +73,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
       }
       
       // Reset form only after successful save
-      setCurrentTag({ name: '', color: colors.blue[500], description: '' });
+      setCurrentTag({ name: '', color: designTokens.brand, description: '' });
 
       // Redirect to tags list page
       router.push(`/orgs/${organizationId}/tags`);
@@ -156,7 +156,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
               <button
                 type="button"
                 onClick={() => {
-                  setCurrentTag({ name: '', color: colors.blue[500], description: '' });
+                  setCurrentTag({ name: '', color: designTokens.brand, description: '' });
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
                 disabled={isLoading}

@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import { DocRouterAccountApi } from '@/utils/api';
 import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import LLMTestModal from './LLMTestModal';
 import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
 import { useLlmMaxConcurrentSettings } from './useLlmMaxConcurrentSettings';
@@ -280,10 +280,10 @@ const LLMModelsConfig: React.FC = () => {
                 height: '48px !important',
               },
               '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: colors.gray[100],
+                backgroundColor: designTokens.secondary,
               },
               '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${colors.gray[200]} !important`,
+                backgroundColor: `${designTokens.border} !important`,
               },
             }}
           />
@@ -311,10 +311,10 @@ const LLMModelsConfig: React.FC = () => {
                 height: '48px !important',
               },
               '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: colors.gray[100],
+                backgroundColor: designTokens.secondary,
               },
               '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${colors.gray[200]} !important`,
+                backgroundColor: `${designTokens.border} !important`,
               },
             }}
           />

@@ -8,7 +8,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { DocRouterAccountApi } from '@/utils/api';
 import { User, UserCreate } from '@docrouter/sdk';
 import { isAxiosError } from 'axios';
-import colors from 'tailwindcss/colors';
+import { designTokens } from '@/lib/designTokens';
 import { useRouter } from '@/utils/appRouter';
 import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/utils/useAppSession';
@@ -258,10 +258,10 @@ const UserManager: React.FC = () => {
               padding: 'px',
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],
+              backgroundColor: designTokens.secondary,
             },
             '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,
+              backgroundColor: `${designTokens.border} !important`,
             }
           }}
         />
