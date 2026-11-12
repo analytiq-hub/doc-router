@@ -1,33 +1,40 @@
 import React from 'react';
 import { appName } from '@/config/branding';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 const Home = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Hero Section */}
-        <header className="text-center mb-12 hidden md:block">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            <span>{appName}</span>
-          </h1>
-          <div className="text-xl text-gray-600 space-y-1">
-            <p>AI-powered document processing</p>
-            <p>that connects directly to your ERP</p>
-          </div>
+    <div className="min-h-full bg-muted/40">
+      <div className="mx-auto max-w-4xl space-y-8 px-4 py-12 sm:px-6">
+        <header className="hidden space-y-2 text-center md:block">
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">{appName}</h1>
+          <p className="text-lg text-muted-foreground">
+            AI-powered document processing that connects directly to your ERP
+          </p>
         </header>
-        
-        <main>
-          {/* About Section */}
-          <section className="bg-white rounded-lg shadow-lg p-8 mb-12">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">About</h2>
-            <p className="text-gray-600 mb-6">
-              {appName} transforms unstructured documents into structured ERP data automatically. 
-              It processes incoming documents from multiple sources and enriches them with AI for seamless integration.
+
+        <Card>
+          <CardHeader>
+            <CardTitle>About</CardTitle>
+            <CardDescription>
+              How {appName} fits into your document and ERP workflows
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">
+              {appName} transforms unstructured documents into structured ERP data automatically.
+              It processes incoming documents from multiple sources and enriches them with AI for
+              seamless integration.
             </p>
-            
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-3">Key Features</h3>
-              <ul className="list-disc list-inside text-gray-600 space-y-2">
+            <div className="rounded-lg border bg-muted/50 p-4">
+              <h3 className="mb-3 text-sm font-medium text-foreground">Key features</h3>
+              <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
                 <li>Ingests unstructured docs from faxes, email, and ERPs</li>
                 <li>Autonomous processing with LLMs and NLP</li>
                 <li>Human-in-the-loop design for financial accuracy</li>
@@ -35,31 +42,38 @@ const Home = () => {
                 <li>REST APIs for all functions</li>
               </ul>
             </div>
-          </section>
+          </CardContent>
+        </Card>
 
-          {/* Contact Section */}
-          <section className="bg-white rounded-lg shadow-lg p-8">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Contact Us</h2>
-            <p className="text-gray-600 mb-4">
-              Get in touch for inquiries, partnerships, or more information about our products.
+        <Card>
+          <CardHeader>
+            <CardTitle>Contact us</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>Get in touch for inquiries, partnerships, or more information about our products.</p>
+            <p>
+              Email:{' '}
+              <a href="mailto:andrei@analytiqhub.com" className="text-primary hover:underline">
+                andrei@analytiqhub.com
+              </a>
             </p>
-            <ul className="text-gray-600 space-y-2">
-              <li>Email: <a href="mailto:andrei@analytiqhub.com" className="text-primary-600 hover:text-primary-800">andrei@analytiqhub.com</a></li>
-              <li>Website: <a href="https://analytiqhub.com" className="text-primary-600 hover:text-primary-800">analytiqhub.com</a></li>
-            </ul>
-          </section>
-        </main>
-        
-        <footer className="mt-12 text-center text-gray-600">
-          <p>&copy; 2024 DocRouter.AI. All rights reserved.</p>
-          <div className="mt-4">
-            <a 
-              href="https://github.com/analytiq-hub/doc-router" 
-              className="text-primary-600 hover:text-primary-800"
-            >
-              View on GitHub
-            </a>
-          </div>
+            <p>
+              Website:{' '}
+              <a href="https://analytiqhub.com" className="text-primary hover:underline">
+                analytiqhub.com
+              </a>
+            </p>
+          </CardContent>
+        </Card>
+
+        <footer className="space-y-2 text-center text-sm text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} DocRouter.AI. All rights reserved.</p>
+          <a
+            href="https://github.com/analytiq-hub/doc-router"
+            className="text-primary hover:underline"
+          >
+            View on GitHub
+          </a>
         </footer>
       </div>
     </div>

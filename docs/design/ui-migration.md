@@ -52,7 +52,7 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 3. **`main.tsx`**: `styles.css` → shell → Formio theme → formio overrides → markdown.
 4. **Bridge:** legacy `primary-*` / `blue-*` still from `tailwind.config.ts` + `brandPalette.ts`; semantic `bg-background`, `bg-brand`, `text-muted-foreground`, etc. available for Phase 3.
 
-**Exit:** ✅ `npm run build` + `npm run typecheck`. **Next:** Phase 2 shadcn scaffold.
+**Exit:** ✅ `npm run build` + `npm run typecheck`.
 
 **Deferred (later phases):** drop `tailwind.config.ts` body into pure `@theme`; remove `brandPalette.ts`; Layout on `bg-brand` / `primary-soft`.
 
@@ -66,11 +66,11 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 - **Sonner** + `TooltipProvider` in `AppProviders.tsx` (legacy hot-toast / toastify kept until Phase 4+)
 - Demo: **`/dev/ui-kit`** (`UiKitDemoPage`)
 
-**Exit:** ✅ build + typecheck. **Next:** Phase 3 shell + auth.
+**Exit:** ✅ build + typecheck.
 
 ---
 
-### Phase 3 — Vertical slice: shell + auth (~1 week)
+### Phase 3 — Vertical slice: shell + auth — **complete** (`frontend-shadcn`)
 
 | Area | Action |
 |------|--------|
@@ -79,7 +79,7 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 | `pages/auth/signin.tsx` | shadcn `Field` + `Input` + `Button` |
 | `Home.tsx` | `Card` + token typography |
 
-**Exit:** auth + signed-in chrome without MUI/Headless in these files.
+**Exit:** ✅ auth + signed-in chrome without MUI/Headless in these files. **Next:** Phase 4 CRUD lists.
 
 ---
 
@@ -176,7 +176,7 @@ flowchart LR
 | Phases 4–6 (lists, settings, docs; no PDF/flows) | +4–6 weeks |
 | Phases 7–9 (flows, PDF, package removal) | +4–8 weeks |
 
-**First mergeable milestone:** Phases **0 + 1 + 2 + 3** (TW4, tokens matching legacy blues, shadcn init, Layout + sign-in).
+**First mergeable milestone:** Phases **0 + 1 + 2 + 3** — ✅ on `frontend-shadcn` (Form.io TW4 fix landed separately on same branch).
 
 ---
 

@@ -37,9 +37,9 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
           w-8 h-[31px]
           rounded
           transition-colors duration-150
-          ${showLeftPanel 
-            ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
-            : 'text-primary-200 hover:bg-primary-500 hover:text-white'
+          ${showLeftPanel
+            ? 'bg-brand-foreground/15 text-brand-foreground hover:bg-brand-foreground/25'
+            : 'text-brand-foreground/70 hover:bg-brand-foreground/15 hover:text-brand-foreground'
           }
         `}
         title={showLeftPanel ? `Hide ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel` : `Show ${sidebarMode === 'extraction' ? 'Extraction' : 'Forms'} Panel`}
@@ -58,9 +58,9 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
           w-8 h-[31px]
           rounded
           transition-colors duration-150
-          ${showPdfPanel 
-            ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
-            : 'text-primary-200 hover:bg-primary-500 hover:text-white'
+          ${showPdfPanel
+            ? 'bg-brand-foreground/15 text-brand-foreground hover:bg-brand-foreground/25'
+            : 'text-brand-foreground/70 hover:bg-brand-foreground/15 hover:text-brand-foreground'
           }
         `}
         title={showPdfPanel ? "Hide PDF Panel" : "Show PDF Panel"}
@@ -80,9 +80,9 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
             w-8 h-[31px]
             rounded
             transition-colors duration-150
-            ${showChatPanel 
-              ? 'bg-primary-100 text-primary-700 hover:bg-primary-200' 
-              : 'text-primary-200 hover:bg-primary-500 hover:text-white'
+            ${showChatPanel
+              ? 'bg-brand-foreground/15 text-brand-foreground hover:bg-brand-foreground/25'
+              : 'text-brand-foreground/70 hover:bg-brand-foreground/15 hover:text-brand-foreground'
             }
           `}
           title={showChatPanel ? "Hide Chat Panel" : "Show Chat Panel"}

@@ -1,10 +1,16 @@
-"use client"
+"use client";
 
-import React from 'react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter, useSearchParams } from '@/utils/appRouter';
 import { loginWithPassword, oauthStartUrl, persistSessionToken, registerWithPassword } from '@/utils/backendAuth';
 import { useAppSession } from '@/contexts/AppSessionContext';
+import { appName } from '@/config/branding';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 export default function SigninPage() {
   const [error, setError] = useState<string | null>(null);
@@ -12,7 +18,7 @@ export default function SigninPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    name: ''
+    name: '',
   });
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,7 +32,7 @@ export default function SigninPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -56,7 +62,9 @@ export default function SigninPage() {
     try {
       setError(null);
       const data = await registerWithPassword(email, password, name);
-      setSuccessMessage(data.message || 'Registration successful. Please check your email to verify your account.');
+      setSuccessMessage(
+        data.message || 'Registration successful. Please check your email to verify your account.',
+      );
       setIsLoginMode(true);
     } catch (registerError) {
       console.error('Registration error:', registerError);
@@ -68,104 +76,113 @@ export default function SigninPage() {
     window.location.href = oauthStartUrl(provider, returnTo);
   };
 
-  const formWidthClass = 'w-full max-w-xs';
-
   return (
-    <div className="flex flex-col items-center mt-8 px-4">
-      <h1 className="text-2xl font-semibold mb-6">
-        {isLoginMode ? 'Sign In' : 'Register'}
-      </h1>
-      
-      {error && (
-        <div className={`${formWidthClass} text-red-500 mb-4 text-center`}>
-          {error}
+    <div className="flex min-h-full flex-col md:flex-row">
+      <aside className="flex flex-col justify-between gap-8 bg-brand p-8 text-brand-foreground md:w-5/12 md:p-12">
+        <div />
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-semibold md:text-4xl">{appName}</h1>
+          <p className="text-brand-foreground/90">AI-powered document processing for your ERP.</p>
         </div>
-      )}
-      
-      {successMessage && (
-        <div className={`${formWidthClass} text-green-500 mb-4 text-center`}>
-          {successMessage}
-        </div>
-      )}
-      
-      <form onSubmit={handleSubmit} className={`${formWidthClass} space-y-2`}>
-        {!isLoginMode && (
-          <input
-            type="text"
-            id="name"
-            name="name"
-            placeholder="Name"
-            value={formData.name}
-            onChange={handleInputChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400"
-            required
-          />
-        )}
+        <p className="hidden text-sm text-brand-foreground/80 md:block">
+          &copy; {new Date().getFullYear()} {appName}
+        </p>
+      </aside>
 
-        <input
-          type={isLoginMode ? "text" : "email"}
-          id="email"
-          name="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={handleInputChange}
-          autoComplete={isLoginMode ? "username" : "email"}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400"
-          required
-        />
+      <main className="flex flex-1 items-center justify-center p-6">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle>{isLoginMode ? 'Sign in' : 'Register'}</CardTitle>
+            <CardDescription>
+              {isLoginMode ? 'Use your email and password, or a connected account.' : 'Create an account to get started.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            {successMessage ? (
+              <Alert variant="success">
+                <AlertDescription>{successMessage}</AlertDescription>
+              </Alert>
+            ) : null}
 
-        <div className="relative">
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={formData.password}
-            onChange={handleInputChange}
-            placeholder="Password"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400"
-            required
-          />
-        </div>
+            <form onSubmit={handleSubmit} noValidate>
+              <FieldGroup>
+                {!isLoginMode ? (
+                  <Field>
+                    <FieldLabel htmlFor="name">Name</FieldLabel>
+                    <Input
+                      id="name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      autoComplete="name"
+                      required
+                    />
+                  </Field>
+                ) : null}
+                <Field>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    id="email"
+                    name="email"
+                    type={isLoginMode ? 'text' : 'email'}
+                    autoComplete={isLoginMode ? 'username' : 'email'}
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete={isLoginMode ? 'current-password' : 'new-password'}
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Field>
+                <Button type="submit" className="w-full">
+                  {isLoginMode ? 'Sign in' : 'Register'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="w-full"
+                  onClick={() => {
+                    setIsLoginMode(!isLoginMode);
+                    setError(null);
+                    setSuccessMessage(null);
+                  }}
+                >
+                  {isLoginMode ? "Don't have an account? Register" : 'Already have an account? Sign in'}
+                </Button>
+              </FieldGroup>
+            </form>
 
-        <button
-          type="submit"
-          className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
-        >
-          {isLoginMode ? 'Sign In' : 'Register'}
-        </button>
+            <FieldSeparator>Or</FieldSeparator>
 
-        <div className="text-center text-sm">
-          <button
-            type="button"
-            onClick={() => setIsLoginMode(!isLoginMode)}
-            className="text-primary-600 hover:text-primary-800 focus:outline-none"
-          >
-            {isLoginMode ? "Don't have an account? Register" : 'Already have an account? Sign in'}
-          </button>
-        </div>
-      </form>
-
-      <div className={`${formWidthClass} my-6 flex items-center`}>
-        <div className="flex-grow border-t border-gray-300"></div>
-        <span className="px-4 text-gray-500 text-sm">Or</span>
-        <div className="flex-grow border-t border-gray-300"></div>
-      </div>
-
-      <div className={`flex flex-col gap-3 ${formWidthClass}`}>
-        <button
-          onClick={() => handleSocialLogin('google')}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2 text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors"
-        >
-          Sign in with Google
-        </button>
-
-        <button
-          onClick={() => handleSocialLogin('github')}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2 text-white bg-gray-800 hover:bg-gray-900 rounded-md transition-colors"
-        >
-          Sign in with GitHub
-        </button>
-      </div>
+            <div className="flex flex-col gap-2">
+              <Button type="button" onClick={() => handleSocialLogin('google')}>
+                Sign in with Google
+              </Button>
+              <button
+                type="button"
+                onClick={() => handleSocialLogin('github')}
+                className={cn(buttonVariants({ variant: 'outline' }), 'w-full')}
+              >
+                Sign in with GitHub
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 }

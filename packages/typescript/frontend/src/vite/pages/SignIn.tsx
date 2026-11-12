@@ -1,13 +1,10 @@
-import Layout from '@/components/Layout';
 import SigninPage from '@/pages/auth/signin';
 
-/** Same chrome and markup as Next (`Layout` + `auth/layout` gray shell). */
+/** Standalone sign-in (orchestrator-style split layout — no app shell). */
 export function SignInPage() {
   return (
-    <Layout>
-      <div className="min-h-screen bg-gray-50">
-        <SigninPage />
-      </div>
-    </Layout>
+    <div className="flex min-h-screen flex-col bg-background">
+      <SigninPage />
+    </div>
   );
 }

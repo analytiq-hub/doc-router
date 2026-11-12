@@ -1,44 +1,42 @@
 "use client"
 
+import { useRouter } from '@/utils/appRouter';
 import { signOut } from '@/utils/signOut';
 import { useAppSession } from '@/contexts/AppSessionContext';
-import { Typography, Button, Box } from '@mui/material';
-import { ExitToApp as LogoutIcon } from '@mui/icons-material';
-import { useRouter } from '@/utils/appRouter';
+import { Button } from '@/components/ui/button';
 
 function AuthButton() {
   const { session } = useAppSession();
   const router = useRouter();
 
-  const handleLogin = () => {
-    // Directly navigate to our custom signin page instead of using signIn()
-    router.push('/auth/signin');
-  };
-
-  const handleLogout = () => {
-    void signOut();
-  };
-
   if (session) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-        <Typography variant="body1" sx={{ mr: 2 }}>
-          {session?.user?.name}
-        </Typography>
-        <Button color="inherit" onClick={handleLogout} startIcon={<LogoutIcon />}>
-          Sign Out
+      <div className="flex items-center gap-3 text-brand-foreground">
+        <span className="hidden text-sm sm:inline">{session.user?.name}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-brand-foreground hover:bg-brand-foreground/10 hover:text-brand-foreground"
+          onClick={() => void signOut()}
+        >
+          Sign out
         </Button>
-      </Box>
-    );
-  } else {
-    return (
-      <div 
-        onClick={handleLogin}
-        className="text-white hover:bg-primary-500 px-4 py-2 rounded-md cursor-pointer"
-      >
-        Sign in or Register
       </div>
     );
   }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="text-brand-foreground hover:bg-brand-foreground/10 hover:text-brand-foreground"
+      onClick={() => router.push('/auth/signin')}
+    >
+      Sign in or Register
+    </Button>
+  );
 }
+
 export default AuthButton;

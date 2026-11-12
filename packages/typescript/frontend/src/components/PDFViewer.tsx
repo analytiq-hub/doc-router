@@ -18,6 +18,7 @@ import {
   ocrBlockPageNum,
 } from '@/utils/ocr-utils';
 import { formatLocalDate } from '@/utils/date';
+import { ensurePdfjsWorker } from '@/utils/pdfjsWorker';
 import { searchPdf, isPdfDocumentDetachedError, type PdfSearchHit } from '@/utils/pdfTextSearch';
 
 /** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
@@ -131,12 +132,23 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
   // PDF fetch state: we pass a blob URL (string) to react-pdf so the file prop is stable. One URL per load.
   const [loading, setLoading] = useState(true);
+  const [pdfjsReady, setPdfjsReady] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [documentState, setDocumentState] = useState<string | null>(null);
   const fileUrlRef = useRef<string | null>(null);
   const loadedIdRef = useRef<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void ensurePdfjsWorker().then(() => {
+      if (!cancelled) setPdfjsReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const completionFetchStartedRef = useRef(false);
 
   const revokeCurrentUrl = useCallback(() => {
@@ -1531,13 +1543,14 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                   padding: '16px',
                 }}
               >
-                {loading ? (
+                {loading || (fileUrl && !pdfjsReady) ? (
                   <div>Loading PDF...</div>
                 ) : error ? (
                   <Typography color="error" align="center">{error}</Typography>
                 ) : fileUrl ? (
                   <Document
                     file={fileUrl}
+                    suspense={false}
                     onLoadSuccess={handleLoadSuccess}
                     onLoadError={handleLoadError}
                   >
@@ -1561,8 +1574,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                           alignItems: 'center'
                         }}
                       >
-                        <Page 
-                          key={`page_${index + 1}`} 
+                        <Page
+                          key={`page_${index + 1}`}
+                          suspense={false}
                           pageNumber={index + 1} 
                           width={pdfDimensions.width}
                           height={pdfDimensions.height}

@@ -9,26 +9,28 @@ import UserMenu from '@/components/UserMenu';
 import PDFViewerControls from '@/components/PDFViewerControls';
 import OrganizationSwitcher from './OrganizationSwitcher';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { 
-  Menu as Bars3Icon,
-  Dashboard as DashboardIcon,
-  Description as DocumentIcon,
-  LocalOffer as LocalOfferIcon,
-  DataObject as SchemaIcon,
-  Chat as PromptIcon,
-  Assignment as FormsIcon,
-  AccountTree as FlowsIcon,
-  MenuBook as KnowledgeBaseIcon,
-  FolderCopy as CasesIcon,
-  InfoOutlined as AboutIcon
-} from '@mui/icons-material';
-import { SvgIconProps } from '@mui/material';
+import {
+  Menu,
+  LayoutDashboard,
+  FileText,
+  FolderOpen,
+  Tag,
+  Braces,
+  MessageSquareText,
+  ClipboardList,
+  GitBranch,
+  Library,
+  Info,
+  type LucideIcon,
+} from 'lucide-react';
 import TourGuide from '@/components/TourGuide';
-import SidebarNavTooltip from '@/components/SidebarNavTooltip';
 import LicenseBanner from '@/components/LicenseBanner';
 import { appName } from '@/config/branding';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
-// First, let's fix the type errors (exported for use in doc viewer page)
 export interface PDFViewerControlsType {
   showLeftPanel: boolean;
   setShowLeftPanel: React.Dispatch<React.SetStateAction<boolean>>;
@@ -45,16 +47,59 @@ declare global {
   }
 }
 
-// Update the icon type
 interface MenuItem {
   text: string;
-  icon: React.ComponentType<SvgIconProps>;
+  icon: LucideIcon;
   href: string;
   tooltip: string;
 }
 
 interface LayoutProps {
   children: ReactNode;
+}
+
+function NavLinkItem({
+  item,
+  open,
+  active,
+  disabled,
+}: {
+  item: MenuItem;
+  open: boolean;
+  active: boolean;
+  disabled?: boolean;
+}) {
+  const Icon = item.icon;
+  const link = (
+    <Link
+      to={item.href}
+      aria-current={active ? 'page' : undefined}
+      aria-disabled={disabled || undefined}
+      className={cn(
+        'flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium outline-none transition-colors',
+        active && 'bg-primary-soft text-primary',
+        !active && !disabled && 'text-foreground hover:bg-accent',
+        disabled && 'pointer-events-none cursor-not-allowed opacity-60',
+      )}
+      onClick={disabled ? (e) => e.preventDefault() : undefined}
+    >
+      <Icon className="size-5 shrink-0" aria-hidden />
+      {open ? <span className="truncate">{item.text}</span> : <span className="sr-only">{item.text}</span>}
+    </Link>
+  );
+
+  if (open) {
+    return <span className="block px-2 py-0.5">{link}</span>;
+  }
+
+  return (
+    <span className="block px-2 py-0.5">
+      <Tooltip>
+        <TooltipTrigger render={link} />
+        <TooltipContent side="right">{disabled ? 'Select an organization' : item.tooltip}</TooltipContent>
+      </Tooltip>
+    </span>
+  );
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
@@ -69,13 +114,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [forceUpdate, setForceUpdate] = useState(0);
   const [pdfControls, setPdfControls] = useState<PDFViewerControlsType | null>(null);
 
-  // Derive org id from the URL path — usePathname() is stable on both server and client,
-  // so this never causes a hydration mismatch and never produces /orgs/undefined links.
   const orgIdForLinks =
     (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null;
 
-  // Restore collapsed/expanded preference once on mount (do not persist on every open change —
-  // that would overwrite a contracted sidebar when state briefly resets during in-app navigation).
   useLayoutEffect(() => {
     const savedSidebarState = localStorage.getItem('sidebarOpen');
     if (savedSidebarState !== null) {
@@ -93,35 +134,34 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const fileMenuItems: MenuItem[] = orgIdForLinks
     ? [
-        { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: `/orgs/${orgIdForLinks}/dashboard` },
-        { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: `/orgs/${orgIdForLinks}/docs` },
-        { text: 'Cases', icon: CasesIcon, tooltip: 'Cases', href: `/orgs/${orgIdForLinks}/cases` },
-        { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: `/orgs/${orgIdForLinks}/tags` },
-        { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${orgIdForLinks}/schemas` },
-        { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${orgIdForLinks}/prompts` },
-        { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: `/orgs/${orgIdForLinks}/forms` },
-        { text: 'Flows', icon: FlowsIcon, tooltip: 'Flows', href: `/orgs/${orgIdForLinks}/flows` },
-        { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: `/orgs/${orgIdForLinks}/knowledge-bases` },
+        { text: 'Dashboard', icon: LayoutDashboard, tooltip: 'Dashboard', href: `/orgs/${orgIdForLinks}/dashboard` },
+        { text: 'Documents', icon: FileText, tooltip: 'Documents', href: `/orgs/${orgIdForLinks}/docs` },
+        { text: 'Cases', icon: FolderOpen, tooltip: 'Cases', href: `/orgs/${orgIdForLinks}/cases` },
+        { text: 'Tags', icon: Tag, tooltip: 'Tags', href: `/orgs/${orgIdForLinks}/tags` },
+        { text: 'Schemas', icon: Braces, tooltip: 'Schemas', href: `/orgs/${orgIdForLinks}/schemas` },
+        { text: 'Prompts', icon: MessageSquareText, tooltip: 'Prompts', href: `/orgs/${orgIdForLinks}/prompts` },
+        { text: 'Forms', icon: ClipboardList, tooltip: 'Forms', href: `/orgs/${orgIdForLinks}/forms` },
+        { text: 'Flows', icon: GitBranch, tooltip: 'Flows', href: `/orgs/${orgIdForLinks}/flows` },
+        { text: 'Knowledge Bases', icon: Library, tooltip: 'Knowledge Bases', href: `/orgs/${orgIdForLinks}/knowledge-bases` },
       ]
     : [
-        { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: '#' },
-        { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: '#' },
-        { text: 'Cases', icon: CasesIcon, tooltip: 'Cases', href: '#' },
-        { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: '#' },
-        { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: '#' },
-        { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: '#' },
-        { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: '#' },
-        { text: 'Flows', icon: FlowsIcon, tooltip: 'Flows', href: '#' },
-        { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: '#' },
+        { text: 'Dashboard', icon: LayoutDashboard, tooltip: 'Dashboard', href: '#' },
+        { text: 'Documents', icon: FileText, tooltip: 'Documents', href: '#' },
+        { text: 'Cases', icon: FolderOpen, tooltip: 'Cases', href: '#' },
+        { text: 'Tags', icon: Tag, tooltip: 'Tags', href: '#' },
+        { text: 'Schemas', icon: Braces, tooltip: 'Schemas', href: '#' },
+        { text: 'Prompts', icon: MessageSquareText, tooltip: 'Prompts', href: '#' },
+        { text: 'Forms', icon: ClipboardList, tooltip: 'Forms', href: '#' },
+        { text: 'Flows', icon: GitBranch, tooltip: 'Flows', href: '#' },
+        { text: 'Knowledge Bases', icon: Library, tooltip: 'Knowledge Bases', href: '#' },
       ];
 
-  const systemMenuItems = [
-    { text: 'About', icon: AboutIcon, tooltip: 'About Page', href: '/' },
+  const systemMenuItems: MenuItem[] = [
+    { text: 'About', icon: Info, tooltip: 'About Page', href: '/' },
   ];
 
   useEffect(() => {
     const handleResize = () => {
-      // Only auto-close on small screens if no saved state exists
       if (window.innerWidth <= 640) {
         const savedState = localStorage.getItem('sidebarOpen');
         if (savedState === null) {
@@ -131,7 +171,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     };
 
     window.addEventListener('resize', handleResize);
-    // Defer initial run to avoid synchronous setState in effect
     const timer = setTimeout(handleResize, 0);
     return () => {
       clearTimeout(timer);
@@ -139,18 +178,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     };
   }, []);
 
-  // Keep the existing PDF controls effects
   useEffect(() => {
     const handleControlsChange = () => {
-      setForceUpdate(prev => prev + 1);
+      setForceUpdate((prev) => prev + 1);
     };
-    
+
     window.addEventListener('pdfviewercontrols', handleControlsChange);
     return () => window.removeEventListener('pdfviewercontrols', handleControlsChange);
   }, []);
 
   useEffect(() => {
-    // Defer setState to avoid synchronous setState in effect (cascading renders)
     const timer = setTimeout(() => {
       setPdfControls(window.pdfViewerControls || null);
     }, 0);
@@ -158,152 +195,91 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [forceUpdate]);
 
   useEffect(() => {
-    if (status === 'unauthenticated' && 
-        pathname !== '/' &&
-        !pathname.startsWith('/auth/') &&
-        !pathname.startsWith('/dashboard')) {
+    if (
+      status === 'unauthenticated' &&
+      pathname !== '/' &&
+      !pathname.startsWith('/auth/') &&
+      !pathname.startsWith('/dashboard')
+    ) {
       router.push('/auth/signin');
     }
   }, [status, router, pathname]);
 
-  // Update the renderMenuItem function to match burger icon size and alignment.
-  // Use array.join(' ') for classNames so server and client never get whitespace/newline mismatch (hydration).
   const renderMenuItem = (item: MenuItem) => {
-    const Icon = item.icon;
     const isPlaceholder = item.href === '#';
-    const isSelected = !isPlaceholder && (pathname === item.href || pathname.startsWith(item.href + '/'));
-
-    const outerClasses = [
-      'flex items-center h-10 w-full rounded-md',
-      isSelected ? 'bg-blue-100' : 'hover:bg-blue-100',
-      'transition-colors duration-200 px-3',
-    ].join(' ');
-    const iconWrapClasses = ['flex items-center justify-center', open ? 'w-6' : 'w-full'].join(' ');
-    const labelClasses = ['ml-3 pr-3 pt-1 text-sm font-medium whitespace-nowrap', isSelected ? 'text-blue-600' : 'text-gray-700'].join(' ');
-
-    const content = (
-      <div className={outerClasses}>
-        <div className={iconWrapClasses}>
-          <Icon className="h-6 w-6 shrink-0" />
-        </div>
-        {open && (
-          <span className={labelClasses}>
-            {item.text}
-          </span>
-        )}
-      </div>
-    );
-
-    if (isPlaceholder) {
-      return (
-        <SidebarNavTooltip
-          key={item.text}
-          label={!open ? item.tooltip : 'Select an organization'}
-          show={!open}
-          className="px-2 py-1 cursor-not-allowed opacity-70"
-        >
-          {content}
-        </SidebarNavTooltip>
-      );
-    }
+    const isSelected = !isPlaceholder && (pathname === item.href || pathname.startsWith(`${item.href}/`));
 
     return (
-      <SidebarNavTooltip
+      <NavLinkItem
         key={item.text}
-        label={item.tooltip}
-        show={!open}
-        className="px-2 py-1"
-      >
-        <Link
-          to={item.href}
-          className="block"
-        >
-          {content}
-        </Link>
-      </SidebarNavTooltip>
+        item={item}
+        open={open}
+        active={isSelected}
+        disabled={isPlaceholder}
+      />
     );
   };
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Header */}
-      <header className="bg-blue-600 border-b border-blue-700">
-        <div className="flex h-16 items-center justify-between px-3">
-          <div className="flex shrink-0 items-center">
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              className="p-2 rounded-md hover:bg-blue-500"
-            >
-              <Bars3Icon className="h-6 w-6 text-white" />
-            </button>
-            <Link
-              to={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
-              className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}
-            >
-              <span>{appName}</span>
-            </Link>
-          </div>
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b-2 border-primary bg-brand pr-3 pl-2 text-brand-foreground">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-9 text-brand-foreground hover:bg-brand-foreground/10 hover:text-brand-foreground"
+          onClick={toggleSidebar}
+          aria-label="Toggle navigation"
+        >
+          <Menu className="size-5" />
+        </Button>
+        <Link
+          to={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
+          className={cn(
+            'flex min-w-0 flex-1 items-center text-lg font-semibold transition-[margin]',
+            !open && 'ml-4',
+          )}
+        >
+          <span className="truncate">{appName}</span>
+        </Link>
 
-          <div className="flex-1 flex justify-end">
-            {session && <OrganizationSwitcher />}
-          </div>
-
-          <div className="flex items-center space-x-4">
-            {isPDFViewer && pdfControls && (
-              <PDFViewerControls key={forceUpdate} {...pdfControls} />
-            )}
-            {session ? (
-              <UserMenu user={session?.user} />
-            ) : (
-              <AuthButton />
-            )}
-          </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {session ? <OrganizationSwitcher /> : null}
+          {isPDFViewer && pdfControls ? <PDFViewerControls key={forceUpdate} {...pdfControls} /> : null}
+          {session ? <UserMenu user={session?.user} /> : <AuthButton />}
         </div>
       </header>
 
-      {status === 'authenticated' && <LicenseBanner />}
+      {status === 'authenticated' ? <LicenseBanner /> : null}
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside
-          className={`flex-shrink-0 transition-all duration-300 ease-in-out bg-blue-50 border-r border-gray-200 ${open ? 'w-48' : 'w-16 overflow-visible'}`}
+          className={cn(
+            'flex shrink-0 flex-col border-r border-border bg-card transition-[width] duration-300 ease-in-out',
+            open ? 'w-52' : 'w-16 overflow-visible',
+          )}
         >
-          <nav className={`flex h-full flex-col ${open ? 'overflow-hidden' : 'overflow-visible'}`}>
-            {status === 'authenticated' && (
+          <nav className={cn('flex h-full flex-col py-1', open ? 'overflow-hidden' : 'overflow-visible')}>
+            {status === 'authenticated' ? (
               <>
-                <div className="py-1">
-                  {fileMenuItems.slice(0, 1).map(renderMenuItem)}
-                </div>
-                <hr className="border-gray-200 my-1" />
-                <div className="py-1">
+                <div>{fileMenuItems.slice(0, 1).map(renderMenuItem)}</div>
+                <Separator className="my-1" />
+                <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
                   {fileMenuItems.slice(1).map(renderMenuItem)}
                 </div>
-                {/* <hr className="border-gray-200" />
-                <div className="py-1">
-                  {modelMenuItems.map(renderMenuItem)}
-                </div> */}
               </>
-            )}
-            <>
-              <hr className="border-gray-200" />
-              <div className="py-1">
-                {systemMenuItems.map(renderMenuItem)}
-              </div>
-            </>
+            ) : null}
+            <Separator className="my-1" />
+            <div>{systemMenuItems.map(renderMenuItem)}</div>
           </nav>
         </aside>
 
-        {/* Main content */}
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
+        <main className="min-w-0 flex-1 overflow-auto bg-background">{children}</main>
       </div>
-      
-      {/* Add the TourGuide component with a key to force remount */}
-      {status === 'authenticated' && (
+
+      {status === 'authenticated' ? (
         <TourGuide key={`tour-${session?.user?.email}`} />
-      )}
+      ) : null}
     </div>
   );
 };
