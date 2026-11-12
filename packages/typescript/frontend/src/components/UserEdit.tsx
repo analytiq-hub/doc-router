@@ -1,407 +1,308 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from '@/utils/appRouter';
-import { DocRouterAccountApi } from '@/utils/api';
-import { User, UserUpdate } from '@docrouter/sdk';
-import { signOut } from '@/utils/signOut';
-import { useAppSession } from '@/contexts/AppSessionContext';
-import { isSysAdmin } from '@/utils/roles';
-import { toast } from 'react-toastify';
-import { toastActionError } from '@/utils/toastActionError';
+import React, { useState, useEffect, useMemo } from 'react'
+import { useRouter } from '@/utils/appRouter'
+import { DocRouterAccountApi } from '@/utils/api'
+import { User, UserUpdate } from '@docrouter/sdk'
+import { signOut } from '@/utils/signOut'
+import { useAppSession } from '@/contexts/AppSessionContext'
+import { isSysAdmin } from '@/utils/roles'
+import { toast } from 'react-toastify'
+import { toastActionError } from '@/utils/toastActionError'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { FormDialog } from '@/components/FormDialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 interface UserEditProps {
-  userId: string;
+  userId: string
 }
-
-interface PasswordChangeModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (newPassword: string) => Promise<void>;
-}
-
-const PasswordChangeModal: React.FC<PasswordChangeModalProps> = ({ isOpen, onClose, onSubmit }) => {
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    try {
-      await onSubmit(newPassword);
-      setNewPassword('');
-      setConfirmPassword('');
-      onClose();
-    } catch (error) {
-      console.error('Password update failed:', error);
-      toastActionError('Failed to update password', error);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h3>
-        
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              New Password
-            </label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-            >
-              Update Password
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-interface DeleteUserModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}
-
-const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onConfirm }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete User</h3>
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to delete this user? This action cannot be undone.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-          >
-            Delete User
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
-  const router = useRouter();
-  const { session } = useAppSession();
-  const [user, setUser] = useState<User | null>(null);
-  const [name, setName] = useState('');
-  const [isSysadmin, setIsSysadmin] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const router = useRouter()
+  const { session } = useAppSession()
+  const [user, setUser] = useState<User | null>(null)
+  const [name, setName] = useState('')
+  const [isSysadmin, setIsSysadmin] = useState(false)
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordModalError, setPasswordModalError] = useState<string | null>(null)
+  const [passwordBusy, setPasswordBusy] = useState(false)
 
   const [originalValues, setOriginalValues] = useState({
     name: '',
     isSysadmin: false,
-    emailVerified: false
-  });
+    emailVerified: false,
+  })
 
-  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
 
-  const hasChanges = () => {
-    return name !== originalValues.name ||
-           isSysadmin !== originalValues.isSysadmin ||
-           emailVerified !== originalValues.emailVerified;
-  };
+  const hasChanges = () =>
+    name !== originalValues.name ||
+    isSysadmin !== originalValues.isSysadmin ||
+    emailVerified !== originalValues.emailVerified
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const userData = await docRouterAccountApi.getUser(userId);
-        setUser(userData);
-        setName(userData.name || '');
-        setIsSysadmin(userData.is_sysadmin);
-        setEmailVerified(userData.email_verified || false);
+        const userData = await docRouterAccountApi.getUser(userId)
+        setUser(userData)
+        setName(userData.name || '')
+        setIsSysadmin(userData.is_sysadmin)
+        setEmailVerified(userData.email_verified || false)
         setOriginalValues({
           name: userData.name || '',
           isSysadmin: userData.is_sysadmin,
-          emailVerified: userData.email_verified || false
-        });
-      } catch (error) {
-        setError('Failed to load user');
-        console.error('Error fetching user:', error);
+          emailVerified: userData.email_verified || false,
+        })
+      } catch (fetchError) {
+        setError('Failed to load user')
+        console.error('Error fetching user:', fetchError)
       }
-    };
-
-    fetchUser();
-  }, [userId, docRouterAccountApi]);
-
-  const handlePasswordUpdate = async (newPassword: string) => {
-    try {
-      await docRouterAccountApi.updateUser(userId, { password: newPassword });
-      setSuccess(true);
-    } catch (error) {
-      setError('Failed to update password');
-      throw error; // Re-throw to be handled by modal
     }
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(false);
+    void fetchUser()
+  }, [userId, docRouterAccountApi])
+
+  const handlePasswordUpdate = async (password: string) => {
+    await docRouterAccountApi.updateUser(userId, { password })
+    setSuccess(true)
+  }
+
+  const submitPasswordChange = async () => {
+    setPasswordModalError(null)
+    if (newPassword !== confirmPassword) {
+      setPasswordModalError('Passwords do not match')
+      return
+    }
+    setPasswordBusy(true)
+    try {
+      await handlePasswordUpdate(newPassword)
+      setNewPassword('')
+      setConfirmPassword('')
+      setIsPasswordModalOpen(false)
+    } catch (updateError) {
+      console.error('Password update failed:', updateError)
+      setPasswordModalError('Failed to update password')
+      toastActionError('Failed to update password', updateError)
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
+  const handleSubmit = async () => {
+    setError(null)
+    setSuccess(false)
 
     try {
       const update: UserUpdate = {
         name: name || undefined,
         is_sysadmin: isSysadmin,
-        email_verified: emailVerified
-      };
+        email_verified: emailVerified,
+      }
 
-      await docRouterAccountApi.updateUser(userId, update);
-      setSuccess(true);
-      
-      // Update original values after successful save
+      await docRouterAccountApi.updateUser(userId, update)
+      setSuccess(true)
+
       setOriginalValues({
         name: name || '',
         isSysadmin,
         emailVerified,
-      });
-    } catch (error) {
-      setError('Failed to update user');
-      console.error('Error updating user:', error);
+      })
+    } catch (updateError) {
+      setError('Failed to update user')
+      console.error('Error updating user:', updateError)
     }
-  };
+  }
 
   const handleDeleteUser = async () => {
     try {
-      await docRouterAccountApi.deleteUser(userId);
-      
-      // Check if deleting current user
+      await docRouterAccountApi.deleteUser(userId)
+      setIsDeleteModalOpen(false)
+
       if (session?.user?.id === userId) {
-        // Sign out if deleting self
-        void signOut();
+        void signOut()
       } else {
-        // Otherwise just redirect to user list
-        router.push('/settings/account/users');
+        router.push('/settings/account/users')
       }
-    } catch (error) {
-      setError('Failed to delete user');
-      console.error('Error deleting user:', error);
+    } catch (deleteError) {
+      setError('Failed to delete user')
+      console.error('Error deleting user:', deleteError)
     }
-  };
+  }
 
   const handleSendVerification = async () => {
     try {
-      await docRouterAccountApi.sendVerificationEmail(userId);
-      setSuccess(true);
-      toast.success('Verification email sent successfully');
-    } catch (error) {
-      setError('Failed to send verification email');
-      console.error('Error sending verification email:', error);
+      await docRouterAccountApi.sendVerificationEmail(userId)
+      setSuccess(true)
+      toast.success('Verification email sent successfully')
+    } catch (sendError) {
+      setError('Failed to send verification email')
+      console.error('Error sending verification email:', sendError)
     }
-  };
-
-  if (!user) {
-    return <div>Loading...</div>;
   }
 
-  const isAdmin = isSysAdmin(session);
+  if (!user) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>
+  }
+
+  const isAdmin = isSysAdmin(session)
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">Edit User Profile</h2>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => router.push('/settings/account/users')}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-          >
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-foreground">Edit user profile</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => router.push('/settings/account/users')}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!hasChanges()}
-            className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-              ${hasChanges()
-                ? 'bg-primary-600 text-white hover:bg-primary-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-          >
-            Save Changes
-          </button>
+          </Button>
+          <Button type="button" onClick={() => void handleSubmit()} disabled={!hasChanges()}>
+            Save changes
+          </Button>
         </div>
       </div>
-      
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md">
-          {error}
-        </div>
-      )}
-      
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 text-green-700 rounded-md">
-          User updated successfully
-        </div>
-      )}
 
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            value={user.email}
-            disabled
-            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500"
-          />
-        </div>
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
+      {success ? (
+        <Alert variant="success">
+          <AlertDescription>User updated successfully.</AlertDescription>
+        </Alert>
+      ) : null}
 
-        {isAdmin && (
-          <>
-            <div className="flex items-center space-x-2">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isSysadmin}
-                  onChange={(e) => setIsSysadmin(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-              </label>
-              <span className="text-sm font-medium text-gray-700">Platform sysadmin</span>
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Account</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="user-email">Email</FieldLabel>
+              <Input id="user-email" type="email" value={user.email} disabled readOnly />
+            </Field>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailVerified}
-                    onChange={(e) => setEmailVerified(e.target.checked)}
-                    className="sr-only peer"
+            <Field>
+              <FieldLabel htmlFor="user-name">Name</FieldLabel>
+              <Input
+                id="user-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+
+            {isAdmin ? (
+              <>
+                <Field orientation="horizontal" className="justify-between">
+                  <div className="space-y-0.5">
+                    <FieldLabel htmlFor="user-sysadmin">Platform sysadmin</FieldLabel>
+                  </div>
+                  <Switch
+                    id="user-sysadmin"
+                    checked={isSysadmin}
+                    onCheckedChange={(checked) => setIsSysadmin(checked === true)}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                </label>
-                <span className="text-sm font-medium text-gray-700">Email Verified</span>
+                </Field>
+
+                <Field orientation="horizontal" className="flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-foreground">Email verified</p>
+                  <Switch
+                    id="user-email-verified"
+                    checked={emailVerified}
+                    onCheckedChange={(checked) => setEmailVerified(checked === true)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:ml-auto sm:w-auto"
+                    onClick={() => void handleSendVerification()}
+                    disabled={originalValues.emailVerified}
+                  >
+                    Send verification email
+                  </Button>
+                </Field>
+              </>
+            ) : null}
+
+            {user.has_password ? (
+              <div className="border-t pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsPasswordModalOpen(true)}>
+                  Change password
+                </Button>
               </div>
+            ) : null}
+          </FieldGroup>
+        </CardContent>
+      </Card>
 
-              <button
-                type="button"
-                onClick={handleSendVerification}
-                disabled={originalValues.emailVerified}
-                className={`px-4 py-2 text-sm border rounded-md transition-colors
-                  ${originalValues.emailVerified 
-                    ? 'text-gray-400 border-gray-400 cursor-not-allowed' 
-                    : 'text-primary-600 border-primary-600 hover:bg-primary-50'
-                  }`}
-              >
-                Send Verification Email
-              </button>
-            </div>
-          </>
-        )}
-
-        {user.has_password && (
-          <div className="border-t pt-4">
-            <button
-              type="button"
-              onClick={() => setIsPasswordModalOpen(true)}
-              className="px-4 py-2 text-primary-600 border border-primary-600 rounded-md hover:bg-primary-50"
-            >
-              Change Password
-            </button>
-          </div>
-        )}
-      </form>
-
-      <div className="mt-8 pt-6 border-t">
-        <button
-          type="button"
-          onClick={() => setIsDeleteModalOpen(true)}
-          className="px-4 py-2 text-red-600 border border-red-600 rounded-md hover:bg-red-50"
-        >
-          Delete User
-        </button>
+      <div className="border-t pt-4">
+        <Button type="button" variant="outline" onClick={() => setIsDeleteModalOpen(true)}>
+          Delete user
+        </Button>
+        <FieldDescription className="mt-2">This action cannot be undone.</FieldDescription>
       </div>
 
-      <PasswordChangeModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
-        onSubmit={handlePasswordUpdate}
-      />
+      {isPasswordModalOpen ? (
+        <FormDialog
+          title="Change password"
+          submitLabel="Update password"
+          submitDisabled={!newPassword || !confirmPassword}
+          busy={passwordBusy}
+          error={passwordModalError}
+          onSubmit={() => void submitPasswordChange()}
+          onClose={() => {
+            setIsPasswordModalOpen(false)
+            setNewPassword('')
+            setConfirmPassword('')
+            setPasswordModalError(null)
+          }}
+        >
+          <Field>
+            <FieldLabel htmlFor="new-password">New password</FieldLabel>
+            <Input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoFocus
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+            <Input
+              id="confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </Field>
+        </FormDialog>
+      ) : null}
 
-      <DeleteUserModal
-        isOpen={isDeleteModalOpen}
+      <ConfirmDialog
+        open={isDeleteModalOpen}
+        title="Delete user"
+        message="Are you sure you want to delete this user? This action cannot be undone."
+        confirmLabel="Delete user"
+        onConfirm={() => void handleDeleteUser()}
         onClose={() => setIsDeleteModalOpen(false)}
-        onConfirm={handleDeleteUser}
       />
     </div>
-  );
-};
+  )
+}
 
-export default UserEdit; 
+export default UserEdit

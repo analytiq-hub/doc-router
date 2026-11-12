@@ -1,8 +1,10 @@
+'use client';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import Switch from '@mui/material/Switch';
-import Button from '@mui/material/Button';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { DocRouterAccountApi } from '@/utils/api';
 import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
@@ -65,7 +67,13 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
 
   const chatAgentModels = provider?.litellm_models_chat_agent ?? provider?.litellm_models_enabled ?? [];
 
-  const maxConcurrentColumn = createMaxConcurrentColumn({
+  const maxConcurrentColumn = createMaxConcurrentColumn<LLMChatModel>({
+    getModelName: (row) => String(row.litellm_model),
+    isEnabled: (row) =>
+      provider?.litellm_models_enabled.includes(String(row.litellm_model)) ?? false,
+  });
+
+  const maxConcurrentEmbeddingColumn = createMaxConcurrentColumn<LLMEmbeddingModel>({
     getModelName: (row) => String(row.litellm_model),
     isEnabled: (row) =>
       provider?.litellm_models_enabled.includes(String(row.litellm_model)) ?? false,
@@ -149,19 +157,18 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   };
 
   // Chat models columns (with test button and chat agent toggle)
-  const chatModelColumns: GridColDef[] = [
+  const chatModelColumns: DataTableColumn<LLMChatModel>[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
       field: 'enabled',
       headerName: 'Enabled',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Switch
-          checked={provider?.litellm_models_enabled.includes(params.row.litellm_model)}
-          onChange={(e) => handleToggleModel(params.row.litellm_model, e.target.checked)}
-          size="small"
-          color="primary"
+          checked={provider?.litellm_models_enabled.includes(row.litellm_model)}
+          onCheckedChange={(checked) => void handleToggleModel(row.litellm_model, checked === true)}
         />
       ),
     },
@@ -170,13 +177,12 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       headerName: 'Chat Agent',
       width: 120,
       minWidth: 120,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Switch
-          checked={chatAgentModels.includes(params.row.litellm_model)}
-          onChange={(e) => handleToggleChatAgent(params.row.litellm_model, e.target.checked)}
-          size="small"
-          color="secondary"
-          disabled={!provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+          checked={chatAgentModels.includes(row.litellm_model)}
+          onCheckedChange={(checked) => void handleToggleChatAgent(row.litellm_model, checked === true)}
+          disabled={!provider?.litellm_models_enabled.includes(row.litellm_model)}
         />
       ),
     },
@@ -185,12 +191,14 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       headerName: 'Test',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Button
-          variant="outlined"
-          size="small"
-          onClick={() => handleTestModel(params.row.litellm_model)}
-          disabled={!provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleTestModel(row.litellm_model)}
+          disabled={!provider?.litellm_models_enabled.includes(row.litellm_model)}
         >
           Test
         </Button>
@@ -204,19 +212,18 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   ];
 
   // Embedding models columns (with test button)
-  const embeddingModelColumns: GridColDef[] = [
+  const embeddingModelColumns: DataTableColumn<LLMEmbeddingModel>[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
       field: 'enabled',
       headerName: 'Enabled',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Switch
-          checked={provider?.litellm_models_enabled.includes(params.row.litellm_model)}
-          onChange={(e) => handleToggleModel(params.row.litellm_model, e.target.checked)}
-          size="small"
-          color="primary"
+          checked={provider?.litellm_models_enabled.includes(row.litellm_model)}
+          onCheckedChange={(checked) => void handleToggleModel(row.litellm_model, checked === true)}
         />
       ),
     },
@@ -225,18 +232,20 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       headerName: 'Test',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Button
-          variant="outlined"
-          size="small"
-          onClick={() => handleTestEmbeddingModel(params.row.litellm_model)}
-          disabled={!provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleTestEmbeddingModel(row.litellm_model)}
+          disabled={!provider?.litellm_models_enabled.includes(row.litellm_model)}
         >
           Test
         </Button>
       ),
     },
-    maxConcurrentColumn,
+    maxConcurrentEmbeddingColumn,
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
     { field: 'dimensions', headerName: 'Dimensions', width: 120, minWidth: 120 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
@@ -296,15 +305,10 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
             Max concurrent limits are per worker process; leave empty or 0 for unlimited.
           </p>
           <div className="w-full overflow-x-auto">
-            <DataGrid
+            <DataTable
               rows={chatModelRows}
               columns={chatModelColumns}
-              disableRowSelectionOnClick
               getRowId={(row) => row.litellm_model}
-              sx={{
-                minWidth: 800,
-                height: 300,
-              }}
             />
           </div>
         </div>
@@ -315,15 +319,10 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         <div>
           <h3 className="text-lg font-semibold mb-2">Embedding Models</h3>
           <div className="w-full overflow-x-auto">
-            <DataGrid
+            <DataTable
               rows={embeddingModelRows}
               columns={embeddingModelColumns}
-              disableRowSelectionOnClick
               getRowId={(row) => row.litellm_model}
-              sx={{
-                minWidth: 800,
-                height: 300,
-              }}
             />
           </div>
         </div>

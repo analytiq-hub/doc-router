@@ -6,15 +6,7 @@ import { apiClient, getApiErrorMsg } from '@/utils/api';
 import { toast } from 'react-toastify';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import { isOrgAdmin, isSysAdmin } from '@/utils/roles';
-import {
-  Send as SendIcon,
-  Refresh as RefreshIcon,
-  Replay as RetryIcon,
-  Close as CloseIcon,
-  ContentCopy as CopyIcon,
-  Add as AddIcon,
-  DeleteOutline as DeleteIcon,
-} from '@mui/icons-material';
+import { Copy, Plus, RefreshCw, RotateCcw, Send, Trash2, X } from 'lucide-react';
 import { useOrganizationData } from '@/hooks/useOrganizationData';
 import type { Organization as UiOrganization } from '@/types/organizations';
 import { copyToClipboard } from '@/utils/clipboard';
@@ -504,7 +496,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                 onClick={addEndpoint}
                 className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-sm"
               >
-                <AddIcon fontSize="small" className="mr-1" />
+                <Plus className="mr-1 size-4" />
                 Add endpoint
               </button>
             )}
@@ -522,7 +514,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
               disabled={!canEdit || testing || !selectedEndpointId || isCreatingNew}
               className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
             >
-              <SendIcon fontSize="small" className="mr-2" />
+              <Send className="mr-2 size-4" />
               Test webhook
             </button>
             {canEdit && selectedEndpointId && !isCreatingNew && (
@@ -531,7 +523,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                 onClick={deleteEndpoint}
                 className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-red-200 text-red-700 bg-white hover:bg-red-50 text-sm"
               >
-                <DeleteIcon fontSize="small" className="mr-1" />
+                <Trash2 className="mr-1 size-4" />
                 Delete
               </button>
             )}
@@ -779,7 +771,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                   onClick={addEndpoint}
                   className="inline-flex items-center px-4 py-2 rounded-md bg-primary-600 text-white hover:bg-primary-700"
                 >
-                  <AddIcon fontSize="small" className="mr-2" />
+                  <Plus className="mr-2 size-4" />
                   Add your first webhook
                 </button>
               )}
@@ -802,7 +794,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
               disabled={deliveriesLoading}
               title="Refresh deliveries"
             >
-              <RefreshIcon fontSize="small" className="mr-2" />
+              <RefreshCw className="mr-2 size-4" />
               Refresh
             </button>
           </div>
@@ -849,7 +841,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                         className="ml-3 inline-flex items-center text-sm text-gray-700 hover:text-gray-900"
                         title="Retry"
                       >
-                        <RetryIcon fontSize="small" className="mr-1" />
+                        <RotateCcw className="mr-1 size-4" />
                         Retry
                       </button>
                     )}
@@ -924,7 +916,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                 className="p-2 rounded-md hover:bg-gray-100"
                 aria-label="Close"
               >
-                <CloseIcon fontSize="small" />
+                <X className="size-4" />
               </button>
             </div>
 
@@ -945,7 +937,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                   onClick={() => retryDelivery(selectedDeliveryId)}
                   className="inline-flex items-center px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
                 >
-                  <RetryIcon fontSize="small" className="mr-2" />
+                  <RotateCcw className="mr-2 size-4" />
                   Retry
                 </button>
               )}
@@ -964,7 +956,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
               className="absolute right-3 top-3 p-2 rounded-md hover:bg-gray-100 text-gray-600"
               aria-label="Close"
             >
-              <CloseIcon fontSize="small" />
+              <X className="size-4" />
             </button>
 
             <div className="p-6">
@@ -982,7 +974,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                   className="inline-flex items-center p-2 rounded-full bg-gray-200 shadow-md hover:bg-gray-300 hover:shadow-lg text-gray-700"
                   title="Copy"
                 >
-                  <CopyIcon fontSize="small" />
+                  <Copy className="size-4" />
                 </button>
               </div>
 

@@ -1,330 +1,220 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { IconButton } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { DocRouterAccountApi } from '@/utils/api';
-import { User, UserCreate } from '@docrouter/sdk';
-import { isAxiosError } from 'axios';
-import { designTokens } from '@/lib/designTokens';
-import { useRouter } from '@/utils/appRouter';
-import { signOut } from '@/utils/signOut';
-import { useAppSession } from '@/utils/useAppSession';
-import UserInviteModal from './UserInviteModal';
-import UserAddModal from './UserAddModal';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
+import { Pencil, Trash2 } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { isAxiosError } from 'axios'
+import type { User, UserCreate } from '@docrouter/sdk'
 
-interface DeleteUserModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  user: User | null;
-  onConfirm: () => Promise<void>;
-}
-
-const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, user, onConfirm }) => {
-  if (!isOpen || !user) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete User</h3>
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to delete user &quot;{user.email}&quot;? This action cannot be undone.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-          >
-            Delete User
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { DataTable, type DataTableColumn, type PaginationModel } from '@/components/data-table'
+import { RowActionsMenu } from '@/components/RowActionsMenu'
+import { SearchInput } from '@/components/SearchInput'
+import UserAddModal from '@/components/UserAddModal'
+import UserInviteModal from '@/components/UserInviteModal'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useDebounced } from '@/lib/useDebounced'
+import { DocRouterAccountApi } from '@/utils/api'
+import { signOut } from '@/utils/signOut'
+import { useAppSession } from '@/utils/useAppSession'
 
 const UserManager: React.FC = () => {
-  const router = useRouter();
-  const session = useAppSession();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
-  const [paginationModel, setPaginationModel] = useState({
-    pageSize: 10,
-    page: 0,
-  });
-  const [searchQuery, setSearchQuery] = useState('');
-  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const session = useAppSession()
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
+
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 10 })
+  const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounced(searchQuery.trim())
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isInviteOpen, setIsInviteOpen] = useState(false)
 
   const fetchUsers = useCallback(async () => {
+    setLoading(true)
     try {
       const response = await docRouterAccountApi.listUsers({
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize,
-        search_name: debouncedSearch || undefined
-      });
-      setUsers(response.users);
-      setTotalCount(response.total_count);
+        skip: pagination.page * pagination.pageSize,
+        limit: pagination.pageSize,
+        search_name: debouncedSearch || undefined,
+      })
+      setUsers(response.users)
+      setTotalCount(response.total_count)
+    } catch (error) {
+      if (isAxiosError(error)) console.error('Error fetching users:', error.response?.data)
+    } finally {
+      setLoading(false)
+    }
+  }, [pagination, debouncedSearch, docRouterAccountApi])
+
+  useEffect(() => {
+    void fetchUsers()
+  }, [fetchUsers])
+
+  useEffect(() => {
+    setPagination((p) => ({ ...p, page: 0 }))
+  }, [debouncedSearch])
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return
+    setDeleteBusy(true)
+    try {
+      await docRouterAccountApi.deleteUser(userToDelete.id)
+      if (session?.session?.user?.id === userToDelete.id) {
+        void signOut()
+        return
+      }
+      await fetchUsers()
+      setUserToDelete(null)
     } catch (error) {
       if (isAxiosError(error)) {
-        console.error('Error fetching users:', error.response?.data);
+        alert(error.response?.data?.detail || 'Failed to delete user')
       }
     } finally {
-      setLoading(false);
+      setDeleteBusy(false)
     }
-  }, [paginationModel, debouncedSearch, docRouterAccountApi]);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [paginationModel, fetchUsers]);
-
-  // Debounce search input
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
-    return () => clearTimeout(handle);
-  }, [searchQuery]);
-
-  const handleDeleteClick = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    if (user) {
-      setUserToDelete(user);
-      setIsDeleteModalOpen(true);
-    }
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!userToDelete) return;
-
-    try {
-      await docRouterAccountApi.deleteUser(userToDelete.id);
-      
-      if (session?.session?.user?.id === userToDelete.id) {
-        void signOut();
-        return;
-      }
-      
-      fetchUsers();
-      setIsDeleteModalOpen(false);
-      setUserToDelete(null);
-    } catch (error) {
-      if (isAxiosError(error)) {
-        const errorMessage = error.response?.data?.detail || 'Failed to delete user';
-        alert(errorMessage);
-      }
-    }
-  };
-
-  // Server-side filtering; rows are the fetched users
-  const filteredUsers = users;
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, user: User) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedUser(user);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedUser(null);
-  };
-
-  const columns: GridColDef[] = [
-    {
-      field: 'name',
-      headerName: 'User',
-      flex: 1,
-      minWidth: 300,
-      renderCell: (params: GridRenderCellParams) => (
-        <button
-          onClick={() => router.push(`/settings/account/users/${params.row.id}`)}
-          className="text-left hover:text-primary-600 focus:outline-none"
-        >
-          <span className="font-medium">{params.value || 'Unnamed User'}</span>
-          <span className="text-gray-500 ml-2">({params.row.email})</span>
-        </button>
-      )
-    },
-    {
-      field: 'is_sysadmin',
-      headerName: 'Sysadmin',
-      width: 120,
-      renderCell: (params) => (
-        <span className={params.value ? 'text-primary-600' : ''}>
-          {params.value ? 'Yes' : 'No'}
-        </span>
-      ),
-    },
-    {
-      field: 'email_verified',
-      headerName: 'Email Verified',
-      width: 130,
-      renderCell: (params) => (
-        <span className={params.value ? 'text-green-600' : 'text-gray-500'}>
-          {params.value ? 'Yes' : 'No'}
-        </span>
-      )
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 80,
-      renderCell: (params) => (
-        <div>
-          <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row)}
-            className="text-gray-600 hover:bg-gray-50"
-          >
-            <MoreVertIcon />
-          </IconButton>
-        </div>
-      ),
-    },
-  ];
-
-  // Calculate the current range for status text
-  const startRange = (paginationModel.page * paginationModel.pageSize) + 1;
+  }
 
   const handleAddUser = async (userData: UserCreate) => {
-    try {
-      await docRouterAccountApi.createUser(userData);
-      await fetchUsers();
-    } catch (error) {
-      throw error; // Let the modal handle the error
-    }
-  };
+    await docRouterAccountApi.createUser(userData)
+    await fetchUsers()
+  }
+
+  const columns: DataTableColumn<User>[] = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: 'User',
+        flex: 1,
+        minWidth: 240,
+        renderCell: ({ row }) => (
+          <Link
+            to={`/settings/account/users/${row.id}`}
+            className="text-primary hover:underline"
+          >
+            <span className="font-medium">{row.name || 'Unnamed user'}</span>
+            <span className="ml-2 text-muted-foreground">({row.email})</span>
+          </Link>
+        ),
+      },
+      {
+        field: 'is_sysadmin',
+        headerName: 'Sysadmin',
+        width: 100,
+        renderCell: ({ row }) => (
+          <span className={row.is_sysadmin ? 'text-primary font-medium' : 'text-muted-foreground'}>
+            {row.is_sysadmin ? 'Yes' : 'No'}
+          </span>
+        ),
+      },
+      {
+        field: 'email_verified',
+        headerName: 'Verified',
+        width: 100,
+        renderCell: ({ row }) => (
+          <span className={row.email_verified ? 'text-green-600' : 'text-muted-foreground'}>
+            {row.email_verified ? 'Yes' : 'No'}
+          </span>
+        ),
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        width: 52,
+        sortable: false,
+        hideable: false,
+        resizable: false,
+        renderCell: ({ row }) => (
+          <RowActionsMenu
+            label={`Actions for ${row.email}`}
+            actions={[
+              { label: 'Edit', icon: Pencil, to: `/settings/account/users/${row.id}` },
+              {
+                label: 'Delete',
+                icon: Trash2,
+                destructive: true,
+                onSelect: () => setUserToDelete(row),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [],
+  )
+
+  const rangeStart = pagination.page * pagination.pageSize + 1
+  const rangeEnd = pagination.page * pagination.pageSize + users.length
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-          >
-            Add User
-          </button>
-          <button
-            onClick={() => setIsInviteModalOpen(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-          >
-            Invite User
-          </button>
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+        <CardTitle className="text-lg">User management</CardTitle>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={() => setIsAddOpen(true)}>
+            Add user
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setIsInviteOpen(true)}>
+            Invite user
+          </Button>
         </div>
-      </div>
-
-      {/* Search Box */}
-      <div className="mb-4">
-        <input
-          type="text"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-          placeholder="Search users by name or email..."
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <SearchInput
+          className="w-full max-w-md"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={setSearchQuery}
+          placeholder="Search users by name or email…"
         />
-      </div>
-
-      <div style={{ height: 400, width: '100%' }}>
-        <DataGrid
-          rows={filteredUsers}
+        <DataTable
+          rows={users}
           columns={columns}
           loading={loading}
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          pageSizeOptions={[10, 25, 50]}
-          paginationMode="server"
           rowCount={totalCount}
-          disableRowSelectionOnClick
-          getRowId={(row) => row.id}
-          sx={{
-            '& .MuiDataGrid-cell': {
-              padding: 'px',
-            },
-            '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: designTokens.secondary,
-            },
-            '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${designTokens.border} !important`,
-            }
-          }}
+          paginationModel={pagination}
+          onPaginationModelChange={setPagination}
+          pageSizeOptions={[10, 25, 50]}
         />
-      </div>
+        <p className="text-sm text-muted-foreground">
+          {loading
+            ? 'Loading…'
+            : users.length > 0
+              ? `Showing ${rangeStart}–${rangeEnd} of ${totalCount} users`
+              : 'No users found'}
+        </p>
+      </CardContent>
 
-      <div className="mt-4 text-sm text-gray-600">
-        {loading ? 'Loading...' :
-          users.length > 0 ?
-            `Showing ${startRange}-${startRange + users.length - 1} of ${totalCount} users` :
-            'No users found'
+      {isAddOpen ? (
+        <UserAddModal open onClose={() => setIsAddOpen(false)} onAdd={handleAddUser} />
+      ) : null}
+
+      {isInviteOpen ? (
+        <UserInviteModal
+          open
+          onClose={() => setIsInviteOpen(false)}
+          onInvited={() => void fetchUsers()}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={Boolean(userToDelete)}
+        title="Delete user"
+        message={
+          userToDelete
+            ? `Are you sure you want to delete "${userToDelete.email}"? This action cannot be undone.`
+            : ''
         }
-      </div>
-
-      <DeleteUserModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setUserToDelete(null);
-        }}
-        user={userToDelete}
-        onConfirm={handleDeleteConfirm}
+        confirmLabel="Delete user"
+        busy={deleteBusy}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => setUserToDelete(null)}
       />
+    </Card>
+  )
+}
 
-      <UserAddModal
-        open={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onAdd={handleAddUser}
-      />
-
-      <UserInviteModal
-        open={isInviteModalOpen}
-        onClose={() => setIsInviteModalOpen(false)}
-        onInvited={fetchUsers}
-      />
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => {
-            if (selectedUser) router.push(`/settings/account/users/${selectedUser.id}`);
-            handleMenuClose();
-          }}
-          className="flex items-center gap-2"
-        >
-          <EditIcon fontSize="small" className="text-primary-600" />
-          <span>Edit</span>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (selectedUser) handleDeleteClick(selectedUser.id);
-            handleMenuClose();
-          }}
-          className="flex items-center gap-2"
-        >
-          <DeleteIcon fontSize="small" className="text-red-600" />
-          <span>Delete</span>
-        </MenuItem>
-      </Menu>
-    </div>
-  );
-};
-
-export default UserManager; 
+export default UserManager

@@ -1,207 +1,220 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Button, TextField, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableContainer, TableHead, Paper, TableRow, TableCell, Alert, Snackbar } from '@mui/material';
-import { Delete as DeleteIcon, ContentCopy as ContentCopyIcon } from '@mui/icons-material';
-import { DocRouterAccountApi } from '@/utils/api';
-import { CreateTokenRequest, AccessToken } from '@docrouter/sdk';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { copyToClipboard } from '@/utils/clipboard';
-import { formatLocalDate } from '@/utils/date';
+'use client'
+
+import { Copy, Trash2 } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import type { AccessToken, CreateTokenRequest } from '@docrouter/sdk'
+
+import { ErrorAlert } from '@/components/ErrorAlert'
+import { FormDialog } from '@/components/FormDialog'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useOrganization } from '@/contexts/OrganizationContext'
+import { DocRouterAccountApi } from '@/utils/api'
+import { copyToClipboard } from '@/utils/clipboard'
+import { formatLocalDate } from '@/utils/date'
 
 const OrganizationTokenManager: React.FC = () => {
-  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
-  const { currentOrganization } = useOrganization();
-  const [tokens, setTokens] = useState<AccessToken[]>([]);
-  const [openModal, setOpenModal] = useState(false);
-  const [newTokenName, setNewTokenName] = useState('');
-  const [tokenLifetime, setTokenLifetime] = useState('90');
-  const [newToken, setNewToken] = useState<AccessToken | null>(null);
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
+  const { currentOrganization } = useOrganization()
+  const orgId = currentOrganization?.id
+
+  const [tokens, setTokens] = useState<AccessToken[]>([])
+  const [openModal, setOpenModal] = useState(false)
+  const [newTokenName, setNewTokenName] = useState('')
+  const [tokenLifetime, setTokenLifetime] = useState('90')
+  const [newToken, setNewToken] = useState<AccessToken | null>(null)
+  const [showTokenModal, setShowTokenModal] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const [busy, setBusy] = useState(false)
+
+  const loadTokens = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const tokensData = await docRouterAccountApi.getOrganizationTokens(orgId)
+      setTokens(tokensData)
+    } catch (err) {
+      console.error('Error fetching tokens:', err)
+    }
+  }, [orgId, docRouterAccountApi])
 
   useEffect(() => {
-    const getTokensData = async () => {
-      if (!currentOrganization?.id) return;
-      
-      try {
-        const tokensData = await docRouterAccountApi.getOrganizationTokens(currentOrganization.id);
-        setTokens(tokensData);
-      } catch (error) {
-        console.error('Error fetching tokens:', error);
-      }
-    };
-
-    getTokensData();
-  }, [currentOrganization?.id, docRouterAccountApi]);
+    void loadTokens()
+  }, [loadTokens])
 
   const createToken = async () => {
-    if (!currentOrganization?.id) {
-      setError('No organization selected');
-      return;
+    if (!orgId) {
+      setError('No organization selected')
+      return
     }
-
+    setBusy(true)
+    setError(null)
     try {
-      const trimmedName = newTokenName.trim();
-      if (tokens.some(token => token.name === trimmedName)) {
-        setError('A token with this name already exists. Please choose a different name.');
-        return;
+      const trimmedName = newTokenName.trim()
+      if (tokens.some((token) => token.name === trimmedName)) {
+        setError('A token with this name already exists. Please choose a different name.')
+        return
       }
-
-      const lifetime = tokenLifetime.trim() === '' ? 0 : parseInt(tokenLifetime);
-
-      const request: CreateTokenRequest = {
-        name: trimmedName,
-        lifetime: lifetime
-      };
-      const response = await docRouterAccountApi.createOrganizationToken(request, currentOrganization.id);
-
-      setNewToken(response);
-      setShowTokenModal(true);
-      setOpenModal(false);
-      setNewTokenName('');
-      setTokenLifetime('90');
-    } catch (error) {
-      console.error('Error creating token:', error);
-      setError('An error occurred while creating the token. Please try again.');
+      const lifetime = tokenLifetime.trim() === '' ? 0 : parseInt(tokenLifetime, 10)
+      const request: CreateTokenRequest = { name: trimmedName, lifetime }
+      const response = await docRouterAccountApi.createOrganizationToken(request, orgId)
+      setNewToken(response)
+      setShowTokenModal(true)
+      setOpenModal(false)
+      setNewTokenName('')
+      setTokenLifetime('90')
+    } catch (err) {
+      console.error('Error creating token:', err)
+      setError('An error occurred while creating the token. Please try again.')
+    } finally {
+      setBusy(false)
     }
-  };
+  }
 
   const saveToken = async () => {
-    if (newToken) {
-      setNewToken(null);
-      setShowTokenModal(false);
-      // Refetch tokens to get the preview instead of full token
-      if (!currentOrganization?.id) return;
-      try {
-        const tokensData = await docRouterAccountApi.getOrganizationTokens(currentOrganization.id);
-        setTokens(tokensData);
-      } catch (error) {
-        console.error('Error fetching tokens:', error);
-      }
-    }
-  };
-
+    setNewToken(null)
+    setShowTokenModal(false)
+    await loadTokens()
+  }
 
   const handleDeleteToken = async (tokenId: string) => {
-    if (!currentOrganization?.id) return;
-    
+    if (!orgId) return
     try {
-      await docRouterAccountApi.deleteOrganizationToken(tokenId, currentOrganization.id);
-      setTokens(tokens.filter(token => token.id !== tokenId));
-    } catch (error) {
-      console.error('Error deleting token:', error);
-      setError('Failed to delete token');
+      await docRouterAccountApi.deleteOrganizationToken(tokenId, orgId)
+      setTokens(tokens.filter((token) => token.id !== tokenId))
+    } catch (err) {
+      console.error('Error deleting token:', err)
+      setError('Failed to delete token')
     }
-  };
+  }
 
   return (
-    <div>
-      <Button
-        variant="outlined"
-        color="primary"
-        className="mb-4"
-        onClick={() => setOpenModal(true)}
-        disabled={!currentOrganization?.id}
-      >
-        Generate Organization Token
+    <div className="space-y-4">
+      <Button type="button" variant="outline" onClick={() => setOpenModal(true)} disabled={!orgId}>
+        Generate organization token
       </Button>
-      <div className="mb-6"></div>
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
+      <ErrorAlert error={error} />
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell>Comment</TableCell>
-              <TableCell>Token</TableCell>
-              <TableCell>Creation</TableCell>
-              <TableCell>Expiration</TableCell>
-              <TableCell></TableCell>
+              <TableHead>Comment</TableHead>
+              <TableHead>Token</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Expiration</TableHead>
+              <TableHead className="w-12" />
             </TableRow>
-          </TableHead>
+          </TableHeader>
           <TableBody>
-            {tokens.map((token, index) => (
-              <TableRow 
-                key={token.id} 
-                sx={{ 
-                  '&:last-child td, &:last-child th': { border: 0 }, 
-                  height: '30px',
-                  backgroundColor: index % 2 === 1 ? 'inherit' : 'rgba(0, 0, 0, 0.04)'  // Add zebra striping
-                }}
-              >
-                <TableCell sx={{ py: 0.5 }}>{token.name}</TableCell>
-                <TableCell sx={{ py: 0.5, fontFamily: 'monospace' }}>
-                  {token.token ? `${token.token}...` : '-'}
+            {tokens.map((token) => (
+              <TableRow key={token.id}>
+                <TableCell>{token.name}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {token.token ? `${token.token}…` : '—'}
                 </TableCell>
-                <TableCell sx={{ py: 0.5 }}>{formatLocalDate(token.created_at)}</TableCell>
-                <TableCell sx={{ py: 0.5 }}>
+                <TableCell>{formatLocalDate(token.created_at)}</TableCell>
+                <TableCell>
                   {token.lifetime
-                    ? formatLocalDate(new Date(new Date(token.created_at).getTime() + token.lifetime * 24 * 60 * 60 * 1000))
+                    ? formatLocalDate(
+                        new Date(
+                          new Date(token.created_at).getTime() + token.lifetime * 24 * 60 * 60 * 1000,
+                        ),
+                      )
                     : 'None'}
                 </TableCell>
-                <TableCell sx={{ py: 0.5 }} align="right">
-                  <IconButton aria-label="delete" onClick={() => handleDeleteToken(token.id)}>
-                    <DeleteIcon />
-                  </IconButton>
+                <TableCell className="text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => void handleDeleteToken(token.id)}
+                    aria-label="Delete token"
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </div>
 
-      <Dialog open={openModal} onClose={() => setOpenModal(false)}>
-        <DialogTitle>Generate Organization Token</DialogTitle>
-        <DialogContent sx={{ pt: 2.5 }}>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Comment"
-            fullWidth
-            variant="outlined"
-            value={newTokenName}
-            onChange={(e) => setNewTokenName(e.target.value)}
-            placeholder="What's this token for?"
-          />
-          <TextField
-            margin="dense"
-            label="Lifetime (days)"
-            type="number"
-            fullWidth
-            variant="outlined"
-            value={tokenLifetime}
-            onChange={(e) => setTokenLifetime(e.target.value)}
-            placeholder="Leave empty for no expiration"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" color="primary"
-            onClick={() => setOpenModal(false)}>Cancel</Button>
-          <Button variant="contained" color="primary" onClick={createToken} disabled={!newTokenName.trim()}>Generate</Button>
-        </DialogActions>
-      </Dialog>
+      {openModal ? (
+        <FormDialog
+          title="Generate organization token"
+          submitLabel="Generate"
+          submitDisabled={!newTokenName.trim()}
+          busy={busy}
+          error={error}
+          onSubmit={() => void createToken()}
+          onClose={() => setOpenModal(false)}
+        >
+          <Field>
+            <FieldLabel htmlFor="org-token-comment">Comment</FieldLabel>
+            <Input
+              id="org-token-comment"
+              value={newTokenName}
+              onChange={(e) => setNewTokenName(e.target.value)}
+              placeholder="What is this token for?"
+              autoFocus
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="org-token-lifetime">Lifetime (days)</FieldLabel>
+            <Input
+              id="org-token-lifetime"
+              type="number"
+              value={tokenLifetime}
+              onChange={(e) => setTokenLifetime(e.target.value)}
+            />
+            <FieldDescription>Leave empty for no expiration.</FieldDescription>
+          </Field>
+        </FormDialog>
+      ) : null}
 
-      {/* New Token Modal */}
-      <Dialog open={showTokenModal} onClose={saveToken}>
-        <DialogTitle>New Token Created</DialogTitle>
+      <Dialog open={showTokenModal} onOpenChange={(open) => !open && void saveToken()}>
         <DialogContent>
-          <p>Copy your new token. It is displayed only once.</p>
-          <div className="flex items-center justify-between mt-2 p-2 bg-gray-100 rounded">
-            <span className="font-mono">{newToken?.token}</span>
-            <IconButton onClick={() => newToken?.token && copyToClipboard(newToken.token)}>
-              <ContentCopyIcon />
-            </IconButton>
+          <DialogHeader>
+            <DialogTitle>New token created</DialogTitle>
+            <DialogDescription>Copy your new token. It is shown only once.</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-between gap-2 rounded-md bg-muted p-2">
+            <span className="min-w-0 break-all font-mono text-sm">{newToken?.token}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => newToken?.token && void copyToClipboard(newToken.token)}
+              aria-label="Copy token"
+            >
+              <Copy className="size-4" />
+            </Button>
           </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => void saveToken()}>
+              Done
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button variant="contained" color="primary" onClick={saveToken}>Save token</Button>
-        </DialogActions>
       </Dialog>
-
-      <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError(null)}>
-        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-          {error}
-        </Alert>
-      </Snackbar>
     </div>
-  );
-};
+  )
+}
 
-export default OrganizationTokenManager;
+export default OrganizationTokenManager

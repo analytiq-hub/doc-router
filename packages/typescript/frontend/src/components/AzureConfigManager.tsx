@@ -4,6 +4,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { getApiErrorMsg } from '@/utils/api';
 import type { AzureServicePrincipalConfig } from '@docrouter/sdk';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { FormDialog } from '@/components/FormDialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 
 const AzureConfigManager: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
@@ -14,6 +21,7 @@ const AzureConfigManager: React.FC = () => {
   const [clientSecret, setClientSecret] = useState('');
   const [apiBase, setApiBase] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +84,7 @@ const AzureConfigManager: React.FC = () => {
     try {
       await docRouterAccountApi.deleteAzureConfig();
       setConfig(null);
+      setDeleteOpen(false);
     } catch (e: unknown) {
       setError(getApiErrorMsg(e) || 'Failed to delete Azure configuration.');
     }
@@ -85,152 +94,142 @@ const AzureConfigManager: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-gray-900">Microsoft Entra (service principal)</h2>
-          <button
-            type="button"
-            onClick={handleOpenEdit}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+          <CardTitle className="text-lg">Microsoft Entra (service principal)</CardTitle>
+          <Button type="button" onClick={handleOpenEdit}>
             {configured ? 'Edit credentials' : 'Add credentials'}
-          </button>
-        </div>
-        <p className="text-sm text-gray-600 mb-3">
-          Service principal credentials (tenant ID, client ID, client secret) and API base URL used to access
-          Microsoft Foundry models. The service principal must be assigned the <b>Cognitive Services User</b> role
-          on the Foundry resource.
-        </p>
-        <p className="text-sm">
-          <b>Status:</b>{' '}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Service principal credentials (tenant ID, client ID, client secret) and API base URL used to access
+            Microsoft Foundry models. The service principal must be assigned the <b>Cognitive Services User</b> role
+            on the Foundry resource.
+          </p>
+          <p className="text-sm">
+            <b>Status:</b>{' '}
+            {configured ? (
+              <span className="text-green-600">Configured</span>
+            ) : (
+              <span className="text-amber-600">Not configured</span>
+            )}
+          </p>
+          {configured && config ? (
+            <div className="mt-4 space-y-1 font-mono text-sm text-foreground">
+              <div>
+                <span className="text-muted-foreground">Tenant ID:</span> {config.tenant_id}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Client ID:</span> {config.client_id}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Client secret:</span> {config.client_secret}
+              </div>
+              <div className="break-all">
+                <span className="text-muted-foreground">API base:</span> {config.api_base}
+              </div>
+            </div>
+          ) : null}
           {configured ? (
-            <span className="text-green-600">Configured</span>
-          ) : (
-            <span className="text-yellow-600">Not configured</span>
-          )}
-        </p>
-        {configured && config && (
-          <div className="mt-4 text-sm space-y-1 font-mono text-gray-800">
-            <div>
-              <span className="text-gray-500">Tenant ID:</span> {config.tenant_id}
-            </div>
-            <div>
-              <span className="text-gray-500">Client ID:</span> {config.client_id}
-            </div>
-            <div>
-              <span className="text-gray-500">Client secret:</span> {config.client_secret}
-            </div>
-            <div className="break-all">
-              <span className="text-gray-500">API base:</span> {config.api_base}
-            </div>
-          </div>
-        )}
-        {configured && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="mt-3 px-3 py-1.5 text-sm text-red-700 border border-red-300 rounded hover:bg-red-50"
-          >
-            Remove Azure credentials
-          </button>
-        )}
-        {error && !editOpen && <p className="text-red-600 text-sm mt-2">{error}</p>}
-      </div>
+            <Button type="button" variant="outline" className="mt-2 text-destructive" onClick={() => setDeleteOpen(true)}>
+              Remove Azure credentials
+            </Button>
+          ) : null}
+          {error && !editOpen ? (
+            <Alert variant="destructive" className="mt-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      <div className="bg-primary-50 rounded-lg shadow p-4">
-        <span className="list-decimal list-inside space-y-2 text-primary-900">
-          Change Azure Configuration for on-prem installs only.
-        </span>
-      </div>
+      <Card className="border-primary/30 bg-primary-soft">
+        <CardContent className="pt-6 text-sm text-foreground">
+          Change Azure configuration for on-prem installs only.
+        </CardContent>
+      </Card>
 
-      {editOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Azure service principal</h2>
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Close"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Directory (tenant) ID</label>
-            <input
-              type="text"
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded text-sm font-mono"
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              value={tenantId}
-              onChange={(e) => {
-                setTenantId(e.target.value);
-                setError(null);
-              }}
-            />
-            <label className="block text-sm font-medium text-gray-700 mb-1">Application (client) ID</label>
-            <input
-              type="text"
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded text-sm font-mono"
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              value={clientId}
-              onChange={(e) => {
-                setClientId(e.target.value);
-                setError(null);
-              }}
-            />
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client secret</label>
-            <input
-              type="password"
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded text-sm font-mono"
-              placeholder="From Certificates & secrets"
-              value={clientSecret}
-              onChange={(e) => {
-                setClientSecret(e.target.value);
-                setError(null);
-              }}
-            />
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              API base URL (Foundry endpoint)
-            </label>
-            <input
-              type="url"
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded text-sm font-mono"
-              placeholder="https://your-resource.services.ai.azure.com"
-              value={apiBase}
-              onChange={(e) => {
-                setApiBase(e.target.value);
-                setError(null);
-              }}
-            />
-            {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={
-                  !tenantId.trim() ||
-                  !clientId.trim() ||
-                  !clientSecret.trim() ||
-                  !apiBase.trim()
-                }
-                className="px-4 py-2 text-sm text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {editOpen ? (
+        <FormDialog
+          title="Azure service principal"
+          submitLabel="Save"
+          submitDisabled={!tenantId.trim() || !clientId.trim() || !clientSecret.trim() || !apiBase.trim()}
+          error={error}
+          size="wide"
+          onSubmit={() => void handleSave()}
+          onClose={() => {
+            setEditOpen(false);
+            setError(null);
+          }}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="azure-tenant">Directory (tenant) ID</FieldLabel>
+              <Input
+                id="azure-tenant"
+                className="font-mono text-sm"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={tenantId}
+                onChange={(e) => {
+                  setTenantId(e.target.value);
+                  setError(null);
+                }}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="azure-client">Application (client) ID</FieldLabel>
+              <Input
+                id="azure-client"
+                className="font-mono text-sm"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={clientId}
+                onChange={(e) => {
+                  setClientId(e.target.value);
+                  setError(null);
+                }}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="azure-secret">Client secret</FieldLabel>
+              <Input
+                id="azure-secret"
+                type="password"
+                className="font-mono text-sm"
+                placeholder="From Certificates & secrets"
+                value={clientSecret}
+                onChange={(e) => {
+                  setClientSecret(e.target.value);
+                  setError(null);
+                }}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="azure-api-base">API base URL (Foundry endpoint)</FieldLabel>
+              <Input
+                id="azure-api-base"
+                type="url"
+                className="font-mono text-sm"
+                placeholder="https://your-resource.services.ai.azure.com"
+                value={apiBase}
+                onChange={(e) => {
+                  setApiBase(e.target.value);
+                  setError(null);
+                }}
+              />
+            </Field>
+          </FieldGroup>
+        </FormDialog>
+      ) : null}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Remove Azure credentials"
+        message="Remove the stored Entra service principal credentials? Microsoft Foundry models may stop working."
+        confirmLabel="Remove"
+        onConfirm={() => void handleDelete()}
+        onClose={() => setDeleteOpen(false)}
+      />
     </div>
   );
 };

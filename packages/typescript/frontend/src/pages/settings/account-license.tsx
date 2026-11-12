@@ -7,6 +7,11 @@ import SettingsLayout, {
   settingsDescriptionClass,
   settingsPageTitleClass,
 } from '@/components/SettingsLayout';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Textarea } from '@/components/ui/textarea';
 
 /** Parse API datetimes; timezone-less values are treated as UTC. */
 function parseApiDate(value: string): Date | null {
@@ -111,21 +116,25 @@ const LicensePage: React.FC = () => {
           </p>
         </div>
 
-        {loading && <p className="text-sm text-gray-600">Loading…</p>}
+        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-        {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-            {success}
-          </div>
-        )}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+        {success ? (
+          <Alert variant="success">
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        ) : null}
 
         {license && !loading && (
-          <div className="space-y-3 rounded-md border border-gray-200 bg-white p-4 text-sm">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Current license</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
             <div className="grid grid-cols-[8rem_1fr] gap-y-2">
               <span className="text-gray-500">Status</span>
               <span className="font-medium text-gray-900">
@@ -159,48 +168,45 @@ const LicensePage: React.FC = () => {
               <span className="text-gray-500">Installation ID</span>
               <span className="flex items-center gap-2">
                 <code className="font-mono text-xs">{license.installation_id || '—'}</code>
-                {license.installation_id && (
-                  <button
-                    type="button"
-                    onClick={() => void copyInstallationId()}
-                    className="text-xs text-primary-700 hover:underline"
-                  >
+                {license.installation_id ? (
+                  <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => void copyInstallationId()}>
                     Copy
-                  </button>
-                )}
+                  </Button>
+                ) : null}
               </span>
               <span className="text-gray-500">Last checked</span>
               <span>{formatLocalDateTime(license.checked_at)}</span>
             </div>
-            {license.message && (
-              <p className="text-gray-600">{license.message}</p>
-            )}
-          </div>
+            {license.message ? <p className="text-muted-foreground">{license.message}</p> : null}
+            </CardContent>
+          </Card>
         )}
 
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold text-gray-900">Update license</h2>
-          <p className={settingsDescriptionClass}>
-            Paste a new signed license key. The previous key is kept if the new
-            one is invalid.
-          </p>
-          <textarea
-            className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs"
-            rows={4}
-            value={licenseKey}
-            onChange={(e) => setLicenseKey(e.target.value)}
-            placeholder="DRLIC1.…"
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Update license</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+          <FieldDescription className={settingsDescriptionClass}>
+            Paste a new signed license key. The previous key is kept if the new one is invalid.
+          </FieldDescription>
+          <Field>
+            <FieldLabel htmlFor="license-key">License key</FieldLabel>
+            <Textarea
+              id="license-key"
+              className="font-mono text-xs"
+              rows={4}
+              value={licenseKey}
+              onChange={(e) => setLicenseKey(e.target.value)}
+              placeholder="DRLIC1.…"
+              spellCheck={false}
+            />
+          </Field>
+          <Button type="button" onClick={() => void handleSave()} disabled={saving}>
             {saving ? 'Saving…' : 'Save license'}
-          </button>
-        </div>
+          </Button>
+          </CardContent>
+        </Card>
       </div>
     </SettingsLayout>
   );

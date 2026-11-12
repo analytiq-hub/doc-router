@@ -2,6 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { GCPConfig } from '@docrouter/sdk';
 import { DocRouterAccountApi } from '@/utils/api';
 import { getApiErrorMsg } from '@/utils/api';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { FormDialog } from '@/components/FormDialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { Textarea } from '@/components/ui/textarea';
 
 const GCPConfigManager: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
@@ -11,6 +18,7 @@ const GCPConfigManager: React.FC = () => {
   const [jsonText, setJsonText] = useState('');
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -72,95 +80,96 @@ const GCPConfigManager: React.FC = () => {
     setError(null);
     try {
       await docRouterAccountApi.deleteGCPConfig();
+      setDeleteOpen(false);
       await refresh();
     } catch (e: unknown) {
       setError(getApiErrorMsg(e) || 'Failed to delete GCP configuration.');
     }
   };
 
+  const openEdit = () => {
+    setEditOpen(true);
+    setJsonText('');
+    setFileName('');
+    setError(null);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-gray-900">GCP (Vertex AI)</h2>
-          <button
-            type="button"
-            onClick={() => {
-              setEditOpen(true);
-              setJsonText('');
-              setFileName('');
-              setError(null);
-            }}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+          <CardTitle className="text-lg">GCP (Vertex AI)</CardTitle>
+          <Button type="button" onClick={openEdit}>
             {configured ? 'Edit JSON key' : 'Add JSON key'}
-          </button>
-        </div>
-        <p className="text-sm text-gray-600 mb-3">
-          Service account JSON used for Vertex AI models. The service account must be granted the{' '}
-          <b>Vertex AI User</b> role (<code>roles/aiplatform.user</code>) on the project, and the Vertex AI API
-          must be enabled.
-        </p>
-        <p className="text-sm">
-          <b>Status:</b>{' '}
-          {configured === null ? (
-            <span className="text-gray-500">Loading…</span>
-          ) : configured ? (
-            <span className="text-green-600">Configured</span>
-          ) : (
-            <span className="text-yellow-600">Not configured</span>
-          )}
-        </p>
-        {configured && gcpConfig && (
-          <div className="mt-4 text-sm space-y-1 font-mono text-gray-800">
-            <div className="break-all">
-              <span className="text-gray-500">Project ID:</span> {gcpConfig.project_id || '—'}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Service account JSON used for Vertex AI models. The service account must be granted the{' '}
+            <b>Vertex AI User</b> role (<code>roles/aiplatform.user</code>) on the project, and the Vertex AI API
+            must be enabled.
+          </p>
+          <p className="text-sm">
+            <b>Status:</b>{' '}
+            {configured === null ? (
+              <span className="text-muted-foreground">Loading…</span>
+            ) : configured ? (
+              <span className="text-green-600">Configured</span>
+            ) : (
+              <span className="text-amber-600">Not configured</span>
+            )}
+          </p>
+          {configured && gcpConfig ? (
+            <div className="mt-4 space-y-1 font-mono text-sm text-foreground">
+              <div className="break-all">
+                <span className="text-muted-foreground">Project ID:</span> {gcpConfig.project_id || '—'}
+              </div>
+              <div className="break-all">
+                <span className="text-muted-foreground">Service account:</span> {gcpConfig.client_email || '—'}
+              </div>
+              <div className="break-all">
+                <span className="text-muted-foreground">Client ID:</span> {gcpConfig.client_id || '—'}
+              </div>
+              <div className="break-all">
+                <span className="text-muted-foreground">Private key ID:</span> {gcpConfig.private_key_id || '—'}
+              </div>
             </div>
-            <div className="break-all">
-              <span className="text-gray-500">Service account:</span> {gcpConfig.client_email || '—'}
-            </div>
-            <div className="break-all">
-              <span className="text-gray-500">Client ID:</span> {gcpConfig.client_id || '—'}
-            </div>
-            <div className="break-all">
-              <span className="text-gray-500">Private key ID:</span> {gcpConfig.private_key_id || '—'}
-            </div>
-          </div>
-        )}
-        {configured && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="mt-3 px-3 py-1.5 text-sm text-red-700 border border-red-300 rounded hover:bg-red-50"
-          >
-            Remove GCP key
-          </button>
-        )}
-      </div>
+          ) : null}
+          {configured ? (
+            <Button type="button" variant="outline" className="mt-2 text-destructive" onClick={() => setDeleteOpen(true)}>
+              Remove GCP key
+            </Button>
+          ) : null}
+          {error && !editOpen ? (
+            <Alert variant="destructive" className="mt-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      <div className="bg-primary-50 rounded-lg shadow p-4">
-        <span className="list-decimal list-inside space-y-2 text-primary-900">
-          Change GCP Configuration for on-prem installs only.
-        </span>
-      </div>
+      <Card className="border-primary/30 bg-primary-soft">
+        <CardContent className="pt-6 text-sm text-foreground">
+          Change GCP configuration for on-prem installs only.
+        </CardContent>
+      </Card>
 
-      {editOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">GCP service account JSON</h2>
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Close"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <label className="cursor-pointer inline-block mb-2 text-sm text-primary-600 hover:underline">
+      {editOpen ? (
+        <FormDialog
+          title="GCP service account JSON"
+          submitLabel="Save"
+          submitDisabled={!jsonText.trim()}
+          error={error}
+          size="wide"
+          onSubmit={() => void handleSave()}
+          onClose={() => {
+            setEditOpen(false);
+            setError(null);
+          }}
+        >
+          <Field>
+            <FieldLabel>Service account JSON</FieldLabel>
+            <label className="mb-2 inline-block cursor-pointer text-sm text-primary hover:underline">
               Choose JSON file
               <input
                 type="file"
@@ -180,9 +189,9 @@ const GCPConfigManager: React.FC = () => {
                 }}
               />
             </label>
-            {fileName && <span className="text-sm text-gray-600 ml-2">{fileName}</span>}
-            <textarea
-              className="w-full h-48 mt-2 p-2 text-xs font-mono border border-gray-300 rounded"
+            {fileName ? <span className="ml-2 text-sm text-muted-foreground">{fileName}</span> : null}
+            <Textarea
+              className="mt-2 min-h-48 font-mono text-xs"
               placeholder="Paste service account JSON…"
               value={jsonText}
               onChange={(e) => {
@@ -190,27 +199,18 @@ const GCPConfigManager: React.FC = () => {
                 setError(null);
               }}
             />
-            {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!jsonText.trim()}
-                className="px-4 py-2 text-sm text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </Field>
+        </FormDialog>
+      ) : null}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Remove GCP key"
+        message="Remove the stored GCP service account JSON? Vertex AI features that depend on it may stop working."
+        confirmLabel="Remove"
+        onConfirm={() => void handleDelete()}
+        onClose={() => setDeleteOpen(false)}
+      />
     </div>
   );
 };

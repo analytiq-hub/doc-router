@@ -3,15 +3,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSearchParams } from '@/utils/appRouter';
-import SettingsIcon from '@mui/icons-material/Settings';
+import { BarChart3, CircleDollarSign, CreditCard, Settings } from 'lucide-react';
 import { DocRouterAccountApi } from '@/utils/api';
 import SubscriptionPlans from './SubscriptionPlans';
 import SubscriptionUsage from './SubscriptionUsage';
 import SubscriptionCredits from './SubscriptionCredits';
 import SubscriptionPurchase from './SubscriptionPurchase';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 
 interface SubscriptionProps {
@@ -145,8 +143,6 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
 
 
   const orgSettingsHref = `/settings/organizations/${organizationId}`;
-  const orgSettingsButtonClass =
-    'inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500';
 
   const billingPageHeader = (
     <div className="flex justify-between items-center mb-4">
@@ -165,10 +161,10 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
             {currentPlan === 'enterprise' ? 'Previous Plan Billing' : 'Manage Billing'}
           </a>
         )}
-        <Link to={orgSettingsHref} className={orgSettingsButtonClass}>
-          <SettingsIcon className="w-4 h-4 mr-2" fontSize="small" />
+        <Button render={<Link to={orgSettingsHref} />}>
+          <Settings className="size-4" />
           Org settings
-        </Link>
+        </Button>
       </div>
     </div>
   );
@@ -199,7 +195,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <AttachMoneyIcon className="mr-2 mb-1" fontSize="small" />
+            <CircleDollarSign className="mb-0.5 mr-2 inline size-4" />
             Credits
           </button>
           <button
@@ -210,7 +206,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <CreditCardIcon className="mr-2 mb-1" fontSize="small" />
+            <CreditCard className="mb-0.5 mr-2 inline size-4" />
             Plans
           </button>
           <button
@@ -221,7 +217,7 @@ const SubscriptionManager: React.FC<SubscriptionProps> = ({ organizationId }) =>
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <BarChartIcon className="mr-2 mb-1" fontSize="small" />
+            <BarChart3 className="mb-0.5 mr-2 inline size-4" />
             Usage
           </button>
         </nav>

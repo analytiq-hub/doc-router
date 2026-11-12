@@ -1,81 +1,62 @@
 'use client'
 
-import React from 'react';
-import SettingsLayout, { settingsSectionTitleClass, settingsDescriptionClass } from '@/components/SettingsLayout';
-import { Link } from 'react-router-dom';
-import { Button } from '@mui/material';
-import { fastApiBrowserBase } from '@/utils/api';
+import React from 'react'
+import { Link } from 'react-router-dom'
+
+import SettingsLayout, { settingsDescriptionClass, settingsSectionTitleClass } from '@/components/SettingsLayout'
+import { Button } from '@/components/ui/button'
+import { fastApiBrowserBase } from '@/utils/api'
 
 const DeveloperPage: React.FC = () => {
-  const apiUrl = `${fastApiBrowserBase()}/docs`;
-  
+  const apiUrl = `${fastApiBrowserBase()}/docs`
+
+  const sections = [
+    {
+      title: 'Account tokens',
+      description: 'Use access tokens to authenticate with our account API.',
+      href: '/settings/user/developer/account-access-tokens',
+    },
+    {
+      title: 'Organization tokens',
+      description: 'Use organization tokens to authenticate with our organization API.',
+      href: '/settings/user/developer/organization-access-tokens',
+    },
+    {
+      title: 'Webhook',
+      description: 'Configure a per-organization webhook and view delivery history.',
+      href: '/settings/user/developer/organization-webhooks',
+    },
+  ]
+
   return (
     <SettingsLayout selectedMenu="user_developer">
       <div className="space-y-6">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className={settingsSectionTitleClass}>Account Tokens</h2>
-            <p className={`${settingsDescriptionClass} mb-2`}>
-              Use Acccess Tokens to authenticate with our account API.
-            </p>
-          </div>
-          <Link to="/settings/user/developer/account-access-tokens">
-            <Button variant="contained" color="primary">
+        {sections.map((section) => (
+          <div key={section.href} className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className={settingsSectionTitleClass}>{section.title}</h2>
+              <p className={`${settingsDescriptionClass} mb-0`}>{section.description}</p>
+            </div>
+            <Button type="button" render={<Link to={section.href} />}>
               Manage
             </Button>
-          </Link>
-        </div>
-
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className={settingsSectionTitleClass}>Organization Tokens</h2>
-            <p className={`${settingsDescriptionClass} mb-2`}>
-              Use Organization Tokens to authenticate with our organization API.
-            </p>
           </div>
-          <Link to="/settings/user/developer/organization-access-tokens">
-            <Button variant="contained" color="primary">
-              Manage
-            </Button>
-          </Link>
-        </div>
+        ))}
 
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className={settingsSectionTitleClass}>Webhook</h2>
-            <p className={`${settingsDescriptionClass} mb-2`}>
-              Configure a per-organization webhook and view delivery history.
-            </p>
-          </div>
-          <Link to="/settings/user/developer/organization-webhooks">
-            <Button variant="contained" color="primary">
-              Manage
-            </Button>
-          </Link>
-        </div>
-
-        <div className="bg-primary-50 rounded-lg shadow p-4">
-          <div className="space-y-2 text-primary-900">
-            <p>
-              The complete API documentation is available at:
-            </p>
-            <p>
-              <a 
-                href={apiUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary-700"
-              >
-                <code className="bg-primary-100 px-1.5 py-0.5 rounded font-mono text-sm">
-                  {apiUrl}
-                </code>
-              </a>
-            </p>
-          </div>
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 shadow-sm">
+          <p className="text-sm text-foreground">The complete API documentation is available at:</p>
+          <a
+            href={apiUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-primary hover:underline"
+          >
+            <code className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-sm">{apiUrl}</code>
+          </a>
         </div>
       </div>
     </SettingsLayout>
-  );
-};
+  )
+}
 
-export default DeveloperPage;
+export default DeveloperPage

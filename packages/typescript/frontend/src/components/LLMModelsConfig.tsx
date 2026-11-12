@@ -1,11 +1,12 @@
+'use client';
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import Switch from '@mui/material/Switch';
-import Button from '@mui/material/Button';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { DocRouterAccountApi } from '@/utils/api';
 import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
-import { designTokens } from '@/lib/designTokens';
 import LLMTestModal from './LLMTestModal';
 import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
 import { useLlmMaxConcurrentSettings } from './useLlmMaxConcurrentSettings';
@@ -49,7 +50,20 @@ const LLMModelsConfig: React.FC = () => {
     fetchData();
   }, [docRouterAccountApi, loadMaxConcurrentSettings]);
 
-  const maxConcurrentColumn = createMaxConcurrentColumn({
+  type ModelRow = {
+    id: string
+    provider: string
+    name: string
+    enabled: boolean
+    max_input_tokens: number
+    max_output_tokens?: number
+    dimensions?: number
+    input_cost_per_token: number
+    output_cost_per_token?: number
+    input_cost_per_token_batches?: number
+  }
+
+  const maxConcurrentColumn = createMaxConcurrentColumn<ModelRow>({
     getModelName: (row) => String(row.name),
     isEnabled: (row) => Boolean(row.enabled),
   });
@@ -102,7 +116,7 @@ const LLMModelsConfig: React.FC = () => {
   };
 
   // Chat models columns (with test button)
-  const chatModelColumns: GridColDef[] = [
+  const chatModelColumns: DataTableColumn<ModelRow>[] = [
     { field: 'provider', headerName: 'Provider', flex: 1, minWidth: 120 },
     { field: 'name', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
@@ -110,12 +124,11 @@ const LLMModelsConfig: React.FC = () => {
       headerName: 'Enabled',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Switch
-          checked={params.row.enabled}
-          onChange={(e) => handleToggleModel(params.row.provider, params.row.name, e.target.checked)}
-          size="small"
-          color="primary"
+          checked={row.enabled}
+          onCheckedChange={(checked) => void handleToggleModel(row.provider, row.name, checked === true)}
         />
       ),
     },
@@ -124,12 +137,14 @@ const LLMModelsConfig: React.FC = () => {
       headerName: 'Test',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Button
-          variant="outlined"
-          size="small"
-          onClick={() => handleTestModel(params.row.name)}
-          disabled={!params.row.enabled}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleTestModel(row.name)}
+          disabled={!row.enabled}
         >
           Test
         </Button>
@@ -143,7 +158,7 @@ const LLMModelsConfig: React.FC = () => {
   ];
 
   // Embedding models columns (with test button)
-  const embeddingModelColumns: GridColDef[] = [
+  const embeddingModelColumns: DataTableColumn<ModelRow>[] = [
     { field: 'provider', headerName: 'Provider', flex: 1, minWidth: 120 },
     { field: 'name', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
@@ -151,12 +166,11 @@ const LLMModelsConfig: React.FC = () => {
       headerName: 'Enabled',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Switch
-          checked={params.row.enabled}
-          onChange={(e) => handleToggleModel(params.row.provider, params.row.name, e.target.checked)}
-          size="small"
-          color="primary"
+          checked={row.enabled}
+          onCheckedChange={(checked) => void handleToggleModel(row.provider, row.name, checked === true)}
         />
       ),
     },
@@ -165,12 +179,14 @@ const LLMModelsConfig: React.FC = () => {
       headerName: 'Test',
       width: 100,
       minWidth: 100,
-      renderCell: (params: GridRenderCellParams) => (
+      sortable: false,
+      renderCell: ({ row }) => (
         <Button
-          variant="outlined"
-          size="small"
-          onClick={() => handleTestEmbeddingModel(params.row.name)}
-          disabled={!params.row.enabled}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleTestEmbeddingModel(row.name)}
+          disabled={!row.enabled}
         >
           Test
         </Button>
@@ -263,30 +279,7 @@ const LLMModelsConfig: React.FC = () => {
       <div className="mb-8">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Chat Models</h3>
         <div className="w-full overflow-x-auto">
-          <DataGrid
-            rows={chatModelRows}
-            columns={chatModelColumns}
-            disableRowSelectionOnClick
-            sx={{
-              minWidth: 800,
-              height: 400,
-              '& .MuiDataGrid-cell': {
-                padding: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                height: '100%',
-              },
-              '& .MuiDataGrid-row': {
-                height: '48px !important',
-              },
-              '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: designTokens.secondary,
-              },
-              '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${designTokens.border} !important`,
-              },
-            }}
-          />
+          <DataTable rows={chatModelRows} columns={chatModelColumns} getRowId={(row) => row.id} />
         </div>
       </div>
 
@@ -294,30 +287,7 @@ const LLMModelsConfig: React.FC = () => {
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Embedding Models</h3>
         <div className="w-full overflow-x-auto">
-          <DataGrid
-            rows={embeddingModelRows}
-            columns={embeddingModelColumns}
-            disableRowSelectionOnClick
-            sx={{
-              minWidth: 800,
-              height: 400,
-              '& .MuiDataGrid-cell': {
-                padding: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                height: '100%',
-              },
-              '& .MuiDataGrid-row': {
-                height: '48px !important',
-              },
-              '& .MuiDataGrid-row:nth-of-type(odd)': {
-                backgroundColor: designTokens.secondary,
-              },
-              '& .MuiDataGrid-row:hover': {
-                backgroundColor: `${designTokens.border} !important`,
-              },
-            }}
-          />
+          <DataTable rows={embeddingModelRows} columns={embeddingModelColumns} getRowId={(row) => row.id} />
         </div>
       </div>
 

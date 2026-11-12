@@ -1,18 +1,22 @@
 'use client'
 
-import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useEffect, useMemo } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import { DocRouterAccountApi } from '@/utils/api';
-import { User } from '@docrouter/sdk';
-import { toast } from 'react-toastify';
+import React, { useEffect, useMemo, useState } from 'react'
+import type { User } from '@docrouter/sdk'
+import { toast } from 'react-toastify'
+
+import { FormDialog } from '@/components/FormDialog'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { DocRouterAccountApi } from '@/utils/api'
+import { toastActionError } from '@/utils/toastActionError'
 
 interface UserAddToOrgModalProps {
-  open: boolean;
-  onClose: () => void;
-  onAdd: (userId: string, user?: User) => Promise<void>;
-  organizationId: string;
-  currentMembers: string[];
+  open: boolean
+  onClose: () => void
+  onAdd: (userId: string, user?: User) => Promise<void>
+  organizationId: string
+  currentMembers: string[]
 }
 
 const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
@@ -20,124 +24,122 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
   onClose,
   onAdd,
   organizationId,
-  currentMembers
+  currentMembers,
 }) => {
-  const [email, setEmail] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
+  const [email, setEmail] = useState('')
+  const [searchResults, setSearchResults] = useState<User[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
+
+  useEffect(() => {
+    if (!open) {
+      setEmail('')
+      setSearchResults([])
+      setError(null)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!email) {
-      setSearchResults([]);
-      return;
+      setSearchResults([])
+      return
     }
-
     const timeoutId = setTimeout(() => {
-      docRouterAccountApi.listUsers({ limit: 100 })
-        .then(response => {
-          const filteredUsers = response.users.filter(user =>
-            !currentMembers.includes(user.id) && (
-              user.email.toLowerCase().includes(email.toLowerCase()) ||
-              (user.name && user.name.toLowerCase().includes(email.toLowerCase()))
-            )
-          );
-          setSearchResults(filteredUsers);
+      void docRouterAccountApi
+        .listUsers({ limit: 100 })
+        .then((response) => {
+          const filteredUsers = response.users.filter(
+            (user) =>
+              !currentMembers.includes(user.id) &&
+              (user.email.toLowerCase().includes(email.toLowerCase()) ||
+                (user.name && user.name.toLowerCase().includes(email.toLowerCase()))),
+          )
+          setSearchResults(filteredUsers)
         })
-        .catch(error => {
-          console.error('Failed to search users:', error);
-        });
-    }, 500);
+        .catch((err) => console.error('Failed to search users:', err))
+    }, 500)
+    return () => clearTimeout(timeoutId)
+  }, [email, currentMembers, docRouterAccountApi])
 
-    return () => clearTimeout(timeoutId);
-  }, [email, currentMembers, docRouterAccountApi]);
+  if (!open) return null
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-
-    setIsSubmitting(true);
+  const handleSelectUser = async (user: User) => {
     try {
-      const existingUser = searchResults.find(
-        user => user.email.toLowerCase() === email.toLowerCase()
-      );
+      await onAdd(user.id, user)
+      onClose()
+    } catch (err) {
+      toastActionError('Failed to add user', err)
+    }
+  }
 
+  const submit = async () => {
+    if (!email) return
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      const existingUser = searchResults.find((user) => user.email.toLowerCase() === email.toLowerCase())
       if (existingUser) {
-        await onAdd(existingUser.id, existingUser);
+        await onAdd(existingUser.id, existingUser)
       } else {
         await docRouterAccountApi.createInvitation({
           email,
           organization_id: organizationId,
-        });
-        toast.success('Invitation sent successfully');
+        })
+        toast.success('Invitation sent successfully')
       }
-      onClose();
-      setEmail('');
-    } catch (error) {
-      console.error('Failed to add user: ' + error);
-      toastActionError('Failed to add user', error);
+      onClose()
+      setEmail('')
+    } catch (err) {
+      console.error('Failed to add user:', err)
+      setError(err)
+      toastActionError('Failed to add user', err)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
-
-  const handleSelectUser = async (user: User) => {
-    try {
-      await onAdd(user.id, user);
-      onClose();
-    } catch (error) {
-      toastActionError('Failed to add user', error);
-    }
-  };
+  }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add User</DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent>
-          <div className="mt-4">
-            <input
-              type="email"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Enter email address..."
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoFocus
-            />
-
-            {searchResults.length > 0 && (
-              <div className="mt-4 max-h-96 overflow-y-auto border rounded-md divide-y">
-                {searchResults.map((user) => (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => handleSelectUser(user)}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="font-medium">{user.name || 'Unnamed User'}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
-                    </div>
-                    <span className="text-primary-600">Add</span>
-                  </button>
-                ))}
-              </div>
-            )}
+    <FormDialog
+      title="Add user"
+      submitLabel={isSubmitting ? 'Adding…' : 'Add user'}
+      submitDisabled={!email || isSubmitting}
+      busy={isSubmitting}
+      error={error}
+      onSubmit={() => void submit()}
+      onClose={onClose}
+    >
+      <Field>
+        <FieldLabel htmlFor="add-org-user-email">Email</FieldLabel>
+        <Input
+          id="add-org-user-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email address"
+          autoFocus
+        />
+        {searchResults.length > 0 ? (
+          <div className="mt-2 max-h-96 overflow-y-auto divide-y rounded-md border">
+            {searchResults.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => void handleSelectUser(user)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/60"
+              >
+                <div>
+                  <div className="font-medium">{user.name || 'Unnamed user'}</div>
+                  <div className="text-sm text-muted-foreground">{user.email}</div>
+                </div>
+                <span className="text-primary text-sm">Add</span>
+              </button>
+            ))}
           </div>
-        </DialogContent>
-        <DialogActions className="p-4">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isSubmitting || !email}
-          >
-            {isSubmitting ? 'Adding...' : 'Add User'}
-          </Button>
-        </DialogActions>
-      </form>
-    </Dialog>
-  );
-};
+        ) : null}
+      </Field>
+    </FormDialog>
+  )
+}
 
-export default UserAddToOrgModal; 
+export default UserAddToOrgModal

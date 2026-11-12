@@ -5,7 +5,7 @@ import { useParams } from '@/utils/appRouter';
 import SettingsLayout from '@/components/SettingsLayout';
 import LLMProviderConfig from '@/components/LLMProviderConfig';
 import { Link } from 'react-router-dom';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { ArrowLeft } from 'lucide-react';
 
 const ProviderConfigPage: React.FC = () => {
   const params = useParams();
@@ -19,7 +19,7 @@ const ProviderConfigPage: React.FC = () => {
             to="/settings/account/development/llm-manager"
             className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
           >
-            <ArrowBackIcon className="w-5 h-5" />
+            <ArrowLeft className="size-5" />
             Back to Providers
           </Link>
         </div>

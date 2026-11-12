@@ -1,38 +1,42 @@
 'use client'
 
-import React, { useState } from 'react';
-import { useAppSession } from '@/contexts/AppSessionContext';
-import { isSysAdmin } from '@/utils/roles';
-import { Feedback as FeedbackIcon, AdminPanelSettings as AdminIcon } from '@mui/icons-material';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { MessageSquare, Shield } from 'lucide-react'
+import { useAppSession } from '@/contexts/AppSessionContext'
+import { isSysAdmin } from '@/utils/roles'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Textarea } from '@/components/ui/textarea'
 
 interface FeedbackFormProps {
-  onClose?: () => void;
-  isModal?: boolean;
+  onClose?: () => void
+  isModal?: boolean
 }
 
 const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false }) => {
-  const { session } = useAppSession();
-  const [feedback, setFeedback] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState('');
-  
-  // Check if the user is an admin
-  const isAdmin = isSysAdmin(session);
+  const { session } = useAppSession()
+  const [feedback, setFeedback] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const isAdmin = isSysAdmin(session)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+    e.preventDefault()
+
     if (!feedback.trim()) {
-      setSubmitStatus('error');
-      setErrorMessage('Please provide feedback before submitting.');
-      return;
+      setSubmitStatus('error')
+      setErrorMessage('Please provide feedback before submitting.')
+      return
     }
-    
-    setIsSubmitting(true);
-    setSubmitStatus('idle');
-    
+
+    setIsSubmitting(true)
+    setSubmitStatus('idle')
+
     try {
       const response = await fetch('/fastapi/v0/feedback', {
         method: 'POST',
@@ -46,98 +50,90 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onClose, isModal = false })
           userName: session?.user?.name,
           createdAt: new Date().toISOString(),
         }),
-      });
-      
+      })
+
       if (!response.ok) {
-        throw new Error('Failed to submit feedback');
+        throw new Error('Failed to submit feedback')
       }
-      
-      setSubmitStatus('success');
-      setFeedback('');
-      
-      // If this is a modal, close it after successful submission
+
+      setSubmitStatus('success')
+      setFeedback('')
+
       if (isModal && onClose) {
         setTimeout(() => {
-          onClose();
-        }, 2000);
+          onClose()
+        }, 2000)
       }
-    } catch (error) {
-      console.error('Error submitting feedback:', error);
-      setSubmitStatus('error');
-      setErrorMessage('Failed to submit feedback. Please try again later.');
+    } catch (submitError) {
+      console.error('Error submitting feedback:', submitError)
+      setSubmitStatus('error')
+      setErrorMessage('Failed to submit feedback. Please try again later.')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
-    <div className={`bg-white rounded-lg shadow-md ${isModal ? 'p-6' : 'p-8 max-w-2xl mx-auto my-8'}`}>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center">
-          <FeedbackIcon className="text-primary-500 mr-2" />
-          <h2 className="text-2xl font-semibold text-gray-800">Product Feedback</h2>
-        </div>
-        
-        {/* Admin link - only visible to admins */}
-        {isAdmin && (
-          <Link 
-            to="/admin/feedback" 
-            className="flex items-center text-primary-600 hover:text-primary-800 transition-colors"
-          >
-            <AdminIcon className="mr-1" />
-            <span>View All Feedback</span>
-          </Link>
-        )}
-      </div>
-      
-      <p className="text-gray-600 mb-6">
-        We value your feedback! Use this form to report bugs, share suggestions, or send kudos.
-      </p>
-      
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label htmlFor="feedback" className="block text-sm font-medium text-gray-700 mb-1">
-            Your Feedback <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            id="feedback"
-            rows={5}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            placeholder="Describe your issue, suggestion, or appreciation here..."
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            required
-          />
-        </div>
-        
-        {session?.user?.email && (
-          <p className="text-sm text-gray-500 mb-4">
-            Feedback will be submitted using your account email: {session.user.email}
-          </p>
-        )}
-        
-        {submitStatus === 'success' && (
-          <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md">
-            Thank you for your feedback! We appreciate your input.
-          </div>
-        )}
-        
-        {submitStatus === 'error' && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
-            {errorMessage}
-          </div>
-        )}
-        
-        <button
-          type="submit"
-          className="w-full py-2 px-4 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
-        </button>
-      </form>
-    </div>
-  );
-};
+    <Card className={isModal ? undefined : 'mx-auto my-8 max-w-2xl'}>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <MessageSquare className="size-5 text-primary" />
+          Product feedback
+        </CardTitle>
 
-export default FeedbackForm;
+        {isAdmin ? (
+          <Button variant="link" size="sm" className="h-auto px-0" render={<Link to="/admin/feedback" />}>
+            <Shield className="size-4" />
+            View all feedback
+          </Button>
+        ) : null}
+      </CardHeader>
+
+      <CardContent>
+        <p className="mb-6 text-sm text-muted-foreground">
+          We value your feedback. Use this form to report bugs, share suggestions, or send kudos.
+        </p>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+          <Field>
+            <FieldLabel htmlFor="feedback">
+              Your feedback <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Textarea
+              id="feedback"
+              rows={5}
+              placeholder="Describe your issue, suggestion, or appreciation here…"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              required
+            />
+          </Field>
+
+          {session?.user?.email ? (
+            <p className="text-sm text-muted-foreground">
+              Feedback will be submitted using your account email: {session.user.email}
+            </p>
+          ) : null}
+
+          {submitStatus === 'success' ? (
+            <Alert variant="success">
+              <AlertDescription>Thank you for your feedback. We appreciate your input.</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {submitStatus === 'error' ? (
+            <Alert variant="destructive">
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? 'Submitting…' : 'Submit feedback'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default FeedbackForm

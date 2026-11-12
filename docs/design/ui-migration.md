@@ -117,9 +117,26 @@ Roll through: cases, schemas, forms, prompts, knowledge bases.
 
 ---
 
-### Phase 5 — Settings + admin (1–2 weeks)
+### Phase 5 — Settings + admin (1–2 weeks) — **done** (`frontend-shadcn`)
 
 Settings layout, users, orgs, license, development/LLM screens — shadcn form controls (`Field`, `Select`, `Switch`, `Tabs`); density per ui.md (`text-sm`, `h-9`).
+
+**Progress on `frontend-shadcn`:**
+
+- ✅ `SettingsLayout` — Lucide nav + semantic tokens (matches org shell)
+- ✅ `OrganizationManager`, `UserManager` — `DataTable`, `RowActionsMenu`, `FormDialog` / `ConfirmDialog`, `SearchInput`
+- ✅ User modals: `UserAddModal`, `UserInviteModal`, `UserAddToOrgModal`
+- ✅ Tokens: `AccountTokenManager`, `OrganizationTokenManager`, `AccessTokenManager`
+- ✅ Developer hub pages: `account-development`, `user-developer`, LLM route chrome (Lucide)
+- ✅ LLM admin: `LLMManager`, `LLMProviderConfig`, `LLMModelsConfig`, `useLlmMaxConcurrentSettings` + shadcn `Switch`
+- ✅ `OrganizationEdit` — members `DataTable`, permission `DropdownMenu` + checkboxes, shadcn `Alert` / `Checkbox` / `SearchInput`
+- ✅ `OrganizationWebhooks`, `SubscriptionManager` — Lucide icons; billing header `Button` + Link
+- ✅ `UserEdit` (profile + admin user detail) — `Card`, `Switch`, `FormDialog`, `ConfirmDialog`
+- ✅ `account-license` — shadcn `Card`, `Alert`, `Textarea`, `Button`
+- ✅ Cloud/on-prem config: `AWSConfigManager`, `GCPConfigManager`, `AzureConfigManager` — `FormDialog` / `ConfirmDialog`
+- ✅ `SystemSettingsManager` (worker settings) — `Card`, `Field`, `Input`, `Alert`
+- ✅ `FeedbackForm`, `FeedbackAdmin` — Lucide + shadcn (admin linked from settings/sysadmin flows)
+- ✅ `Models` stub — `DataTable` + `SearchInput` (removed unused MUI grid)
 
 ---
 

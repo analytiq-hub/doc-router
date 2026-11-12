@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import TextField from '@mui/material/TextField';
-import { GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import type { DataTableColumn } from '@/components/data-table';
+import { Input } from '@/components/ui/input';
 import { DocRouterAccountApi } from '@/utils/api';
 
 export const MIN_LLM_MAX_CONCURRENT = 0;
 export const MAX_LLM_MAX_CONCURRENT = 1024;
 
-type MaxConcurrentColumnOptions = {
-  getModelName: (row: Record<string, unknown>) => string;
-  isEnabled: (row: Record<string, unknown>) => boolean;
+type MaxConcurrentColumnOptions<Row> = {
+  getModelName: (row: Row) => string;
+  isEnabled: (row: Row) => boolean;
 };
 
 type MaxConcurrentCellProps = {
@@ -37,13 +37,15 @@ function MaxConcurrentCell({
   };
 
   return (
-    <TextField
+    <Input
       type="number"
-      size="small"
+      className="h-8 w-[5.5rem] tabular-nums"
       placeholder="0"
       value={draft}
       disabled={!enabled || saving}
-      inputProps={{ min: MIN_LLM_MAX_CONCURRENT, max: MAX_LLM_MAX_CONCURRENT, step: 1 }}
+      min={MIN_LLM_MAX_CONCURRENT}
+      max={MAX_LLM_MAX_CONCURRENT}
+      step={1}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -53,7 +55,6 @@ function MaxConcurrentCell({
           (e.target as HTMLInputElement).blur();
         }
       }}
-      sx={{ width: 88 }}
     />
   );
 }
@@ -107,18 +108,19 @@ export function useLlmMaxConcurrentSettings(docRouterAccountApi: DocRouterAccoun
   );
 
   const createMaxConcurrentColumn = useCallback(
-    ({ getModelName, isEnabled }: MaxConcurrentColumnOptions): GridColDef => ({
+    <Row,>({ getModelName, isEnabled }: MaxConcurrentColumnOptions<Row>): DataTableColumn<Row> => ({
       field: 'max_concurrent',
       headerName: 'Max concurrent',
       width: 130,
       minWidth: 130,
-      renderCell: (params: GridRenderCellParams) => {
-        const modelName = getModelName(params.row);
+      sortable: false,
+      renderCell: ({ row }) => {
+        const modelName = getModelName(row);
         return (
           <MaxConcurrentCell
             modelName={modelName}
             savedValue={llmMaxConcurrentByModel[modelName]}
-            enabled={isEnabled(params.row)}
+            enabled={isEnabled(row)}
             saving={savingModel === modelName}
             onPersist={persistMaxConcurrent}
           />

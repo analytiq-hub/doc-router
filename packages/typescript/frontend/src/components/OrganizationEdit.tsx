@@ -9,17 +9,23 @@ import type { FlowLogLevel } from '@/types/organizations'
 import { OrganizationMember, OrganizationType } from '@/types/index'
 import { DocRouterAccountApi } from '@/utils/api';
 import { User } from '@docrouter/sdk'
-import { 
-  DataGrid, 
-  GridColDef, 
-  GridRenderCellParams 
-} from '@mui/x-data-grid'
-import { IconButton, Alert, Checkbox, ListItemText, Menu, MenuItem } from '@mui/material'
-import DeleteIcon from '@mui/icons-material/Delete'
+import { Info, MoreVertical, Trash2, TriangleAlert } from 'lucide-react'
+import { DataTable, type DataTableColumn, type PaginationModel } from '@/components/data-table'
+import { SearchInput } from '@/components/SearchInput'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
 import { toast } from 'react-toastify'
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useOrganizationData } from '@/hooks/useOrganizationData'
 import { isSysAdmin, isOrgAdmin } from '@/utils/roles'
 import {
@@ -76,8 +82,13 @@ function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
 const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig =>
   normalizeOcrConfig(JSON.parse(JSON.stringify(c)) as OrgOcrConfig)
 
-const settingsCheckboxClass =
-  'h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500'
+type OrgMemberRow = {
+  id: string
+  name: string
+  email: string
+  permissionGroupIds: string[]
+  primaryPermissionGroupId: string
+}
 
 const getAvailableOrganizationTypes = (currentType: OrganizationType, isSystemAdmin: boolean): OrganizationType[] => {
   switch (currentType) {
@@ -124,11 +135,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [originalOcrConfig, setOriginalOcrConfig] = useState<OrgOcrConfig | null>(null)
   const { session } = useAppSession();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedMember, setSelectedMember] = useState<{
-    id: string;
-    permissionGroupIds: string[];
-  } | null>(null);
+  const [memberPagination, setMemberPagination] = useState<PaginationModel>({ page: 0, pageSize: 5 });
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
 
   const [ocrLlmChatModels, setOcrLlmChatModels] = useState<LLMChatModel[]>([])
@@ -343,10 +350,6 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         return prevMembers;
       }
 
-      setSelectedMember((prev) =>
-        prev && prev.id === userId ? { ...prev, permissionGroupIds: nextIds } : prev
-      );
-
       return updatedMembers;
     });
   };
@@ -402,103 +405,111 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     setMembers(prev => prev.filter(member => member.user_id !== userId));
   };
 
-  // Update getGridRows to use filtered members
-  const getGridRows = () => {
-    return filteredMembers.map(member => {
-      const user = allUsers.find(u => u.id === member.user_id)
-      const permissionGroupIds = sortPermissionGroupIds(member.permission_group_ids);
+  const memberRows = useMemo((): OrgMemberRow[] => {
+    return filteredMembers.map((member) => {
+      const user = allUsers.find((u) => u.id === member.user_id)
+      const permissionGroupIds = sortPermissionGroupIds(member.permission_group_ids)
       return {
         id: member.user_id,
         name: user?.name || 'Unknown User',
         email: user?.email || '',
         permissionGroupIds,
-        primaryPermissionGroupId:
-          primaryPermissionGroupId(permissionGroupIds) ?? BUILTIN_OPERATOR,
-      };
+        primaryPermissionGroupId: primaryPermissionGroupId(permissionGroupIds) ?? BUILTIN_OPERATOR,
+      }
     })
-  }
+  }, [filteredMembers, allUsers])
 
-  const handleMenuOpen = (
-    event: React.MouseEvent<HTMLElement>,
-    memberId: string,
-    permissionGroupIds: string[]
-  ) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedMember({ id: memberId, permissionGroupIds });
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedMember(null);
-  };
-
-  // Define columns for the grid
-  const columns: GridColDef[] = [
-    {
-      field: 'name',
-      headerName: 'User',
-      flex: 1,
-      minWidth: 300,
-      renderCell: (params: GridRenderCellParams) => (
-        <button
-          onClick={() => router.push(`/settings/account/users/${params.row.id}`)}
-          className="text-left hover:text-primary-600 focus:outline-none"
-        >
-          <span className="font-medium">{params.value}</span>
-          <span className="text-gray-500 ml-2">({params.row.email})</span>
-        </button>
-      )
-    },
-    {
-      field: 'permissionGroupIds',
-      headerName: 'Groups',
-      flex: 0.6,
-      minWidth: 200,
-      sortable: false,
-      renderCell: (params: GridRenderCellParams) => {
-        const ids = (params.value as string[]) ?? [];
-        const primaryId = params.row.primaryPermissionGroupId as string;
-        const stacked = ids.length > 1;
-        return (
-          <div
-            className={`flex h-full w-full gap-1 ${
-              stacked
-                ? 'flex-wrap content-center items-center py-0.5'
-                : 'items-center'
-            }`}
+  const memberColumns: DataTableColumn<OrgMemberRow>[] = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: 'User',
+        flex: 1,
+        minWidth: 300,
+        renderCell: ({ row }) => (
+          <button
+            type="button"
+            onClick={() => router.push(`/settings/account/users/${row.id}`)}
+            className="text-left hover:text-primary-600 focus:outline-none"
           >
-            {ids.map((id) => (
-              <span
-                key={id}
-                className={`inline-flex shrink-0 items-center px-2 py-1 text-sm leading-none rounded shadow-sm ${
-                  id === primaryId
-                    ? 'bg-primary-100 font-medium text-primary-800'
-                    : 'bg-gray-100 text-gray-700'
-                }`}
-              >
-                {permissionGroupLabel(id)}
-              </span>
-            ))}
-          </div>
-        );
+            <span className="font-medium">{row.name}</span>
+            <span className="ml-2 text-gray-500">({row.email})</span>
+          </button>
+        ),
       },
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 80,
-      renderCell: (params: GridRenderCellParams) => (
-        <div>
-          <IconButton
-            onClick={(e) => handleMenuOpen(e, params.row.id, params.row.permissionGroupIds)}
-            className="text-gray-600 hover:bg-gray-50"
-          >
-            <MoreVertIcon />
-          </IconButton>
-        </div>
-      )
-    }
-  ]
+      {
+        field: 'permissionGroupIds',
+        headerName: 'Groups',
+        flex: 0.6,
+        minWidth: 200,
+        sortable: false,
+        renderCell: ({ row }) => {
+          const ids = row.permissionGroupIds
+          const primaryId = row.primaryPermissionGroupId
+          const stacked = ids.length > 1
+          return (
+            <div
+              className={`flex h-full w-full gap-1 ${
+                stacked ? 'flex-wrap content-center items-center py-0.5' : 'items-center'
+              }`}
+            >
+              {ids.map((id) => (
+                <span
+                  key={id}
+                  className={`inline-flex shrink-0 items-center rounded px-2 py-1 text-sm leading-none shadow-sm ${
+                    id === primaryId
+                      ? 'bg-primary-100 font-medium text-primary-800'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {permissionGroupLabel(id)}
+                </span>
+              ))}
+            </div>
+          )
+        },
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        width: 52,
+        sortable: false,
+        hideable: false,
+        resizable: false,
+        renderCell: ({ row }) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="icon-sm" className="-ml-2" aria-label={`Actions for ${row.email}`} />
+              }
+            >
+              <MoreVertical />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-w-xs">
+              {BUILTIN_PERMISSION_GROUPS.map((group) => (
+                <DropdownMenuCheckboxItem
+                  key={group.id}
+                  checked={row.permissionGroupIds.includes(group.id)}
+                  onCheckedChange={() => handleTogglePermissionGroup(row.id, group.id)}
+                >
+                  {group.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => handleRemoveMember(row.id)}
+              >
+                <Trash2 />
+                Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+      },
+    ],
+    [router],
+  )
 
   const textractFeatureOptions =
     organization?.ocr_catalog?.textract_feature_types?.length
@@ -734,13 +745,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 </select>
               </div>
 
-              <div className="flex items-start space-x-2">
-                <input
+              <div className="flex items-start gap-2">
+                <Checkbox
                   id="default-prompt-enabled"
-                  type="checkbox"
+                  className="mt-0.5"
                   checked={defaultPromptEnabled}
-                  onChange={(e) => setDefaultPromptEnabled(e.target.checked)}
-                  className={`mt-1 ${settingsCheckboxClass}`}
+                  onCheckedChange={(checked) => setDefaultPromptEnabled(checked === true)}
                 />
                 <div>
                   <label htmlFor="default-prompt-enabled" className="block text-sm font-medium text-gray-700">
@@ -752,13 +762,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 </div>
               </div>
 
-              <div className="flex items-start space-x-2">
-                <input
+              <div className="flex items-start gap-2">
+                <Checkbox
                   id="experimental-features-enabled"
-                  type="checkbox"
+                  className="mt-0.5"
                   checked={experimentalFeatures}
-                  onChange={(e) => setExperimentalFeatures(e.target.checked)}
-                  className={`mt-1 ${settingsCheckboxClass}`}
+                  onCheckedChange={(checked) => setExperimentalFeatures(checked === true)}
                 />
                 <div>
                   <label htmlFor="experimental-features-enabled" className="block text-sm font-medium text-gray-700">
@@ -821,48 +830,64 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               </div>
 
               {!mistralEnabled && ocrConfig.mode === 'mistral' && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                  Mistral OCR is unavailable because the Mistral provider is off or no models are enabled
-                  in account LLM settings. Select another engine before you can save.
+                <Alert className="mb-2 border-amber-500/40 bg-amber-50 text-foreground">
+                  <TriangleAlert className="text-amber-600" />
+                  <AlertDescription>
+                    Mistral OCR is unavailable because the Mistral provider is off or no models are enabled
+                    in account LLM settings. Select another engine before you can save.
+                  </AlertDescription>
                 </Alert>
               )}
 
               {!mistralVertexEnabled && ocrConfig.mode === 'mistral_vertex' && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                  Mistral Vertex OCR is unavailable because GCP credentials are not configured in account
-                  settings. Select another engine before you can save.
+                <Alert className="mb-2 border-amber-500/40 bg-amber-50 text-foreground">
+                  <TriangleAlert className="text-amber-600" />
+                  <AlertDescription>
+                    Mistral Vertex OCR is unavailable because GCP credentials are not configured in account
+                    settings. Select another engine before you can save.
+                  </AlertDescription>
                 </Alert>
               )}
 
               {ocrConfig.mode === 'textract' && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Uses AWS Textract AnalyzeDocument. Choose feature types below.
+                <Alert variant="info" className="mb-2">
+                  <Info />
+                  <AlertDescription>Uses AWS Textract AnalyzeDocument. Choose feature types below.</AlertDescription>
                 </Alert>
               )}
               {ocrConfig.mode === 'mistral' && mistralEnabled && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The API key is
-                  read from the Mistral LLM provider in account settings when a document is processed.
+                <Alert variant="info" className="mb-2">
+                  <Info />
+                  <AlertDescription>
+                    Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The API key is
+                    read from the Mistral LLM provider in account settings when a document is processed.
+                  </AlertDescription>
                 </Alert>
               )}
               {ocrConfig.mode === 'mistral_vertex' && mistralVertexEnabled && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Uses Mistral OCR (<code className="text-sm">mistral-ocr-2505</code>) via Google Cloud
-                  Vertex AI (region: <code className="text-sm">us-central1</code>). Credentials are read
-                  from the GCP service account configured in account settings.
+                <Alert variant="info" className="mb-2">
+                  <Info />
+                  <AlertDescription>
+                    Uses Mistral OCR (<code className="text-sm">mistral-ocr-2505</code>) via Google Cloud
+                    Vertex AI (region: <code className="text-sm">us-central1</code>). Credentials are read
+                    from the GCP service account configured in account settings.
+                  </AlertDescription>
                 </Alert>
               )}
               {ocrConfig.mode === 'pymupdf' && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Extracts embedded text from PDFs locally (PyMuPDF). Scanned or image-only PDFs need AWS
-                  Textract, Mistral OCR, or LLM OCR. This mode uses 0 SPU.
+                <Alert variant="info" className="mb-2">
+                  <Info />
+                  <AlertDescription>
+                    Extracts embedded text from PDFs locally (PyMuPDF). Scanned or image-only PDFs need AWS
+                    Textract, Mistral OCR, or LLM OCR. This mode uses 0 SPU.
+                  </AlertDescription>
                 </Alert>
               )}
               {ocrConfig.mode === 'llm' && (
                 <>
                   {ocrLlmCatalogError && (
-                    <Alert severity="error" sx={{ mb: 2 }}>
-                      {ocrLlmCatalogError}
+                    <Alert variant="destructive" className="mb-2">
+                      <AlertDescription>{ocrLlmCatalogError}</AlertDescription>
                     </Alert>
                   )}
                   {ocrLlmCatalogLoading ? (
@@ -952,11 +977,9 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                     <div className="flex flex-wrap gap-3">
                       {textractFeatureOptions.map((ft) => (
                         <label key={ft} className="inline-flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={ocrConfig.textract.feature_types.includes(ft)}
-                            onChange={() => toggleTextractFeature(ft)}
-                            className={settingsCheckboxClass}
+                            onCheckedChange={() => toggleTextractFeature(ft)}
                           />
                           {ft}
                         </label>
@@ -973,112 +996,32 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">Members</h3>
               
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowAddUserModal(true)}
                 disabled={type === 'individual'}
-                className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-                  ${type === 'individual' 
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                    : 'bg-primary-600 text-white hover:bg-primary-700'}`}
               >
-                Add User
-              </button>
+                Add user
+              </Button>
             </div>
 
-            <div className="mb-4">
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                placeholder="Search members..."
-                value={memberSearch}
-                onChange={(e) => setMemberSearch(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              className="mb-4 w-full"
+              placeholder="Search members…"
+              value={memberSearch}
+              onChange={setMemberSearch}
+            />
 
-            {/* Update the DataGrid container height */}
-            <div className="flex-1 bg-white rounded-lg flex flex-col">
-              <DataGrid
-                rows={getGridRows()}
-                columns={columns}
-                initialState={{
-                  pagination: {
-                    paginationModel: { pageSize: 5 }
-                  }
-                }}
+            <div className="flex-1 rounded-lg bg-white">
+              <DataTable
+                rows={memberRows}
+                columns={memberColumns}
+                paginationModel={memberPagination}
+                onPaginationModelChange={setMemberPagination}
                 pageSizeOptions={[5, 10, 20]}
-                disableRowSelectionOnClick
                 disableColumnMenu
-                density="standard"
-                sx={{
-                  flex: 1,
-                  minHeight: 100,
-                  height: '100%',
-                  '& .MuiDataGrid-row': {
-                    height: '60px'
-                  },
-                  '& .MuiDataGrid-row:nth-of-type(odd)': {
-                    backgroundColor: '#f9fafb'
-                  },
-                  '& .MuiDataGrid-cell': {
-                    height: '60px',
-                    alignItems: 'center',
-                    padding: '0 16px',
-                  },
-                  '& .MuiDataGrid-cell[data-field="permissionGroupIds"]': {
-                    display: 'flex',
-                    alignItems: 'center',
-                  },
-                  '& .MuiDataGrid-cell[data-field="permissionGroupIds"] .MuiDataGrid-cellContent': {
-                    display: 'flex',
-                    alignItems: 'center',
-                    height: '100%',
-                    width: '100%',
-                  },
-                }}
+                autoRowHeight
               />
-              {/* Actions Menu for member row */}
-              <Menu
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={handleMenuClose}
-                slotProps={{
-                  paper: {
-                    sx: { maxWidth: 320 },
-                  },
-                }}
-              >
-                {BUILTIN_PERMISSION_GROUPS.map((group) => {
-                  const checked = selectedMember?.permissionGroupIds.includes(group.id) ?? false;
-                  return (
-                    <MenuItem
-                      key={group.id}
-                      dense
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (selectedMember) {
-                          handleTogglePermissionGroup(selectedMember.id, group.id);
-                        }
-                      }}
-                    >
-                      <Checkbox checked={checked} size="small" sx={{ py: 0, mr: 0.5 }} />
-                      <ListItemText primary={group.label} />
-                    </MenuItem>
-                  );
-                })}
-                <MenuItem
-                  onClick={() => {
-                    if (selectedMember) handleRemoveMember(selectedMember.id);
-                    handleMenuClose();
-                  }}
-                  className="flex items-center gap-2"
-                  disabled={!selectedMember}
-                >
-                  <DeleteIcon fontSize="small" className="text-red-600" />
-                  <span>Remove</span>
-                </MenuItem>
-              </Menu>
             </div>
           </div>
         </form>

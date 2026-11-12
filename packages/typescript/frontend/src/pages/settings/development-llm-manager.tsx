@@ -4,7 +4,7 @@ import React from 'react';
 import SettingsLayout from '@/components/SettingsLayout';
 import LLMManager from '@/components/LLMManager';
 import { Link } from 'react-router-dom';
-import ViewListIcon from '@mui/icons-material/ViewList';
+import { List } from 'lucide-react';
 
 const LLMManagerPage: React.FC = () => {
   return (
@@ -16,7 +16,7 @@ const LLMManagerPage: React.FC = () => {
             to="/settings/account/development/llm-manager/models"
             className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
           >
-            <ViewListIcon className="w-5 h-5" />
+            <List className="size-5" />
             View All Models
           </Link>
         </div>

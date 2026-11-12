@@ -4,7 +4,7 @@ import React from 'react';
 import SettingsLayout from '@/components/SettingsLayout';
 import LLMModelsConfig from '@/components/LLMModelsConfig';
 import { Link } from 'react-router-dom';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { ArrowLeft } from 'lucide-react';
 
 const ModelsPage: React.FC = () => {
   return (
@@ -15,7 +15,7 @@ const ModelsPage: React.FC = () => {
             to="/settings/account/development/llm-manager"
             className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
           >
-            <ArrowBackIcon className="w-5 h-5" />
+            <ArrowLeft className="size-5" />
             Back to Providers
           </Link>
         </div>

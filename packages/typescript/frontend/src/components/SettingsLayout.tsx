@@ -1,198 +1,157 @@
 'use client'
 
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { useAppSession } from '@/contexts/AppSessionContext';
-import { isSysAdmin } from '@/utils/roles';
 import {
-  Person as UserIcon,
-  Code as DeveloperIcon,
-  Business as OrganizationsIcon,
-  Group as UsersIcon,
-  Build as DevelopmentIcon,
-  Settings as SystemIcon,
-  VpnKey as LicenseIcon,
-} from '@mui/icons-material';
-import type { SvgIconProps } from '@mui/material';
-import SidebarNavTooltip from '@/components/SidebarNavTooltip';
+  Building2,
+  Code2,
+  KeyRound,
+  Settings,
+  User,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
+import React from 'react'
+import { Link } from 'react-router-dom'
 
-export const settingsPageTitleClass = 'text-lg font-semibold text-gray-900';
-export const settingsSectionTitleClass = 'text-lg font-semibold text-gray-900';
-export const settingsDescriptionClass = 'text-sm text-gray-600';
+import SidebarNavTooltip from '@/components/SidebarNavTooltip'
+import { cn } from '@/lib/utils'
+import { useAppSession } from '@/contexts/AppSessionContext'
+import { isSysAdmin } from '@/utils/roles'
 
-const settingsNavGridClass =
-  'md:grid md:w-full md:grid-cols-[1.25rem_1fr] md:gap-x-2 md:px-4';
+export const settingsPageTitleClass = 'text-lg font-semibold text-foreground'
+export const settingsSectionTitleClass = 'text-lg font-semibold text-foreground'
+export const settingsDescriptionClass = 'text-sm text-muted-foreground'
+
+const settingsNavGridClass = 'md:grid md:w-full md:grid-cols-[1.25rem_1fr] md:gap-x-2 md:px-4'
 const settingsNavLinkClass =
-  'col-span-2 flex h-10 w-full items-center rounded-md pl-[calc(1.25rem+0.5rem)] pr-4';
+  'col-span-2 flex h-10 w-full items-center rounded-md pl-[calc(1.25rem+0.5rem)] pr-4'
 
 interface SettingsLayoutProps {
-  selectedMenu?: string;
-  children?: React.ReactNode;
+  selectedMenu?: string
+  children?: React.ReactNode
 }
 
 interface MenuItem {
-  name: string;
-  href: string;
-  id: string;
-  icon: React.ComponentType<SvgIconProps>;
-  adminOnly?: boolean;
+  name: string
+  href: string
+  id: string
+  adminOnly?: boolean
 }
 
-const SettingsLayout: React.FC<SettingsLayoutProps> = ({ 
-  selectedMenu = 'user_developer',
-  children
-}) => {
-  const { session } = useAppSession();
-  const isAdmin = isSysAdmin(session);
+const SectionIcons: Record<string, LucideIcon> = {
+  User: User,
+  Organizations: Building2,
+  System: Settings,
+}
+
+const ItemIcons: Record<string, LucideIcon> = {
+  user_profile: User,
+  user_developer: Code2,
+  organizations: Building2,
+  system_users: Users,
+  system_license: KeyRound,
+  system_development: Code2,
+}
+
+const SettingsLayout: React.FC<SettingsLayoutProps> = ({ selectedMenu = 'user_developer', children }) => {
+  const { session } = useAppSession()
+  const isAdmin = isSysAdmin(session)
 
   const menuItems: Array<{
-    title: string;
-    icon: React.ElementType;
-    items: Array<MenuItem>;
+    title: string
+    items: Array<MenuItem>
   }> = [
     {
       title: 'User',
-      icon: UserIcon,
       items: [
-        {
-          name: 'Profile',
-          href: '/settings/user/profile',
-          id: 'user_profile',
-          icon: UserIcon,
-        },
-        {
-          name: 'Developer',
-          href: '/settings/user/developer',
-          id: 'user_developer',
-          icon: DeveloperIcon,
-        },
+        { name: 'Profile', href: '/settings/user/profile', id: 'user_profile' },
+        { name: 'Developer', href: '/settings/user/developer', id: 'user_developer' },
       ],
     },
     {
       title: 'Organizations',
-      icon: OrganizationsIcon,
-      items: [
-        {
-          name: 'Organizations',
-          href: '/settings/organizations',
-          id: 'organizations',
-          icon: OrganizationsIcon,
-          adminOnly: false,
-        },
-      ],
+      items: [{ name: 'Organizations', href: '/settings/organizations', id: 'organizations' }],
     },
     {
       title: 'System',
-      icon: SystemIcon,
       items: [
-        {
-          name: 'Users',
-          href: '/settings/account/users',
-          id: 'system_users',
-          icon: UsersIcon,
-          adminOnly: true,
-        },
-        {
-          name: 'License',
-          href: '/settings/account/license',
-          id: 'system_license',
-          icon: LicenseIcon,
-          adminOnly: true,
-        },
-        {
-          name: 'Development',
-          href: '/settings/account/development',
-          id: 'system_development',
-          icon: DevelopmentIcon,
-          adminOnly: true,
-        },
+        { name: 'Users', href: '/settings/account/users', id: 'system_users', adminOnly: true },
+        { name: 'License', href: '/settings/account/license', id: 'system_license', adminOnly: true },
+        { name: 'Development', href: '/settings/account/development', id: 'system_development', adminOnly: true },
       ],
     },
-  ];
+  ]
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <aside className="bg-white w-16 md:w-fit shrink-0 border-r border-gray-200 transition-all duration-200 max-md:overflow-visible">
-        <nav className="h-full py-4 md:py-6 md:flex md:flex-col md:w-max">
+    <div className="flex min-h-screen bg-muted/40">
+      <aside className="w-16 shrink-0 border-r border-border bg-card transition-all duration-200 md:w-fit max-md:overflow-visible">
+        <nav className="h-full py-4 md:flex md:w-max md:flex-col md:py-6">
           {menuItems.map((section) => {
-            const visibleItems = section.items.filter(item => 
-              !item.adminOnly || isAdmin
-            );
+            const visibleItems = section.items.filter((item) => !item.adminOnly || isAdmin)
+            if (visibleItems.length === 0) return null
 
-            if (visibleItems.length === 0) return null;
-
-            const SectionIcon = section.icon;
+            const SectionIcon = SectionIcons[section.title] ?? Settings
 
             return (
-              <div key={section.title} className="mb-4 md:mb-5 last:mb-0 md:w-full">
-                {/* Mobile: icon-only */}
+              <div key={section.title} className="mb-4 last:mb-0 md:mb-5 md:w-full">
                 <div className="md:hidden">
                   {visibleItems.map((item) => {
-                    const ItemIcon = item.icon;
-                    const isSelected = selectedMenu === item.id;
+                    const ItemIcon = ItemIcons[item.id] ?? Settings
+                    const isSelected = selectedMenu === item.id
 
                     return (
-                      <SidebarNavTooltip
-                        key={item.id}
-                        label={item.name}
-                        className="mx-1"
-                      >
+                      <SidebarNavTooltip key={item.id} label={item.name} className="mx-1">
                         <Link
                           to={item.href}
-                          className={[
-                            'flex items-center justify-center h-10 rounded-md',
-                            'text-sm font-medium transition-colors duration-200',
+                          className={cn(
+                            'flex h-10 items-center justify-center rounded-md text-sm font-medium transition-colors',
                             isSelected
-                              ? 'bg-primary-50 text-primary-600'
-                              : 'text-gray-600 hover:bg-gray-100',
-                          ].join(' ')}
+                              ? 'bg-primary-soft text-primary'
+                              : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                          )}
                         >
-                          <ItemIcon className="h-5 w-5 shrink-0" />
+                          <ItemIcon className="size-5 shrink-0" aria-hidden />
                         </Link>
                       </SidebarNavTooltip>
-                    );
+                    )
                   })}
                 </div>
 
-                {/* Desktop: shared grid aligns section labels with item labels */}
-                <div className={`hidden md:w-full ${settingsNavGridClass}`}>
-                  <SectionIcon className="h-5 w-5 shrink-0 self-center" />
-                  <h2 className="text-sm font-medium text-gray-500 whitespace-nowrap self-center min-w-0">
+                <div className={cn('hidden md:w-full', settingsNavGridClass)}>
+                  <SectionIcon className="size-5 shrink-0 self-center text-muted-foreground" aria-hidden />
+                  <h2 className="min-w-0 self-center text-sm font-medium whitespace-nowrap text-muted-foreground">
                     {section.title}
                   </h2>
                   {visibleItems.map((item) => {
-                    const isSelected = selectedMenu === item.id;
+                    const isSelected = selectedMenu === item.id
 
                     return (
                       <Link
                         key={item.id}
                         to={item.href}
-                        className={[
+                        className={cn(
                           settingsNavLinkClass,
-                          'text-sm font-medium whitespace-nowrap transition-colors duration-200',
+                          'text-sm font-medium whitespace-nowrap transition-colors',
                           isSelected
-                            ? 'bg-primary-50 text-primary-600'
-                            : 'text-gray-600 hover:bg-gray-100',
-                        ].join(' ')}
+                            ? 'bg-primary-soft text-primary'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                        )}
                       >
                         {item.name}
                       </Link>
-                    );
+                    )
                   })}
                 </div>
               </div>
-            );
+            )
           })}
         </nav>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto py-8 px-2 md:px-6 text-sm text-gray-900">
-          {children}
-        </div>
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-7xl px-2 py-8 text-sm text-foreground md:px-6">{children}</div>
       </main>
     </div>
-  );
-};
+  )
+}
 
-export default SettingsLayout;
+export default SettingsLayout

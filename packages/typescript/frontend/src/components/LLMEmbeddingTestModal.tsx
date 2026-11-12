@@ -58,7 +58,7 @@ const LLMEmbeddingTestModal: React.FC<LLMEmbeddingTestModalProps> = ({ open, onC
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-black/50 transition-opacity"
         onClick={handleClose}
       />
       
@@ -72,7 +72,7 @@ const LLMEmbeddingTestModal: React.FC<LLMEmbeddingTestModalProps> = ({ open, onC
             </h2>
             <button
               onClick={handleClose}
-              className="text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20"
+              className="text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white/20"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

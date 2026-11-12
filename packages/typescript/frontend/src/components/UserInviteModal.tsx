@@ -1,190 +1,163 @@
 'use client'
 
-import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import { DocRouterAccountApi } from '@/utils/api';
-import { Organization } from '@docrouter/sdk';
-import { toast } from 'react-toastify';
-import debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Organization } from '@docrouter/sdk'
+import { toast } from 'react-toastify'
+
+import { FormDialog } from '@/components/FormDialog'
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { DocRouterAccountApi } from '@/utils/api'
+import { toastActionError } from '@/utils/toastActionError'
 
 interface UserInviteModalProps {
-  open: boolean;
-  onClose: () => void;
-  onInvited: () => void;
+  open: boolean
+  onClose: () => void
+  onInvited: () => void
 }
 
-const UserInviteModal: React.FC<UserInviteModalProps> = ({
-  open,
-  onClose,
-  onInvited
-}) => {
-  const [email, setEmail] = useState('');
-  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Organization[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
+const UserInviteModal: React.FC<UserInviteModalProps> = ({ open, onClose, onInvited }) => {
+  const [email, setEmail] = useState('')
+  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Organization[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
 
-  // Debounced search function
-  const searchOrganizations = useCallback((query: string) => {
-    if (!query) {
-      setSearchResults([]);
-      return;
-    }
-    
-    setIsSearching(true);
-    docRouterAccountApi.listOrganizations({ nameSearch: query, limit: 20 })
-      .then(response => {
-        // Filter to only show team and enterprise organizations
-        const filteredOrgs = response.organizations.filter(org => 
-          org.type === 'team' || org.type === 'enterprise'
-        );
-        setSearchResults(filteredOrgs);
-      })
-      .catch(error => {
-        console.error('Failed to search organizations:', error);
-        toastActionError('Failed to search organizations', error);
-      })
-      .finally(() => {
-        setIsSearching(false);
-      });
-  }, [docRouterAccountApi]);
+  const searchOrganizations = useCallback(
+    (query: string) => {
+      if (!query) {
+        setSearchResults([])
+        return
+      }
+      setIsSearching(true)
+      void docRouterAccountApi
+        .listOrganizations({ nameSearch: query, limit: 20 })
+        .then((response) => {
+          setSearchResults(
+            response.organizations.filter((org) => org.type === 'team' || org.type === 'enterprise'),
+          )
+        })
+        .catch((err) => {
+          console.error('Failed to search organizations:', err)
+          toastActionError('Failed to search organizations', err)
+        })
+        .finally(() => setIsSearching(false))
+    },
+    [docRouterAccountApi],
+  )
 
-  // Use debounce when calling the function
   useEffect(() => {
-    const debouncedSearch = debounce(searchOrganizations, 300);
-    debouncedSearch(searchQuery);
-    
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [searchQuery, searchOrganizations]);
+    const debouncedSearch = debounce(searchOrganizations, 300)
+    debouncedSearch(searchQuery)
+    return () => debouncedSearch.cancel()
+  }, [searchQuery, searchOrganizations])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      toast.error('Please enter an email address');
-      return;
+  useEffect(() => {
+    if (!open) {
+      setEmail('')
+      setSelectedOrg(null)
+      setSearchQuery('')
+      setError(null)
     }
+  }, [open])
 
-    setIsSubmitting(true);
+  if (!open) return null
+
+  const submit = async () => {
+    if (!email) {
+      toast.error('Please enter an email address')
+      return
+    }
+    setIsSubmitting(true)
+    setError(null)
     try {
-      // Send invitation with optional organization
       await docRouterAccountApi.createInvitation({
         email,
         organization_id: selectedOrg?.id,
-      });
-      
-      toast.success('Invitation sent successfully');
-      onInvited();
-      onClose();
-      setEmail('');
-      setSelectedOrg(null);
-      setSearchQuery('');
-    } catch (error) {
-      console.error('Invitation error:', error);
-      toastActionError('Failed to send invitation', error);
+      })
+      toast.success('Invitation sent successfully')
+      onInvited()
+      onClose()
+    } catch (err) {
+      console.error('Invitation error:', err)
+      setError(err)
+      toastActionError('Failed to send invitation', err)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
-
-  const selectOrganization = (org: Organization) => {
-    setSelectedOrg(org);
-    setSearchQuery(''); // Clear search after selection
-  };
+  }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Invite User</DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Enter email address"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Add to Organization (Optional)
-              </label>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Search organizations..."
-              />
-
-              {/* Search Results */}
-              {searchQuery && (
-                <div className="mt-2 max-h-40 overflow-y-auto border rounded-md">
-                  {isSearching ? (
-                    <div className="p-2 text-gray-500">Searching...</div>
-                  ) : searchResults.length > 0 ? (
-                    <div className="divide-y">
-                      {searchResults.map(org => (
-                        <button
-                          key={org.id}
-                          type="button"
-                          onClick={() => selectOrganization(org)}
-                          className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
-                        >
-                          <span>{org.name}</span>
-                          <span className="text-sm text-gray-500">{org.type}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-2 text-gray-500">No organizations found</div>
-                  )}
-                </div>
-              )}
-
-              {/* Selected Organization */}
-              {selectedOrg && (
-                <div className="mt-3">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Selected Organization:</h4>
-                  <div className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md">
-                    <span>{selectedOrg.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOrg(null)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+    <FormDialog
+      title="Invite user"
+      submitLabel={isSubmitting ? 'Sending…' : 'Send invitation'}
+      submitDisabled={!email || isSubmitting}
+      busy={isSubmitting}
+      error={error}
+      onSubmit={() => void submit()}
+      onClose={onClose}
+    >
+      <Field>
+        <FieldLabel htmlFor="invite-email">Email</FieldLabel>
+        <Input
+          id="invite-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email address"
+          required
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="invite-org-search">Add to organization (optional)</FieldLabel>
+        <Input
+          id="invite-org-search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search organizations…"
+        />
+        {searchQuery ? (
+          <p className="mt-2 max-h-40 overflow-y-auto rounded-md border text-sm">
+            {isSearching ? (
+              <span className="block p-2 text-muted-foreground">Searching…</span>
+            ) : searchResults.length > 0 ? (
+              searchResults.map((org) => (
+                <button
+                  key={org.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedOrg(org)
+                    setSearchQuery('')
+                  }}
+                  className="flex w-full items-center justify-between border-b px-3 py-2 text-left last:border-0 hover:bg-muted/60"
+                >
+                  <span>{org.name}</span>
+                  <span className="text-xs text-muted-foreground">{org.type}</span>
+                </button>
+              ))
+            ) : (
+              <span className="block p-2 text-muted-foreground">No organizations found</span>
+            )}
+          </p>
+        ) : null}
+        {selectedOrg ? (
+          <div className="mt-2 flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
+            <span>{selectedOrg.name}</span>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedOrg(null)}>
+              Remove
+            </Button>
           </div>
-        </DialogContent>
-        <DialogActions className="p-4">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isSubmitting || !email}
-          >
-            {isSubmitting ? 'Sending...' : 'Send Invitation'}
-          </Button>
-        </DialogActions>
-      </form>
-    </Dialog>
-  );
-};
+        ) : (
+          <FieldDescription>Only team and enterprise organizations are listed.</FieldDescription>
+        )}
+      </Field>
+    </FormDialog>
+  )
+}
 
-export default UserInviteModal; 
+export default UserInviteModal
