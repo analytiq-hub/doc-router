@@ -733,8 +733,7 @@ const tools: Tool[] = [
               name: { type: 'string', description: 'Document name (optional, defaults to filename)' },
               tag_ids: { type: 'array', items: { type: 'string' }, description: 'Optional list of tag IDs' },
               metadata: { type: 'object', description: 'Optional metadata' },
-              case_id: { type: 'string', description: 'Optional case id to assign on upload' },
-              create_case_if_missing: { type: 'boolean', description: 'Create case if case_id is unknown', default: false },
+              case_id: { type: 'string', description: 'Optional existing case id to assign on upload' },
             },
             required: ['file_path'],
           },
@@ -782,7 +781,6 @@ const tools: Tool[] = [
         tagIds: { type: 'array', items: { type: 'string' }, description: 'Array of tag IDs' },
         metadata: { type: 'object', description: 'Document metadata' },
         caseId: { type: 'string', description: 'Case id to assign, or null to remove from case' },
-        createCaseIfMissing: { type: 'boolean', description: 'When assigning caseId, create case if missing', default: false },
       },
       required: ['documentId'],
     },
@@ -802,7 +800,7 @@ const tools: Tool[] = [
   // ========== CASES ==========
   {
     name: 'list_cases',
-    description: 'List document cases (search matches case id or display name)',
+    description: 'List document cases (search matches case id or name)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -829,25 +827,25 @@ const tools: Tool[] = [
   },
   {
     name: 'create_case',
-    description: 'Create a case',
+    description: 'Create a case (server assigns case id)',
     inputSchema: {
       type: 'object',
       properties: {
-        caseId: { type: 'string' },
-        displayName: { type: 'string' },
+        name: { type: 'string', description: 'Case name (required; may repeat)' },
         tagIds: { type: 'array', items: { type: 'string' } },
         metadata: { type: 'object' },
       },
+      required: ['name'],
     },
   },
   {
     name: 'update_case',
-    description: 'Update case display name, tags, or metadata',
+    description: 'Update case name, tags, or metadata',
     inputSchema: {
       type: 'object',
       properties: {
         caseId: { type: 'string' },
-        displayName: { type: 'string' },
+        name: { type: 'string' },
         tagIds: { type: 'array', items: { type: 'string' } },
         metadata: { type: 'object' },
       },
@@ -874,7 +872,6 @@ const tools: Tool[] = [
       properties: {
         caseId: { type: 'string' },
         documentIds: { type: 'array', items: { type: 'string' } },
-        createCaseIfMissing: { type: 'boolean', default: false },
       },
       required: ['caseId', 'documentIds'],
     },
@@ -1642,7 +1639,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           tag_ids?: string[];
           metadata?: Record<string, string>;
           case_id?: string;
-          create_case_if_missing?: boolean;
         }>;
         
         // Read files from disk and encode to base64
@@ -1675,7 +1671,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             tag_ids: doc.tag_ids,
             metadata: doc.metadata,
             case_id: doc.case_id,
-            create_case_if_missing: doc.create_case_if_missing,
           });
         }
         
@@ -1699,7 +1694,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         if (args && 'caseId' in args) {
           updateParams.caseId = getOptionalArg(args, 'caseId') as string | null | undefined;
-          updateParams.createCaseIfMissing = getOptionalArg(args, 'createCaseIfMissing', false);
         }
         const result = await docrouterClient.updateDocument(updateParams);
         return {
@@ -1752,8 +1746,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'create_case': {
         const result = await docrouterClient.createCase({
           body: {
-            case_id: getOptionalArg(args, 'caseId'),
-            display_name: getOptionalArg(args, 'displayName'),
+            name: getArg(args, 'name'),
             tag_ids: getOptionalArg(args, 'tagIds'),
             metadata: getOptionalArg(args, 'metadata'),
           },
@@ -1766,7 +1759,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await docrouterClient.updateCase({
           caseId: getArg(args, 'caseId'),
           body: {
-            display_name: getOptionalArg(args, 'displayName'),
+            name: getOptionalArg(args, 'name'),
             tag_ids: getOptionalArg(args, 'tagIds'),
             metadata: getOptionalArg(args, 'metadata'),
           },
@@ -1788,7 +1781,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await docrouterClient.assignDocumentsToCase({
           caseId: getArg(args, 'caseId'),
           documentIds: getArg(args, 'documentIds'),
-          createCaseIfMissing: getOptionalArg(args, 'createCaseIfMissing', false),
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(serializeDates(result), null, 2) }],
