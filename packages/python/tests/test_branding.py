@@ -9,8 +9,8 @@ def test_app_name_default(monkeypatch):
 
 
 def test_app_name_from_env(monkeypatch):
-    monkeypatch.setenv("APP_NAME", "Plymouth Rock IDP")
-    assert app_name() == "Plymouth Rock IDP"
+    monkeypatch.setenv("APP_NAME", "Smart Document Router")
+    assert app_name() == "Smart Document Router"
 
 
 def test_app_name_empty_falls_back(monkeypatch):
