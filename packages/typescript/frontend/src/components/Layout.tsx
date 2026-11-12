@@ -20,7 +20,7 @@ import {
   ClipboardList,
   GitBranch,
   Library,
-  Info,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import TourGuide from '@/components/TourGuide';
@@ -157,7 +157,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       ];
 
   const systemMenuItems: MenuItem[] = [
-    { text: 'About', icon: Info, tooltip: 'About Page', href: '/' },
+    { text: 'Settings', icon: Settings, tooltip: 'Settings', href: '/settings' },
   ];
 
   useEffect(() => {

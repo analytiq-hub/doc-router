@@ -85,7 +85,9 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 ### Phase 4 — Standard CRUD lists (2–3 weeks, repeatable) — **in progress**
 
-**Tags (first slice, `frontend-shadcn`):** orchestrator `DataTable` + `PageHeader` + `FilterBuilder` + `FormDialog` / `ConfirmDialog` / `PropertiesDialog`; list has no MUI. Create tag via header dialog (replaces `?tab=tag-create`); `/tags/:tagId` edit route unchanged.
+**Tags (`frontend-shadcn`):** ✅ orchestrator list stack; create via dialog; `/tags/:tagId` edit unchanged.
+
+**Prompts (`frontend-shadcn`):** ✅ same list stack; `TagCell` + tag filter popover; rename/clone via `FormDialog`; create stays `?tab=prompt-create` (Monaco).
 
 Per entity (start with **Tags** or **Prompts**):
 

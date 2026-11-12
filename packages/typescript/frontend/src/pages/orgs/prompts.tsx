@@ -1,69 +1,59 @@
 'use client'
 
-import PromptList from '@/components/PromptList';
-import { useRouteParams } from '@/utils/useRouteParams';
-import PromptCreate from '@/components/PromptCreate';
-import { useSearchParams, useRouter } from '@/utils/appRouter';
-import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
-import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities';
+import { ArrowLeft, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
+
+import PromptList from '@/components/PromptList'
+import { PageHeader } from '@/components/PageHeader'
+import { useRouteParams } from '@/utils/useRouteParams'
+import PromptCreate from '@/components/PromptCreate'
+import { useSearchParams, useRouter } from '@/utils/appRouter'
+import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions'
+import { CAP_CONFIG_WRITE } from '@/utils/orgCapabilities'
+import { Button } from '@/components/ui/button'
 
 export default function PromptsPage(props: { params: Promise<{ organizationId: string }> }) {
-  const { organizationId } = useRouteParams(props);
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const tab = searchParams.get('tab') || 'prompts';
-  const listPath = `/orgs/${organizationId}/prompts`;
+  const { organizationId } = useRouteParams(props)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const tab = searchParams.get('tab') || 'prompts'
+  const listPath = `/orgs/${organizationId}/prompts`
   const { hasCapability: canConfigWrite, loading: capabilitiesLoading } = useOrgCapability(
     organizationId,
     CAP_CONFIG_WRITE,
-  );
-  useOrgCapabilityTabGuard(organizationId, tab, 'prompt-create', listPath, CAP_CONFIG_WRITE);
+  )
+  useOrgCapabilityTabGuard(organizationId, tab, 'prompt-create', listPath, CAP_CONFIG_WRITE)
 
-  const handleTabChange = (newValue: string) => {
-    if (newValue === 'prompt-create' && !canConfigWrite) {
-      return;
-    }
-    router.push(`${listPath}?tab=${newValue}`);
-  };
+  if (tab === 'prompt-create' && canConfigWrite) {
+    return (
+      <div className="mx-auto max-w-6xl p-4">
+        <div className="mb-6">
+          <Button variant="ghost" render={<Link to={listPath} />}>
+            <ArrowLeft data-icon="inline-start" />
+            Back to prompts
+          </Button>
+        </div>
+        <PageHeader title="Create prompt" subtitle="Define extraction instructions, schema, tags, and model." />
+        <PromptCreate organizationId={organizationId} />
+      </div>
+    )
+  }
 
   return (
-    <div className="p-4">
-      <div className="border-b border-gray-200 mb-6">
-        <div className="flex gap-8">
-          <button
-            onClick={() => handleTabChange('prompts')}
-            className={`pb-4 px-1 relative font-semibold text-base ${
-              tab === 'prompts'
-                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Prompts
-          </button>
-          {!capabilitiesLoading && canConfigWrite && (
-            <button
-              onClick={() => handleTabChange('prompt-create')}
-              className={`pb-4 px-1 relative font-semibold text-base ${
-                tab === 'prompt-create'
-                  ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              data-tour="prompt-create"
-            >
-              Create Prompt
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto">
-        <div role="tabpanel" hidden={tab !== 'prompts'}>
-          {tab === 'prompts' && <PromptList organizationId={organizationId} />}
-        </div>
-        <div role="tabpanel" hidden={tab !== 'prompt-create'}>
-          {tab === 'prompt-create' && canConfigWrite && <PromptCreate organizationId={organizationId} />}
-        </div>
-      </div>
+    <div className="mx-auto max-w-6xl p-4">
+      <PageHeader
+        title="Prompts"
+        subtitle="Prompts define extraction instructions; tags choose which documents they run on."
+        actions={
+          !capabilitiesLoading && canConfigWrite ? (
+            <Button onClick={() => router.push(`${listPath}?tab=prompt-create`)} data-tour="prompt-create">
+              <Plus data-icon="inline-start" />
+              New prompt
+            </Button>
+          ) : null
+        }
+      />
+      <PromptList organizationId={organizationId} />
     </div>
-  );
+  )
 }
