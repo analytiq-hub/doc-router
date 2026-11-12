@@ -489,6 +489,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   const isCaseScopedList = Boolean(fixedCaseId);
+  const searchFieldSx = {
+    flex: '0 0 auto',
+    width: '13rem',
+    maxWidth: '100%',
+    minWidth: isCaseScopedList ? 72 : '10rem',
+    ...(isCaseScopedList ? { '& .MuiInputBase-root': { height: 40 } } : {}),
+  }
   const filterFieldSx = isCaseScopedList
     ? {
         flex: '1 1 0%',
@@ -538,7 +545,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
               </InputAdornment>
             ),
           }}
-          sx={filterFieldSx}
+          sx={searchFieldSx}
         />
         <Autocomplete
           multiple
