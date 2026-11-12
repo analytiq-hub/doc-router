@@ -1,7 +1,7 @@
 'use client'
 
 import { Copy, Download, Info, Pencil, PencilLine, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { Schema, SchemaProperty, SchemaResponseFormat } from '@docrouter/sdk'
@@ -26,6 +26,7 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useDebounced } from '@/lib/useDebounced'
 import { shortName } from '@/lib/shortName'
+import { useInvalidateOrgLists, useOrgSchemas } from '@/api/orgQueries'
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
 import { formatLocalDate } from '@/utils/date'
 import { useOrgCapability } from '@/hooks/useOrgPermissions'
@@ -193,10 +194,6 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
 
-  const [schemas, setSchemas] = useState<Schema[]>([])
-  const [loadError, setLoadError] = useState<unknown>(null)
-  const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState(0)
   const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
   const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
   const [filters, setFilters] = useState<FilterItem[]>([])
@@ -204,37 +201,21 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [search, setSearch] = useState('')
   const nameSearch = useDebounced(search.trim())
   const activeFilters = filters.filter(isActiveFilter)
+  const sortForApi = sortModel.filter((s) => s.field !== 'fields' && s.field !== 'actions')
+  const schemasQuery = useOrgSchemas(organizationId, {
+    skip: pagination.page * pagination.pageSize,
+    limit: pagination.pageSize,
+    nameSearch: nameSearch || undefined,
+    sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+    filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+  })
+  const invalidate = useInvalidateOrgLists(organizationId)
 
   const [viewing, setViewing] = useState<SchemaRow | null>(null)
   const [nameEdit, setNameEdit] = useState<{ schema: Schema; cloning: boolean } | null>(null)
   const [deleting, setDeleting] = useState<Schema | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<unknown>(null)
-
-  const loadSchemas = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const sortForApi = sortModel.filter((s) => s.field !== 'fields' && s.field !== 'actions')
-      const response = await docRouterOrgApi.listSchemas({
-        skip: pagination.page * pagination.pageSize,
-        limit: pagination.pageSize,
-        nameSearch: nameSearch || undefined,
-        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
-      })
-      setSchemas(response.schemas)
-      setTotal(response.total_count ?? response.schemas.length)
-    } catch (error) {
-      setLoadError(error)
-    } finally {
-      setLoading(false)
-    }
-  }, [docRouterOrgApi, pagination, nameSearch, sortModel, activeFilters])
-
-  useEffect(() => {
-    void loadSchemas()
-  }, [loadSchemas])
 
   const editPath = (schema: Schema) => `/orgs/${organizationId}/schemas/${schema.schema_revid}`
 
@@ -247,7 +228,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     } else {
       await docRouterOrgApi.updateSchema({ schemaId: schema.schema_id, schema: schemaConfig })
     }
-    await loadSchemas()
+    await invalidate.schemas()
   }
 
   const handleDownload = (schema: Schema) => {
@@ -276,7 +257,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       await docRouterOrgApi.deleteSchema({ schemaId: deleting.schema_id })
       toast.success('Schema deleted')
       setDeleting(null)
-      void loadSchemas()
+      void invalidate.schemas()
     } catch (error) {
       setDeleteError(error)
     } finally {
@@ -405,17 +386,17 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             }}
           />
         </div>
-        <ErrorAlert error={loadError} />
+        <ErrorAlert error={schemasQuery.error} />
         <div className="h-150 min-h-[24rem]">
           <DataTable
             aria-label="Schemas"
-            rows={schemas}
+            rows={schemasQuery.data?.schemas ?? []}
             getRowId={(row) => row.schema_revid}
             columns={withFilterFields(columns, filterFields)}
             activeFilterFields={activeFields(filters)}
             onFilterColumn={(field) => setFilterRequest({ field })}
-            rowCount={total}
-            loading={loading}
+            rowCount={schemasQuery.data?.total_count ?? 0}
+            loading={schemasQuery.isFetching}
             paginationModel={pagination}
             onPaginationModelChange={setPagination}
             sortModel={sortModel}

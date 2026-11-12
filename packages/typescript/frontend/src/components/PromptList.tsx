@@ -8,7 +8,7 @@ import {
   PencilLine,
   Trash2,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { Prompt, Schema, Tag } from '@docrouter/sdk'
@@ -25,7 +25,6 @@ import {
   withFilterFields,
 } from '@/components/FilterBuilder'
 import { FormDialog } from '@/components/FormDialog'
-import { PromptTagFilter } from '@/components/PromptTagFilter'
 import { PropertiesDialog } from '@/components/PropertiesDialog'
 import { RowActionsMenu } from '@/components/RowActionsMenu'
 import { SearchInput } from '@/components/SearchInput'
@@ -34,6 +33,7 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useDebounced } from '@/lib/useDebounced'
 import { shortName } from '@/lib/shortName'
+import { useInvalidateOrgLists, useOrgPrompts, useOrgSchemas, useOrgTags } from '@/api/orgQueries'
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
 import { formatLocalDate } from '@/utils/date'
 import { useOrgCapability } from '@/hooks/useOrgPermissions'
@@ -152,20 +152,26 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
 
-  const [prompts, setPrompts] = useState<Prompt[]>([])
-  const [loadError, setLoadError] = useState<unknown>(null)
-  const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState(0)
   const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
   const [sortModel, setSortModel] = useState<SortModel>([{ field: 'name', sort: 'asc' }])
   const [filters, setFilters] = useState<FilterItem[]>([])
   const [filterRequest, setFilterRequest] = useState<{ field: string } | null>(null)
   const [search, setSearch] = useState('')
   const nameSearch = useDebounced(search.trim())
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
-
-  const [availableTags, setAvailableTags] = useState<Tag[]>([])
-  const [availableSchemas, setAvailableSchemas] = useState<Schema[]>([])
+  const activeFilters = filters.filter(isActiveFilter)
+  const sortForApi = sortModel.filter((s) => s.field !== 'actions')
+  const promptsQuery = useOrgPrompts(organizationId, {
+    skip: pagination.page * pagination.pageSize,
+    limit: pagination.pageSize,
+    nameSearch: nameSearch || undefined,
+    sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+    filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+  })
+  const tagsQuery = useOrgTags(organizationId, { skip: 0, limit: 100 })
+  const schemasQuery = useOrgSchemas(organizationId, { skip: 0, limit: 100 })
+  const invalidate = useInvalidateOrgLists(organizationId)
+  const availableTags = tagsQuery.data?.tags ?? []
+  const availableSchemas = schemasQuery.data?.schemas ?? []
   const tagsById = useMemo(() => new Map(availableTags.map((t) => [t.id, t])), [availableTags])
   const schemaNames = useMemo(
     () => new Map(availableSchemas.map((s) => [s.schema_id, s.name])),
@@ -177,49 +183,6 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [deleting, setDeleting] = useState<Prompt | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<unknown>(null)
-
-  const activeFilters = filters.filter(isActiveFilter)
-
-  const loadPrompts = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const sortForApi = sortModel.filter((s) => s.field !== 'actions')
-      const response = await docRouterOrgApi.listPrompts({
-        skip: pagination.page * pagination.pageSize,
-        limit: pagination.pageSize,
-        nameSearch: nameSearch || undefined,
-        tag_ids: selectedTagIds.length ? selectedTagIds.join(',') : undefined,
-        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
-      })
-      setPrompts(response.prompts)
-      setTotal(response.total_count ?? response.prompts.length)
-    } catch (error) {
-      setLoadError(error)
-    } finally {
-      setLoading(false)
-    }
-  }, [docRouterOrgApi, pagination, nameSearch, selectedTagIds, sortModel, activeFilters])
-
-  useEffect(() => {
-    void loadPrompts()
-  }, [loadPrompts])
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [tagsRes, schemasRes] = await Promise.all([
-          docRouterOrgApi.listTags({ limit: 100 }),
-          docRouterOrgApi.listSchemas({ limit: 100 }),
-        ])
-        setAvailableTags(tagsRes.tags)
-        setAvailableSchemas(schemasRes.schemas)
-      } catch {
-        // Toolbar extras only; list error surfaces on next load
-      }
-    })()
-  }, [docRouterOrgApi])
 
   const editPath = (prompt: Prompt) => `/orgs/${organizationId}/prompts/${prompt.prompt_revid}`
 
@@ -239,7 +202,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     } else {
       await docRouterOrgApi.updatePrompt({ promptId: prompt.prompt_id, prompt: promptConfig })
     }
-    await loadPrompts()
+    await invalidate.prompts()
   }
 
   const handleDownload = async (prompt: Prompt) => {
@@ -284,7 +247,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       await docRouterOrgApi.deletePrompt({ promptId: deleting.prompt_id })
       toast.success('Prompt deleted')
       setDeleting(null)
-      void loadPrompts()
+      void invalidate.prompts()
     } catch (error) {
       setDeleteError(error)
     } finally {
@@ -292,13 +255,23 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     }
   }
 
-  const filterFields: FilterField[] = [
-    { field: 'name', label: 'Name', kind: 'text' },
-    { field: 'content', label: 'Prompt text', kind: 'text' },
-    { field: 'model', label: 'Model', kind: 'text' },
-    { field: 'prompt_version', label: 'Version', kind: 'text' },
-    { field: 'created_at', label: 'Saved', kind: 'date' },
-  ]
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      { field: 'name', label: 'Name', kind: 'text' as const },
+      { field: 'content', label: 'Prompt text', kind: 'text' as const },
+      { field: 'model', label: 'Model', kind: 'text' as const },
+      { field: 'prompt_version', label: 'Version', kind: 'text' as const },
+      {
+        field: 'tag_ids',
+        label: 'Tags',
+        kind: 'tag' as const,
+        single: true,
+        options: availableTags.map((t) => ({ value: t.name, label: t.name })),
+      },
+      { field: 'created_at', label: 'Saved', kind: 'date' as const },
+    ],
+    [availableTags],
+  )
 
   const columns: DataTableColumn<Prompt>[] = [
     {
@@ -419,14 +392,6 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             }}
             placeholder="Search prompts"
           />
-          <PromptTagFilter
-            tags={availableTags}
-            selectedIds={selectedTagIds}
-            onChange={(ids) => {
-              setSelectedTagIds(ids)
-              setPagination((p) => ({ ...p, page: 0 }))
-            }}
-          />
           <FilterBuilder
             fields={filterFields}
             value={filters}
@@ -437,17 +402,17 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             }}
           />
         </div>
-        <ErrorAlert error={loadError} />
+        <ErrorAlert error={promptsQuery.error} />
         <div className="h-150 min-h-[24rem]">
           <DataTable
             aria-label="Prompts"
-            rows={prompts}
+            rows={promptsQuery.data?.prompts ?? []}
             getRowId={(row) => row.prompt_revid}
             columns={withFilterFields(columns, filterFields)}
             activeFilterFields={activeFields(filters)}
             onFilterColumn={(field) => setFilterRequest({ field })}
-            rowCount={total}
-            loading={loading}
+            rowCount={promptsQuery.data?.total_count ?? 0}
+            loading={promptsQuery.isFetching}
             paginationModel={pagination}
             onPaginationModelChange={setPagination}
             sortModel={sortModel}

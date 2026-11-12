@@ -556,15 +556,17 @@ export class DocRouterOrg {
   }
 
   async listPrompts(params?: Omit<ListPromptsParams, 'organizationId'>): Promise<ListPromptsResponse> {
-    const { skip, limit, document_id, tag_ids, nameSearch } = params || {};
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: params?.skip || 0,
+      limit: params?.limit || 10,
+    };
+    if (params?.document_id) queryParams.document_id = params.document_id;
+    if (params?.tag_ids) queryParams.tag_ids = params.tag_ids;
+    if (params?.nameSearch) queryParams.name_search = params.nameSearch;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
     return this.http.get<ListPromptsResponse>(`/v0/orgs/${this.organizationId}/prompts`, {
-      params: {
-        skip: skip || 0,
-        limit: limit || 10,
-        document_id,
-        tag_ids,
-        name_search: nameSearch
-      }
+      params: queryParams,
     });
   }
 
@@ -718,9 +720,16 @@ export class DocRouterOrg {
   }
 
   async listForms(params?: Omit<ListFormsParams, 'organizationId'>): Promise<ListFormsResponse> {
-    const { skip, limit, tag_ids } = params || {};
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: params?.skip || 0,
+      limit: params?.limit || 10,
+    };
+    if (params?.tag_ids) queryParams.tag_ids = params.tag_ids;
+    if (params?.name_search) queryParams.name_search = params.name_search;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
     return this.http.get<ListFormsResponse>(`/v0/orgs/${this.organizationId}/forms`, {
-      params: { skip: skip || 0, limit: limit || 10, tag_ids }
+      params: queryParams,
     });
   }
 
@@ -771,9 +780,15 @@ export class DocRouterOrg {
   }
 
   async listSchemas(params: Omit<ListSchemasParams, 'organizationId'>): Promise<ListSchemasResponse> {
-    const { skip, limit, nameSearch } = params || {};
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: params?.skip || 0,
+      limit: params?.limit || 10,
+    };
+    if (params?.nameSearch) queryParams.name_search = params.nameSearch;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
     return this.http.get<ListSchemasResponse>(`/v0/orgs/${this.organizationId}/schemas`, {
-      params: { skip: skip || 0, limit: limit || 10, name_search: nameSearch }
+      params: queryParams,
     });
   }
 

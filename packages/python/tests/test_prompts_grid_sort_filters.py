@@ -137,6 +137,19 @@ async def test_prompts_grid_sort_filters_focused(test_db, mock_auth, setup_test_
     names = {p["name"] for p in r["prompts"]}
     assert names == {"Alpha Prompt"}
 
+    # Tag filter via FilterBuilder tag kind (operator "is", exact tag name)
+    filters = json.dumps(
+        {
+            "items": [
+                {"field": "tag_ids", "operator": "is", "value": "Finance"},
+            ],
+            "logicOperator": "and",
+        }
+    )
+    r = _list_prompts({"filters": filters, "limit": 50})
+    names = {p["name"] for p in r["prompts"]}
+    assert names == {"Beta Prompt"}
+
     # Sort by name ascending
     sort = json.dumps([{"field": "name", "sort": "asc"}])
     r = _list_prompts({"sort": sort, "limit": 50})

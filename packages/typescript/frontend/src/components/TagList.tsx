@@ -1,7 +1,7 @@
 'use client'
 
 import { Info, Pencil, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import type { Tag } from '@docrouter/sdk'
 
@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useDebounced } from '@/lib/useDebounced'
 import { shortName } from '@/lib/shortName'
+import { useInvalidateOrgLists, useOrgTags } from '@/api/orgQueries'
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
 import { formatLocalDate } from '@/utils/date'
 import { useOrgCapability } from '@/hooks/useOrgPermissions'
@@ -174,17 +175,12 @@ const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => 
   const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
 
-  const [tags, setTags] = useState<Tag[]>([])
-  const [loadError, setLoadError] = useState<unknown>(null)
   const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
   const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
   const [filters, setFilters] = useState<FilterItem[]>([])
   const [filterRequest, setFilterRequest] = useState<{ field: string } | null>(null)
   const [search, setSearch] = useState('')
   const nameSearch = useDebounced(search.trim())
-  const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState(0)
-
   const [editing, setEditing] = useState<Tag | 'new' | null>(null)
   const [viewing, setViewing] = useState<TagWithCreator | null>(null)
   const [deleting, setDeleting] = useState<Tag | null>(null)
@@ -192,31 +188,15 @@ const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => 
   const [deleteError, setDeleteError] = useState<unknown>(null)
 
   const activeFilters = filters.filter(isActiveFilter)
-
-  const loadTags = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const sortForApi = sortModel.filter((s) => s.field !== 'actions')
-      const response = await docRouterOrgApi.listTags({
-        skip: pagination.page * pagination.pageSize,
-        limit: pagination.pageSize,
-        nameSearch: nameSearch || undefined,
-        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
-      })
-      setTags(response.tags)
-      setTotal(response.total_count ?? response.tags.length)
-    } catch (error) {
-      setLoadError(error)
-    } finally {
-      setLoading(false)
-    }
-  }, [docRouterOrgApi, pagination, nameSearch, sortModel, activeFilters])
-
-  useEffect(() => {
-    void loadTags()
-  }, [loadTags])
+  const sortForApi = sortModel.filter((s) => s.field !== 'actions')
+  const tagsQuery = useOrgTags(organizationId, {
+    skip: pagination.page * pagination.pageSize,
+    limit: pagination.pageSize,
+    nameSearch: nameSearch || undefined,
+    sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+    filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+  })
+  const invalidate = useInvalidateOrgLists(organizationId)
 
   const filterFields: FilterField[] = [
     { field: 'name', label: 'Name', kind: 'text' },
@@ -295,7 +275,7 @@ const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => 
       await docRouterOrgApi.deleteTag({ tagId: deleting.id })
       toast.success('Tag deleted')
       setDeleting(null)
-      void loadTags()
+      void invalidate.tags()
     } catch (error) {
       setDeleteError(error)
     } finally {
@@ -325,16 +305,16 @@ const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => 
             }}
           />
         </div>
-        <ErrorAlert error={loadError} />
+        <ErrorAlert error={tagsQuery.error} />
         <div className="h-150 min-h-[24rem]">
           <DataTable
             aria-label="Tags"
-            rows={tags}
+            rows={tagsQuery.data?.tags ?? []}
             columns={withFilterFields(columns, filterFields)}
             activeFilterFields={activeFields(filters)}
             onFilterColumn={(field) => setFilterRequest({ field })}
-            rowCount={total}
-            loading={loading}
+            rowCount={tagsQuery.data?.total_count ?? 0}
+            loading={tagsQuery.isFetching}
             paginationModel={pagination}
             onPaginationModelChange={setPagination}
             sortModel={sortModel}
@@ -346,7 +326,12 @@ const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => 
 
       {viewing ? <TagPropertiesPanel tag={viewing} onClose={() => setViewing(null)} /> : null}
       {editing ? (
-        <TagSaveDialog organizationId={organizationId} tag={editing} onClose={() => setEditing(null)} onSaved={loadTags} />
+        <TagSaveDialog
+          organizationId={organizationId}
+          tag={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => void invalidate.tags()}
+        />
       ) : null}
       <ConfirmDialog
         open={deleting !== null}

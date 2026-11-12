@@ -1,7 +1,7 @@
 'use client'
 
 import { Copy, Download, Info, Pencil, PencilLine, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { Form, Tag } from '@docrouter/sdk'
@@ -26,6 +26,7 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useDebounced } from '@/lib/useDebounced'
 import { shortName } from '@/lib/shortName'
+import { useInvalidateOrgLists, useOrgForms, useOrgTags } from '@/api/orgQueries'
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api'
 import { formatLocalDate } from '@/utils/date'
 import { useOrgCapability } from '@/hooks/useOrgPermissions'
@@ -158,10 +159,6 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const { hasCapability: canConfigWrite } = useOrgCapability(organizationId, CAP_CONFIG_WRITE)
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
 
-  const [forms, setForms] = useState<Form[]>([])
-  const [loadError, setLoadError] = useState<unknown>(null)
-  const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState(0)
   const [pagination, setPagination] = useState<PaginationModel>({ page: 0, pageSize: 25 })
   const [sortModel, setSortModel] = useState<SortModel>([{ field: 'created_at', sort: 'desc' }])
   const [filters, setFilters] = useState<FilterItem[]>([])
@@ -169,8 +166,17 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [search, setSearch] = useState('')
   const nameSearch = useDebounced(search.trim())
   const activeFilters = filters.filter(isActiveFilter)
-
-  const [availableTags, setAvailableTags] = useState<Tag[]>([])
+  const sortForApi = sortModel.filter((s) => !NON_SORT_FIELDS.has(s.field))
+  const formsQuery = useOrgForms(organizationId, {
+    skip: pagination.page * pagination.pageSize,
+    limit: pagination.pageSize,
+    name_search: nameSearch || undefined,
+    sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+    filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
+  })
+  const tagsQuery = useOrgTags(organizationId, { skip: 0, limit: 100 })
+  const invalidate = useInvalidateOrgLists(organizationId)
+  const availableTags = tagsQuery.data?.tags ?? []
   const tagsById = useMemo(() => new Map(availableTags.map((t) => [t.id, t])), [availableTags])
 
   const [viewing, setViewing] = useState<FormRow | null>(null)
@@ -178,35 +184,6 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [deleting, setDeleting] = useState<Form | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<unknown>(null)
-
-  const loadForms = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const sortForApi = sortModel.filter((s) => !NON_SORT_FIELDS.has(s.field))
-      const response = await docRouterOrgApi.listForms({
-        skip: pagination.page * pagination.pageSize,
-        limit: pagination.pageSize,
-        name_search: nameSearch || undefined,
-        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
-        filters: activeFilters.length ? jsonStringifyForQuery({ items: activeFilters }) : undefined,
-      })
-      setForms(response.forms)
-      setTotal(response.total_count ?? response.forms.length)
-    } catch (error) {
-      setLoadError(error)
-    } finally {
-      setLoading(false)
-    }
-  }, [docRouterOrgApi, pagination, nameSearch, sortModel, activeFilters])
-
-  useEffect(() => {
-    void loadForms()
-  }, [loadForms])
-
-  useEffect(() => {
-    void docRouterOrgApi.listTags({ limit: 100 }).then((res) => setAvailableTags(res.tags))
-  }, [docRouterOrgApi])
 
   const editPath = (form: Form) => `/orgs/${organizationId}/forms/${form.form_revid}`
 
@@ -219,7 +196,7 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     } else {
       await docRouterOrgApi.updateForm({ formId: form.form_id, form: formConfig })
     }
-    await loadForms()
+    await invalidate.forms()
   }
 
   const handleDownload = (form: Form) => {
@@ -248,7 +225,7 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       await docRouterOrgApi.deleteForm({ formId: deleting.form_id })
       toast.success('Form deleted')
       setDeleting(null)
-      void loadForms()
+      void invalidate.forms()
     } catch (error) {
       setDeleteError(error)
     } finally {
@@ -256,11 +233,21 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     }
   }
 
-  const filterFields: FilterField[] = [
-    { field: 'name', label: 'Name', kind: 'text' },
-    { field: 'form_version', label: 'Version', kind: 'text' },
-    { field: 'created_at', label: 'Created', kind: 'date' },
-  ]
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      { field: 'name', label: 'Name', kind: 'text' as const },
+      { field: 'form_version', label: 'Version', kind: 'text' as const },
+      {
+        field: 'tag_ids',
+        label: 'Tags',
+        kind: 'tag' as const,
+        single: true,
+        options: availableTags.map((t) => ({ value: t.name, label: t.name })),
+      },
+      { field: 'created_at', label: 'Created', kind: 'date' as const },
+    ],
+    [availableTags],
+  )
 
   const columns: DataTableColumn<Form>[] = [
     {
@@ -367,17 +354,17 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
             }}
           />
         </div>
-        <ErrorAlert error={loadError} />
+        <ErrorAlert error={formsQuery.error} />
         <div className="h-150 min-h-[24rem]">
           <DataTable
             aria-label="Forms"
-            rows={forms}
+            rows={formsQuery.data?.forms ?? []}
             getRowId={(row) => row.form_revid}
             columns={withFilterFields(columns, filterFields)}
             activeFilterFields={activeFields(filters)}
             onFilterColumn={(field) => setFilterRequest({ field })}
-            rowCount={total}
-            loading={loading}
+            rowCount={formsQuery.data?.total_count ?? 0}
+            loading={formsQuery.isFetching}
             paginationModel={pagination}
             onPaginationModelChange={setPagination}
             sortModel={sortModel}
