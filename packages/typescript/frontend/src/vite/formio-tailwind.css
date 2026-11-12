@@ -1,4 +1,26 @@
-/* TW4: one entry so Formio `theme()` + `@apply` resolve via the app theme (see formio-tailwind.css in vite.config). */
 @reference '../styles.css';
 
-@import '@tsed/tailwind-formio/styles/index.css';
+/*
+ * Mirrors @tsed/tailwind-formio/styles/index.css. That file uses bare `@import "alert.css"`,
+ * which Tailwind 4 resolves as an npm package and fails, emitting nothing.
+ */
+@import '@tsed/tailwind-formio/styles/alert.css';
+@import '@tsed/tailwind-formio/styles/badge.css';
+@import '@tsed/tailwind-formio/styles/breadcrumb.css';
+@import '@tsed/tailwind-formio/styles/button.css';
+@import '@tsed/tailwind-formio/styles/card.css';
+@import '@tsed/tailwind-formio/styles/form.css';
+@import '@tsed/tailwind-formio/styles/choices.css';
+@import '@tsed/tailwind-formio/styles/input-group.css';
+@import '@tsed/tailwind-formio/styles/checkbox.css';
+@import '@tsed/tailwind-formio/styles/tooltip.css';
+@import '@tsed/tailwind-formio/styles/modal.css';
+@import '@tsed/tailwind-formio/styles/nav.css';
+@import '@tsed/tailwind-formio/styles/pagination.css';
+@import '@tsed/tailwind-formio/styles/progress.css';
+@import '@tsed/tailwind-formio/styles/list-group.css';
+@import '@tsed/tailwind-formio/styles/tables.css';
+@import '@tsed/tailwind-formio/styles/form-edit.css';
+@import '@tsed/tailwind-formio/styles/grid.css';
+@import '@tsed/tailwind-formio/styles/tabs.css';
+@import '@tsed/tailwind-formio/styles/fieldset.css';

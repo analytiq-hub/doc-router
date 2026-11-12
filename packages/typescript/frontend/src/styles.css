@@ -10,6 +10,8 @@
 /* Scan app sources (TW3 config `content` is ignored under @tailwindcss/vite). */
 @source '../index.html';
 @source './**/*.{ts,tsx,js,jsx}';
+/* Form.io builder templates ship class names only in @tsed/tailwind-formio EJS. */
+@source '../node_modules/@tsed/tailwind-formio/src/templates/tailwind/**/*.ejs.js';
 
 /*
  * Design tokens — doc-orchestrator ui.md §3 (doc-router legacy blues).

@@ -20,7 +20,7 @@ export default function FormEditPage() {
   }
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="p-4 max-w-[min(100%,72rem)] mx-auto w-full">
       <button
         type="button"
         onClick={() => router.push(`/orgs/${orgId}/forms`)}

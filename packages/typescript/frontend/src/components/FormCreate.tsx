@@ -392,7 +392,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
           <div className="space-y-4">
             {activeTab === 'builder' ? (
               // Form Builder Tab
-              <div className="border rounded-lg overflow-hidden bg-white">
+              <div className="border rounded-lg bg-white p-2">
                 <FormioBuilder
                   jsonFormio={JSON.stringify(currentForm.response_format.json_formio || [])}
                   onChange={(components) => {

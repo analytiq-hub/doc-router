@@ -32,34 +32,94 @@
   display: none !important;
 }
 
-/* Force the builder to be a horizontal flex container */
+/*
+ * Builder shell (@tsed/tailwind-formio builder/form.ejs): `formio builder grid … formbuilder`.
+ * TW4 may not emit template-only utilities — force a two-column flex row (legacy behavior).
+ */
+.formio-builder .formio.builder.formbuilder,
 .formio.builder.formbuilder {
   display: flex !important;
   flex-direction: row !important;
-  height: 100%;
+  flex-wrap: nowrap !important;
+  align-items: flex-start !important;
+  gap: 1rem !important;
+  width: 100% !important;
+  min-height: 28rem !important;
+  height: auto !important;
 }
 
-/* Sidebar: fixed width, scrollable if needed */
-.formio.builder.formbuilder .formcomponents {
-  min-width: 260px;
-  max-width: 320px;
-  flex: 0 0 260px;
-  margin-right: 1rem;
-  overflow-y: auto;
-  height: 100%;
+.formio-builder .formio.builder.formbuilder > .formcomponents,
+.formio.builder.formbuilder > .formcomponents {
+  flex: 0 0 260px !important;
+  width: 260px !important;
+  max-width: 320px !important;
+  min-width: 220px !important;
+  grid-column: unset !important;
+  overflow-y: auto !important;
 }
 
-/* Form area: take the rest of the space */
-.formio.builder.formbuilder .formarea {
-  flex: 1 1 0%;
-  min-width: 0;
-  overflow-y: auto;
-  height: 100%;
+.formio-builder .formio.builder.formbuilder > .formarea,
+.formio.builder.formbuilder > .formarea {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  width: auto !important;
+  grid-column: unset !important;
+  overflow-y: auto !important;
+}
+
+/* Undo shadcn/TW4 base border reset inside Formio (keeps field chrome readable). */
+.formio-builder,
+.formio-builder *,
+.formio-form,
+.formio-form *,
+.formio-dialog,
+.formio-dialog * {
+  border-color: revert-layer;
+  outline-color: revert-layer;
 }
 
 /* Form scaling factor - change this value to scale entire form */
 :root {
   --formio-scale: 0.8; /* 1.0 is original size */
+}
+
+/* Builder canvas: full size (scale rules target filled forms / PDF sidebar only). */
+.formio-builder,
+.formio.builder.formbuilder,
+.formio.builder.formbuilder .formarea,
+.formio.builder.formbuilder .formio-form {
+  --formio-scale: 1;
+}
+
+/*
+ * TW4 defines `.collapse { visibility: collapse }` (CSS visibility keyword).
+ * @tsed/formio builder accordions use Bootstrap's `.collapse` / `.collapse.show`.
+ */
+.formio-builder .collapse:not(.show),
+.formio.builder .collapse:not(.show),
+.formio-form .collapse:not(.show),
+.formio-dialog .collapse:not(.show) {
+  visibility: visible !important;
+  display: none !important;
+}
+
+.formio-builder .collapse.show,
+.formio.builder .collapse.show,
+.formio-form .collapse.show,
+.formio-dialog .collapse.show {
+  visibility: visible !important;
+  display: block !important;
+}
+
+.formio-builder .accordion .card,
+.formio.builder .accordion .card {
+  overflow: hidden;
+}
+
+.formio-builder .builder-sidebar_search,
+.formio.builder .builder-sidebar_search {
+  width: 100%;
+  margin-bottom: 0.5rem;
 }
 
 /* Form Renderer Styles - Scalable Layout */
@@ -388,6 +448,7 @@
 
 /* Ensure Tailwind grid classes work properly within Formio contexts */
 .formio-builder [class*="grid-cols-"],
+.formio.builder [class*="grid-cols-"],
 .formio-form [class*="grid-cols-"],
 .formio-dialog [class*="grid-cols-"] {
   display: grid !important;
@@ -395,30 +456,37 @@
 
 /* Generate grid template columns for common patterns - Formio scoped */
 .formio-builder .grid-cols-1,
+.formio.builder .grid-cols-1,
 .formio-form .grid-cols-1,
 .formio-dialog .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
 
 .formio-builder .grid-cols-2,
+.formio.builder .grid-cols-2,
 .formio-form .grid-cols-2,
 .formio-dialog .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 
 .formio-builder .grid-cols-3,
+.formio.builder .grid-cols-3,
 .formio-form .grid-cols-3,
 .formio-dialog .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
 
 .formio-builder .grid-cols-4,
+.formio.builder .grid-cols-4,
 .formio-form .grid-cols-4,
 .formio-dialog .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
 
 .formio-builder .grid-cols-5,
+.formio.builder .grid-cols-5,
 .formio-form .grid-cols-5,
 .formio-dialog .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
 
 .formio-builder .grid-cols-6,
+.formio.builder .grid-cols-6,
 .formio-form .grid-cols-6,
 .formio-dialog .grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
 
 .formio-builder .grid-cols-12,
+.formio.builder .grid-cols-12,
 .formio-form .grid-cols-12,
 .formio-dialog .grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)) !important; }
 

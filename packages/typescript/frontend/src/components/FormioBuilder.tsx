@@ -167,7 +167,12 @@ const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange, rea
     };
   }, [jsonFormio, readOnly]);
 
-  return <div ref={builderRef} />;
+  return (
+    <div
+      ref={builderRef}
+      className="formio-builder min-h-[32rem] w-full"
+    />
+  );
 };
 
 export default FormioBuilder;

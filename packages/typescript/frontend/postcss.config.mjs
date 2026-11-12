@@ -1,6 +1,4 @@
-/** Tailwind 4 via PostCSS (Vite processes all CSS, including Formio `@apply` sheets). */
+/** Tailwind runs via `@tailwindcss/vite` (see vite.config.ts), which resolves `@import` itself. */
 export default {
-  plugins: {
-    '@tailwindcss/postcss': {},
-  },
+  plugins: {},
 };

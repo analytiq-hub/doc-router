@@ -41,16 +41,50 @@ const TW4_RING_OPACITY = [
   [/ring ring-primary-50 ring-opacity-50/g, 'ring-2 ring-primary-50/50'],
 ];
 
+/**
+ * The @tsed sheets are SCSS sources with a .css extension (`&__suffix` nesting, `@include`, `$vars`).
+ * TW3 flattened them via `tailwindcss/nesting`; TW4 does not, so flatten them here.
+ */
+function flattenScssSyntax(sheet, from) {
+  const postcss = require('postcss');
+  const nested = require('postcss-nested').default;
+  const stripScss = {
+    postcssPlugin: 'strip-formio-scss',
+    Once(root) {
+      root.walkAtRules('include', (rule) => {
+        if (rule.nodes && rule.params.trim() === 'hover') {
+          rule.replaceWith(postcss.rule({ selector: '&:hover', nodes: rule.nodes }));
+        } else if (rule.nodes && rule.params.trim() === 'media-breakpoint-up(sm)') {
+          rule.replaceWith(postcss.atRule({ name: 'media', params: '(min-width: 640px)', nodes: rule.nodes }));
+        } else {
+          rule.remove();
+        }
+      });
+      root.walkDecls((decl) => {
+        if (decl.value.includes('$')) decl.remove();
+      });
+      // form.css styles bare `hr` globally (mx-20), which leaks into the app shell.
+      root.walkRules((rule) => {
+        if (rule.selectors.includes('hr') && rule.selectors.length > 1) {
+          rule.selectors = rule.selectors.filter((s) => s !== 'hr');
+        }
+      });
+    },
+  };
+  return postcss([stripScss, nested]).process(sheet, { from }).css;
+}
+
 function patchFormioTailwindSheets() {
   if (!fs.existsSync(formioStylesDir)) return;
   for (const name of fs.readdirSync(formioStylesDir)) {
-    if (!name.endsWith('.css')) continue;
+    if (!name.endsWith('.css') || name === 'index.css') continue;
     const file = path.join(formioStylesDir, name);
     let sheet = fs.readFileSync(file, 'utf8');
     let next = sheet.replace(/\/\*#\s*sourceMappingURL=[^*]+\*\//g, '');
     for (const [from, to] of TW4_RING_OPACITY) {
       next = next.replace(from, to);
     }
+    next = flattenScssSyntax(next, file);
     if (next !== sheet) {
       fs.writeFileSync(file, next);
       console.log(`patch-formio-css: patched ${name} for Tailwind 4`);
