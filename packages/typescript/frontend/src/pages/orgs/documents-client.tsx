@@ -2,7 +2,6 @@
 
 import OrgDocumentList from '@/components/OrgDocumentList';
 import DocumentUpload from '@/components/DocumentUpload';
-import { PageHeader } from '@/components/PageHeader';
 import { useSearchParams, useRouter } from '@/utils/appRouter';
 import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
@@ -66,13 +65,7 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
 
       <div role="tabpanel" hidden={tab !== 'documents'}>
         {tab === 'documents' && (
-          <>
-            <PageHeader
-              title="Documents"
-              subtitle="Browse, filter, and run actions on organization documents."
-            />
-            <OrgDocumentList organizationId={organizationId} initialCaseIdFilter={caseIdFromQuery} />
-          </>
+          <OrgDocumentList organizationId={organizationId} initialCaseIdFilter={caseIdFromQuery} />
         )}
       </div>
       <div role="tabpanel" hidden={tab !== 'upload' || !canUpload}>

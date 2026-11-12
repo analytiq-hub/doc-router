@@ -352,9 +352,21 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
     },
   ]
 
+  const uploadTabHref = `/orgs/${organizationId}/docs?tab=upload${
+    caseIdDebounced ? `&case_id=${encodeURIComponent(caseIdDebounced)}` : ''
+  }`
+
   return (
     <>
       <div className="flex flex-col gap-4">
+        <div className="rounded-lg border border-primary/25 bg-primary-soft p-4 text-sm text-foreground">
+          Welcome! Upload your documents to begin transforming unstructured data into structured insights. If no documents
+          are visible,{' '}
+          <Link to={uploadTabHref} className="font-medium text-primary hover:underline">
+            click here
+          </Link>{' '}
+          or use the tab above to upload and start extracting key data fields effortlessly.
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <SearchInput
             value={search}
@@ -362,7 +374,7 @@ export default function OrgDocumentList({ organizationId, initialCaseIdFilter }:
               setSearch(value)
               setPagination((p) => ({ ...p, page: 0 }))
             }}
-            placeholder="Search document names"
+            placeholder="Search documents..."
           />
           <Input
             className="h-9 w-64 max-w-full shrink-0"
