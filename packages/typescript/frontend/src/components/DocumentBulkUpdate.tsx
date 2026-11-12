@@ -546,7 +546,7 @@ export function DocumentBulkUpdate({
         <DialogContent
           showCloseButton
           className={cn(
-            'top-0 right-0 left-auto flex h-full max-h-full w-full max-w-4xl translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-l p-0 sm:max-w-4xl',
+            'top-4 right-4 bottom-4 left-auto flex w-[min(calc(100vw-2rem),42rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-xl p-0 sm:max-w-none',
           )}
         >
           <DialogHeader className="border-b px-4 py-4 sm:px-6">
