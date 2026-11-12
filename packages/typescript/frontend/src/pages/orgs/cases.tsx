@@ -1,69 +1,59 @@
-'use client';
+'use client'
 
-import CaseList from '@/components/CaseList';
-import { useRouteParams } from '@/utils/useRouteParams';
-import CaseCreate from '@/components/CaseCreate';
-import { useSearchParams, useRouter } from '@/utils/appRouter';
-import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions';
-import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
+import { ArrowLeft, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
+
+import CaseList from '@/components/CaseList'
+import { PageHeader } from '@/components/PageHeader'
+import { useRouteParams } from '@/utils/useRouteParams'
+import CaseCreate from '@/components/CaseCreate'
+import { useSearchParams, useRouter } from '@/utils/appRouter'
+import { useOrgCapability, useOrgCapabilityTabGuard } from '@/hooks/useOrgPermissions'
+import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities'
+import { Button } from '@/components/ui/button'
 
 export default function CasesPage(props: { params: Promise<{ organizationId: string }> }) {
-  const { organizationId } = useRouteParams(props);
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const tab = searchParams.get('tab') || 'cases';
-  const listPath = `/orgs/${organizationId}/cases`;
+  const { organizationId } = useRouteParams(props)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const tab = searchParams.get('tab') || 'cases'
+  const listPath = `/orgs/${organizationId}/cases`
   const { hasCapability: canWriteDocuments, loading: permissionsLoading } = useOrgCapability(
     organizationId,
     CAP_DOCUMENTS_WRITE,
-  );
-  useOrgCapabilityTabGuard(organizationId, tab, 'case-create', listPath, CAP_DOCUMENTS_WRITE);
+  )
+  useOrgCapabilityTabGuard(organizationId, tab, 'case-create', listPath, CAP_DOCUMENTS_WRITE)
 
-  const handleTabChange = (newValue: string) => {
-    if (newValue === 'case-create' && !canWriteDocuments) {
-      return;
-    }
-    router.push(`${listPath}?tab=${newValue}`);
-  };
+  if (tab === 'case-create' && canWriteDocuments) {
+    return (
+      <div className="mx-auto max-w-6xl p-4">
+        <div className="mb-6">
+          <Button variant="ghost" render={<Link to={listPath} />}>
+            <ArrowLeft data-icon="inline-start" />
+            Back to cases
+          </Button>
+        </div>
+        <PageHeader title="Create case" subtitle="Group documents for a claim, file, or project." />
+        <CaseCreate organizationId={organizationId} />
+      </div>
+    )
+  }
 
   return (
-    <div className="p-4">
-      <div className="border-b border-gray-200 mb-6">
-        <div className="flex gap-8">
-          <button
-            onClick={() => handleTabChange('cases')}
-            className={`pb-4 px-1 relative font-semibold text-base ${
-              tab === 'cases'
-                ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Cases
-          </button>
-          {!permissionsLoading && canWriteDocuments && (
-            <button
-              onClick={() => handleTabChange('case-create')}
-              className={`pb-4 px-1 relative font-semibold text-base ${
-                tab === 'case-create'
-                  ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Create case
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="max-w-6xl mx-auto">
-        <div role="tabpanel" hidden={tab !== 'cases'}>
-          {tab === 'cases' && <CaseList organizationId={organizationId} />}
-        </div>
-        <div role="tabpanel" hidden={tab !== 'case-create'}>
-          {tab === 'case-create' && canWriteDocuments && (
-            <CaseCreate organizationId={organizationId} />
-          )}
-        </div>
-      </div>
+    <div className="mx-auto max-w-6xl p-4">
+      <PageHeader
+        title="Cases"
+        subtitle="A case groups the documents for one claim, file, or project."
+        actions={
+          !permissionsLoading && canWriteDocuments ? (
+            <Button onClick={() => router.push(`${listPath}?tab=case-create`)} data-tour="case-create">
+              <Plus data-icon="inline-start" />
+              New case
+            </Button>
+          ) : null
+        }
+      />
+      <CaseList organizationId={organizationId} />
     </div>
-  );
+  )
 }

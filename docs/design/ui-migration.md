@@ -93,6 +93,8 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 **Forms (`frontend-shadcn`):** ✅ `DataTable` + `TagCell`; rename/clone with name uniqueness; create stays `?tab=form-create` (Form.io builder).
 
+**Cases (`frontend-shadcn`):** ✅ `DataTable` + `FilterBuilder` + React Query (`useOrgCases`); `TagCell`; metadata search field; `PageHeader`; create stays `?tab=case-create`. Delete dialog still MUI (Phase 4/6).
+
 Per entity (start with **Tags** or **Prompts**):
 
 1. List: MUI Data Grid → orchestrator-style **DataTable** (TanStack Table + shadcn table)

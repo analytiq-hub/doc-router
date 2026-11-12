@@ -15,6 +15,9 @@ export const orgKeys = {
   schemas: (organizationId: string) => ['org', organizationId, 'schemas'] as const,
   schemaList: (organizationId: string, params: object) =>
     [...orgKeys.schemas(organizationId), 'list', params] as const,
+  cases: (organizationId: string) => ['org', organizationId, 'cases'] as const,
+  caseList: (organizationId: string, params: object) =>
+    [...orgKeys.cases(organizationId), 'list', params] as const,
 }
 
 export type OrgPromptListParams = {
@@ -45,6 +48,16 @@ export type OrgTagListParams = {
   skip: number
   limit: number
   nameSearch?: string
+  sort?: string
+  filters?: string
+}
+
+export type OrgCaseListParams = {
+  skip: number
+  limit: number
+  caseIdSearch?: string
+  tagIds?: string
+  metadataSearch?: string
   sort?: string
   filters?: string
 }
@@ -84,6 +97,14 @@ export function useOrgTags(organizationId: string, params: OrgTagListParams, ena
   })
 }
 
+export function useOrgCases(organizationId: string, params: OrgCaseListParams) {
+  return useQuery({
+    queryKey: orgKeys.caseList(organizationId, params),
+    queryFn: () => orgApi(organizationId).listCases(params),
+    placeholderData: (previous) => previous,
+  })
+}
+
 export function useInvalidateOrgLists(organizationId: string) {
   const client = useQueryClient()
   return {
@@ -91,5 +112,6 @@ export function useInvalidateOrgLists(organizationId: string) {
     forms: () => client.invalidateQueries({ queryKey: orgKeys.forms(organizationId) }),
     schemas: () => client.invalidateQueries({ queryKey: orgKeys.schemas(organizationId) }),
     tags: () => client.invalidateQueries({ queryKey: orgKeys.tags(organizationId) }),
+    cases: () => client.invalidateQueries({ queryKey: orgKeys.cases(organizationId) }),
   }
 }
