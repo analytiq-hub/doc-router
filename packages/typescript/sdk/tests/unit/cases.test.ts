@@ -47,7 +47,7 @@ describe('Cases API unit tests', () => {
   test('getCase encodes case id in path', async () => {
     const mockGet = jest.fn().mockResolvedValue({
       case_id: 'A:B',
-      display_name: 'A:B',
+      name: 'A:B',
       tag_ids: [],
       metadata: {},
       document_count: 0,
@@ -65,7 +65,7 @@ describe('Cases API unit tests', () => {
   test('createCase posts body', async () => {
     const mockPost = jest.fn().mockResolvedValue({
       case_id: 'CLM-1',
-      display_name: 'CLM-1',
+      name: 'CLM-1',
       tag_ids: [],
       metadata: {},
       document_count: 0,
@@ -77,11 +77,10 @@ describe('Cases API unit tests', () => {
     (client as unknown as { http: { post: jest.Mock } }).http.post = mockPost;
 
     await client.createCase({
-      body: { case_id: 'CLM-1', display_name: 'Claim', metadata: { region: 'US' } },
+      body: { name: 'Claim', metadata: { region: 'US' } },
     });
     expect(mockPost).toHaveBeenCalledWith('/v0/orgs/org-123/cases', {
-      case_id: 'CLM-1',
-      display_name: 'Claim',
+      name: 'Claim',
       metadata: { region: 'US' },
     });
   });
@@ -93,10 +92,10 @@ describe('Cases API unit tests', () => {
 
     await client.updateCase({
       caseId: 'X/Y',
-      body: { display_name: 'Updated' },
+      body: { name: 'Updated' },
     });
     expect(mockPut).toHaveBeenCalledWith('/v0/orgs/org-123/cases/X%2FY', {
-      display_name: 'Updated',
+      name: 'Updated',
     });
   });
 
@@ -119,11 +118,9 @@ describe('Cases API unit tests', () => {
     await client.assignDocumentsToCase({
       caseId: 'CLM-1',
       documentIds: ['d1', 'd2'],
-      createCaseIfMissing: true,
     });
     expect(mockPost).toHaveBeenCalledWith('/v0/orgs/org-123/cases/CLM-1/documents', {
       document_ids: ['d1', 'd2'],
-      create_case_if_missing: true,
     });
   });
 
@@ -140,7 +137,7 @@ describe('Cases API unit tests', () => {
 });
 
 describe('Documents case fields unit tests', () => {
-  test('uploadDocuments includes case_id and create_case_if_missing', async () => {
+  test('uploadDocuments includes case_id', async () => {
     const mockPost = jest.fn().mockResolvedValue({ documents: [] });
     const client = orgClient();
     (client as unknown as { http: { post: jest.Mock } }).http.post = mockPost;
@@ -151,7 +148,6 @@ describe('Documents case fields unit tests', () => {
           name: 'a.pdf',
           content: 'Ym9keQ==',
           case_id: 'CLM-1',
-          create_case_if_missing: true,
         },
       ],
     });
@@ -162,7 +158,6 @@ describe('Documents case fields unit tests', () => {
           name: 'a.pdf',
           content: 'Ym9keQ==',
           case_id: 'CLM-1',
-          create_case_if_missing: true,
         },
       ],
     });
@@ -189,12 +184,10 @@ describe('Documents case fields unit tests', () => {
       name: 'a.pdf',
       file,
       case_id: 'CLM-2',
-      create_case_if_missing: true,
     });
 
     const [, form] = mockPostFormData.mock.calls[0] as [string, FormData];
     expect(form.get('case_id')).toBe('CLM-2');
-    expect(form.get('create_case_if_missing')).toBe('true');
   });
 
   test('listDocuments passes case_id query param', async () => {
@@ -208,7 +201,7 @@ describe('Documents case fields unit tests', () => {
     });
   });
 
-  test('updateDocument sends case_id null and create_case_if_missing', async () => {
+  test('updateDocument sends case_id null', async () => {
     const mockPut = jest.fn().mockResolvedValue({});
     const client = orgClient();
     (client as unknown as { http: { put: jest.Mock } }).http.put = mockPut;
@@ -216,11 +209,9 @@ describe('Documents case fields unit tests', () => {
     await client.updateDocument({
       documentId: 'doc-1',
       caseId: null,
-      createCaseIfMissing: false,
     });
     expect(mockPut).toHaveBeenCalledWith('/v0/orgs/org-123/documents/doc-1', {
       case_id: null,
-      create_case_if_missing: false,
     });
   });
 });

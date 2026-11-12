@@ -83,15 +83,11 @@ class CasesAPI:
         organization_id: str,
         case_id: str,
         document_ids: List[str],
-        create_case_if_missing: bool = False,
     ) -> Dict[str, Any]:
         return self.client.request(
             "POST",
             f"/v0/orgs/{organization_id}/cases/{case_id}/documents",
-            json={
-                "document_ids": document_ids,
-                "create_case_if_missing": create_case_if_missing,
-            },
+            json={"document_ids": document_ids},
         )
 
     def remove_document(

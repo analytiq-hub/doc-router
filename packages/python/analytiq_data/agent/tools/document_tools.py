@@ -131,8 +131,7 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
     tag_ids = params.get("tag_ids")
     metadata = params.get("metadata")
     case_assign = "case_id" in params
-    case_id = params.get("case_id") if case_assign else None
-    create_case_if_missing = bool(params.get("create_case_if_missing", False))
+    case_id = params.get("case_id") if "case_id" in params else None
 
     db = _db(context)
     document = await db.docs.find_one(
@@ -180,12 +179,18 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
                 aq, org_id, [document_id], set_fields=update_dict or None
             )
         elif case_assign:
+            if case_id is None or not str(case_id).strip():
+                return {"error": "case_id is required when assigning a case"}
+            resolved = await ad.common.resolve_case_for_assignment(
+                aq,
+                org_id,
+                case_id=str(case_id).strip(),
+            )
             await ad.common.assign_documents_to_case(
                 aq,
                 org_id,
                 [document_id],
-                str(case_id),
-                create_case_if_missing=create_case_if_missing,
+                resolved,
                 created_by=user_id,
                 set_fields=update_dict or None,
             )

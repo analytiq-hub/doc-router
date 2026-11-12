@@ -13,9 +13,10 @@ Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the cas
 ## Decisions
 
 - **Case row + `docs.case_id`.** One case per document in v1 (nullable). Many-to-many deferred.
-- **Case id:** client-supplied or auto `DR-{ulid}`; unique per org; pattern `^[A-Za-z0-9._:-]{1,128}$` (URL-safe). Case-sensitive.
+- **Case id:** server-assigned **24-hex ObjectId string** (same format as `document_id`). **Case name** (`name` on the case JSON) is user-supplied, required on create, may repeat (orchestrator-aligned).
+- **Migration:** legacy client-chosen `case_id` values become `name`; `display_name` is dropped; documents, `case_llm_runs`, and queue payloads are re-keyed (`MigrateCaseServerIdsMigration`).
 - **Tags and metadata** on cases, same as documents (`tag_ids`, `Dict[str, str]`, trim/empty rules). No server-side case-to-case links—metadata values are plain strings (e.g. `policy_number=POL-998` is not validated as another case id).
-- **Unknown case id on assign fails by default.** `create_case_if_missing` defaults `false` (upload, PUT, bulk, assign API). Flow assign node defaults `true` (§5).
+- **Document assign is by `case_id` only** (names are not unique). Unknown case id on assign fails; create cases via the cases API first.
 - **Delete case:** clear `case_id` on docs by default; optional org **admin** **cascade** deletes member documents via `delete_doc` (§2.4); see [`permissions.md`](permissions.md).
 - **Phase 2:** case prompt runs; **retire** prompt `peer_match_keys` (removed from API; legacy request fields ignored—§4.1).
 - **OCR re-run:** does **not** require refreshing stored LLM results (per-document or case-scoped). Re-run case or document prompts explicitly when new OCR text should be extracted.
@@ -27,8 +28,8 @@ Document **tags** still drive OCR/LLM/flows. Case tags/metadata classify the cas
 ```json
 {
   "organization_id": "org1",
-  "case_id": "CLM-123",
-  "display_name": "Smith — auto loss",
+  "case_id": "507f1f77bcf86cd799439011",
+  "name": "CLM-123",
   "tag_ids": ["..."],
   "metadata": { "claim_date": "2026-09-14", "policy_number": "POL-998" },
   "deleting_at": null,
@@ -73,11 +74,11 @@ Module `analytiq_data/common/cases.py` (eager import in `common/__init__.py`).
 |--------|------|--------|
 | GET/POST | `/v0/orgs/{org}/cases` | Create; duplicate `case_id` → `409` |
 | GET/PUT/DELETE | `/v0/orgs/{org}/cases/{case_id}` | DELETE `?cascade=` — default `200`; `cascade=true` → **`202`** (see §2.3) |
-| GET/POST/DELETE | `.../cases/{case_id}/documents` | Assign `{ document_ids, create_case_if_missing? }`; remove one doc |
+| GET/POST/DELETE | `.../cases/{case_id}/documents` | Assign `{ document_ids }`; remove one doc |
 
 Phase 2: `.../runs`, `.../results`.
 
-**Documents API:** filter/bulk by `case_id`. Upload: optional `case_id` + `create_case_if_missing`. **`PUT /documents/{id}`:** omitted `case_id` → unchanged; `null` → remove; string → assign (use Pydantic sentinel so omitted ≠ null). Bulk: same semantics.
+**Documents API:** filter/bulk by `case_id`. Upload: optional `case_id` (must already exist). **`PUT /documents/{id}`:** omitted `case_id` → unchanged; `null` → remove; string → assign (use Pydantic sentinel so omitted ≠ null). Bulk: same semantics.
 
 ### 2.2 Assign, remove, concurrency
 

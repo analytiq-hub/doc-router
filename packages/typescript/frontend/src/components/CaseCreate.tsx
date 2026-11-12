@@ -21,8 +21,8 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const { data: availableTags = [] } = useOrgAllTags(organizationId);
-  const [caseIdInput, setCaseIdInput] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [caseIdReadonly, setCaseIdReadonly] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([]);
 
@@ -32,8 +32,8 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
       setIsLoading(true);
       try {
         const c = await docRouterOrgApi.getCase({ caseId: decodeURIComponent(editCaseId) });
-        setCaseIdInput(c.case_id);
-        setDisplayName(c.display_name);
+        setCaseIdReadonly(c.case_id);
+        setDisplayName(c.name);
         setSelectedTagIds(c.tag_ids || []);
         setMetadataFields(
           Object.entries(c.metadata || {}).map(([key, value], index) => ({
@@ -70,7 +70,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
         await docRouterOrgApi.updateCase({
           caseId: decodeURIComponent(editCaseId),
           body: {
-            display_name: displayName.trim() || undefined,
+            name: displayName.trim() || undefined,
             tag_ids: selectedTagIds,
             metadata,
           },
@@ -78,10 +78,15 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
         toast.success('Case updated');
         router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(decodeURIComponent(editCaseId))}`);
       } else {
+        const name = displayName.trim();
+        if (!name) {
+          toast.error('Case name is required');
+          setIsLoading(false);
+          return;
+        }
         const created = await docRouterOrgApi.createCase({
           body: {
-            case_id: caseIdInput.trim() || undefined,
-            display_name: displayName.trim() || undefined,
+            name,
             tag_ids: selectedTagIds,
             metadata,
           },
@@ -104,26 +109,23 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
           title="About cases"
           content={
             <p>
-              Cases group documents under a stable Case ID (similar to case collation in capture
-              products). Assign documents on upload or from the document list.
+              Cases group documents under a server-assigned id with a name you choose (names may
+              repeat). Assign documents on upload or from the document list.
             </p>
           }
         />
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Field>
-            <FieldLabel htmlFor="case-id">Case ID</FieldLabel>
-            <FieldContent>
-              <Input
-                id="case-id"
-                value={caseIdInput}
-                onChange={(e) => setCaseIdInput(e.target.value)}
-                disabled={isLoading || Boolean(editCaseId)}
-                placeholder="CLM-123"
-              />
-            </FieldContent>
-          </Field>
+          {editCaseId ? (
+            <Field>
+              <FieldLabel htmlFor="case-id">Case ID</FieldLabel>
+              <FieldContent>
+                <Input id="case-id" value={caseIdReadonly} disabled className="font-mono text-xs" />
+              </FieldContent>
+              <FieldDescription>Server-assigned; used in URLs and document assignment.</FieldDescription>
+            </Field>
+          ) : null}
           <Field>
             <FieldLabel htmlFor="case-name">Case name</FieldLabel>
             <FieldContent>
@@ -132,7 +134,8 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 disabled={isLoading}
-                placeholder="Optional; lists use Case ID when empty"
+                placeholder="e.g. Smith — auto loss"
+                required
               />
             </FieldContent>
           </Field>

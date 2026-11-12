@@ -40,7 +40,6 @@ class DocumentUpload(BaseModel):
     tag_ids: List[str] = []  # Optional list of tag IDs
     metadata: Optional[Dict[str, str]] = {}  # Optional key-value metadata pairs
     case_id: Optional[str] = None
-    create_case_if_missing: bool = False
 
 class DocumentsUpload(BaseModel):
     documents: List[DocumentUpload]
@@ -93,11 +92,7 @@ class DocumentUpdate(BaseModel):
     )
     case_id: Optional[str] = Field(
         default=None,
-        description="Assign to case, or null to remove from case when this field is sent"
-    )
-    create_case_if_missing: bool = Field(
-        default=False,
-        description="When assigning via case_id, create the case if it does not exist"
+        description="Assign to case by server case id, or null to remove from case when this field is sent",
     )
 
 def decode_base64_content(content: str) -> bytes:
@@ -147,19 +142,17 @@ async def _check_upload_case(
     analytiq_client,
     organization_id: str,
     case_id: Optional[str],
-    create_case_if_missing: bool,
 ) -> Optional[str]:
-    """
-    Validate an upload's case before anything is stored. Returns the normalized case id.
-
-    ``None`` means no case. An empty string is rejected like any other invalid id.
-    """
-    if case_id is None:
+    """Validate an upload's case before anything is stored. Returns the normalized case id."""
+    cid = case_id.strip() if isinstance(case_id, str) and case_id.strip() else None
+    if cid is None:
         return None
     try:
-        if create_case_if_missing:
-            return ad.common.validate_case_id(case_id)
-        return await ad.common.check_case_assignable(analytiq_client, organization_id, case_id)
+        return await ad.common.resolve_case_for_assignment(
+            analytiq_client,
+            organization_id,
+            case_id=cid,
+        )
     except (ValueError, LookupError) as e:
         raise case_error_to_http(e)
 
@@ -174,7 +167,6 @@ async def _save_single_uploaded_document(
     metadata: Optional[Dict[str, str]],
     *,
     case_id: Optional[str] = None,
-    create_case_if_missing: bool = False,
     upload_policy_cache: Optional[Dict[tuple, Any]] = None,
 ) -> Dict[str, Any]:
     """
@@ -244,7 +236,6 @@ async def _save_single_uploaded_document(
                 organization_id,
                 [document_id],
                 case_id,
-                create_case_if_missing=create_case_if_missing,
                 created_by=current_user.user_id,
             )
         except (ValueError, LookupError) as e:
@@ -323,7 +314,9 @@ async def upload_document(
             raise HTTPException(status_code=400, detail=str(e))
     case_ids = [
         await _check_upload_case(
-            analytiq_client, organization_id, document.case_id, document.create_case_if_missing
+            analytiq_client,
+            organization_id,
+            document.case_id,
         )
         for document in documents_upload.documents
     ]
@@ -341,7 +334,6 @@ async def upload_document(
                 document.tag_ids,
                 document.metadata,
                 case_id=case_id,
-                create_case_if_missing=document.create_case_if_missing,
                 upload_policy_cache=upload_policy_cache,
             )
         )
@@ -356,10 +348,7 @@ async def upload_document_multipart(
     name: Annotated[Optional[str], Form(description="Override filename.")] = None,
     tag_ids: Annotated[Optional[str], Form(description='JSON array of tag IDs, e.g. ["id1","id2"].')] = None,
     metadata: Annotated[Optional[str], Form(description='JSON object of string key-value pairs.')] = None,
-    case_id: Annotated[Optional[str], Form(description="Assign uploaded document to this case.")] = None,
-    create_case_if_missing: Annotated[
-        bool, Form(description="Create case if case_id is unknown.")
-    ] = False,
+    case_id: Annotated[Optional[str], Form(description="Assign by server case id.")] = None,
     current_user: User = Depends(require_org_documents_write),
 ):
     """Upload a single document as raw multipart/form-data (no base64)."""
@@ -392,7 +381,9 @@ async def upload_document_multipart(
     if parsed_tag_ids:
         await _validate_tag_ids_for_org(organization_id, set(parsed_tag_ids), db)
     case_id = await _check_upload_case(
-        analytiq_client, organization_id, case_id, create_case_if_missing
+        analytiq_client,
+        organization_id,
+        case_id,
     )
 
     logger.info(f"upload_document_multipart(): {organization_id}: {file_name}")
@@ -407,7 +398,6 @@ async def upload_document_multipart(
         parsed_tag_ids,
         parsed_metadata,
         case_id=case_id,
-        create_case_if_missing=create_case_if_missing,
     )
     return {"document": doc}
 
@@ -470,17 +460,24 @@ async def update_document(
     # When the case changes, the other fields are written in the same transaction as
     # the case assignment, so a case error leaves the document untouched.
     try:
-        if case_assign and update.case_id is None:
+        if case_assign and "case_id" in fields_set and update.case_id is None:
             await ad.common.remove_documents_from_case(
                 analytiq_client, organization_id, [document_id], set_fields=update_dict
             )
         elif case_assign:
+            cid = update.case_id
+            if not isinstance(cid, str) or not cid.strip():
+                raise HTTPException(status_code=400, detail="case_id cannot be empty")
+            resolved = await ad.common.resolve_case_for_assignment(
+                analytiq_client,
+                organization_id,
+                case_id=cid.strip(),
+            )
             await ad.common.assign_documents_to_case(
                 analytiq_client,
                 organization_id,
                 [document_id],
-                update.case_id,
-                create_case_if_missing=update.create_case_if_missing,
+                resolved,
                 created_by=current_user.user_id,
                 set_fields=update_dict,
             )

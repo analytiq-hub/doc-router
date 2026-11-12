@@ -3587,6 +3587,96 @@ class UnsetLegacyMemberRoleMigration(Migration):
         return True
 
 
+class MigrateCaseServerIdsMigration(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Re-key legacy case ids to 24-hex ObjectId strings; old case_id becomes name; drop display_name"
+        )
+
+    async def up(self, db) -> bool:
+        from bson import ObjectId
+
+        import analytiq_data as ad
+
+        def legacy_dr_object_id(case_id: str) -> str | None:
+            """Old auto ids were DR-{24-hex}; normalize to the same format as document ids."""
+            if not case_id.startswith("DR-") or len(case_id) != 27:
+                return None
+            tail = case_id[3:]
+            return tail if ad.common.is_valid_object_id(tail) else None
+
+        try:
+            rekeyed = 0
+            renamed = 0
+            id_map: dict[tuple[str, str], str] = {}
+
+            async for row in db.cases.find({}):
+                org = row.get("organization_id")
+                old_id = row.get("case_id")
+                if not org or not old_id:
+                    continue
+                if ad.common.is_valid_object_id(old_id):
+                    continue
+                dr_hex = legacy_dr_object_id(old_id)
+                if dr_hex:
+                    new_id = dr_hex
+                else:
+                    new_id = str(ObjectId())
+                id_map[(org, old_id)] = new_id
+                await db.docs.update_many(
+                    {"organization_id": org, "case_id": old_id},
+                    {"$set": {"case_id": new_id}},
+                )
+                await db.case_llm_runs.update_many(
+                    {"organization_id": org, "case_id": old_id},
+                    {"$set": {"case_id": new_id}},
+                )
+                await db.cases.update_one(
+                    {"_id": row["_id"]},
+                    {"$set": {"case_id": new_id, "name": old_id}},
+                )
+                rekeyed += 1
+
+            async for row in db.cases.find({"display_name": {"$exists": True}}):
+                op: dict = {}
+                if not row.get("name"):
+                    op.setdefault("$set", {})["name"] = row["display_name"]
+                op.setdefault("$unset", {})["display_name"] = ""
+                await db.cases.update_one({"_id": row["_id"]}, op)
+                renamed += 1
+
+            queue_coll = db.get_collection("queues.case_llm")
+            queue_updated = 0
+            async for msg in queue_coll.find({"msg.case_id": {"$exists": True}}):
+                payload = msg.get("msg") or {}
+                org = payload.get("organization_id")
+                old = payload.get("case_id")
+                if not org or not old:
+                    continue
+                new = id_map.get((org, old))
+                if not new and ad.common.is_valid_object_id(old):
+                    continue
+                if new:
+                    await queue_coll.update_one(
+                        {"_id": msg["_id"]},
+                        {"$set": {"msg.case_id": new}},
+                    )
+                    queue_updated += 1
+
+            if rekeyed or renamed or queue_updated:
+                logger.info(
+                    f"MigrateCaseServerIdsMigration: rekeyed {rekeyed} cases, "
+                    f"renamed display_name→name on {renamed} cases, updated {queue_updated} queue messages"
+                )
+            return True
+        except Exception as e:
+            logger.error(f"MigrateCaseServerIdsMigration failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        return True
+
+
 class OrgPermissionGroupsMigration(Migration):
     def __init__(self):
         super().__init__(
@@ -3710,6 +3800,7 @@ MIGRATIONS = [
     BackfillDocumentUpdatedAt(),
     OrgPermissionGroupsMigration(),
     UnsetLegacyMemberRoleMigration(),
+    MigrateCaseServerIdsMigration(),
     # Add more migrations here
 ]
 

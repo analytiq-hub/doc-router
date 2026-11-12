@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 interface DocumentUpdateProps {
+  organizationId: string
   isOpen: boolean
   onClose: () => void
   documentName: string
@@ -28,11 +29,12 @@ interface DocumentUpdateProps {
   onSave: (
     tagIds: string[],
     metadata: Record<string, string>,
-    caseOptions?: { caseId: string | null; createCaseIfMissing: boolean },
+    caseId?: string | null,
   ) => Promise<void>
 }
 
 export function DocumentUpdate({
+  organizationId,
   isOpen,
   onClose,
   documentName,
@@ -44,7 +46,6 @@ export function DocumentUpdate({
 }: DocumentUpdateProps) {
   const [selectedTags, setSelectedTags] = useState(currentTags)
   const [caseIdInput, setCaseIdInput] = useState('')
-  const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false)
   const [metadataFields, setMetadataFields] = useState<Array<{ id: string; key: string; value: string }>>([])
   const [validationError, setValidationError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -60,7 +61,6 @@ export function DocumentUpdate({
         })),
       )
       setCaseIdInput(currentCaseId ?? '')
-      setCreateCaseIfMissing(false)
       setValidationError(null)
     }
   }, [isOpen, currentTags, currentMetadata, currentCaseId])
@@ -84,14 +84,10 @@ export function DocumentUpdate({
       cleanMetadata[field.key] = field.value
     })
     const newCaseId = caseIdInput.trim() || null
-    const caseChanged = newCaseId !== (currentCaseId || null)
+    const caseChanged = newCaseId !== (currentCaseId ?? null)
     setSaving(true)
     try {
-      await onSave(
-        selectedTags,
-        cleanMetadata,
-        caseChanged ? { caseId: newCaseId, createCaseIfMissing } : undefined,
-      )
+      await onSave(selectedTags, cleanMetadata, caseChanged ? newCaseId : undefined)
       onClose()
     } finally {
       setSaving(false)
@@ -116,15 +112,12 @@ export function DocumentUpdate({
               onChange={setSelectedTags}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Case</Label>
-            <CaseAssignmentFields
-              caseId={caseIdInput}
-              onCaseIdChange={setCaseIdInput}
-              createCaseIfMissing={createCaseIfMissing}
-              onCreateCaseIfMissingChange={setCreateCaseIfMissing}
-            />
-          </div>
+          <CaseAssignmentFields
+            key={`${isOpen}-${currentCaseId ?? ''}`}
+            organizationId={organizationId}
+            caseId={caseIdInput}
+            onCaseIdChange={setCaseIdInput}
+          />
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Metadata</Label>

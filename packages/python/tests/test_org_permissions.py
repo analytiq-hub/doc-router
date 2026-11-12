@@ -306,7 +306,7 @@ async def test_viewer_cannot_create_case(org_and_users, test_db):
     )
     resp = client.post(
         f"/v0/orgs/{org_id}/cases",
-        json={"case_id": "VIEWER-CASE-1"},
+        json={"name": "VIEWER-CASE-1"},
         headers=get_token_headers(org_and_users["member"]["token"]),
     )
     assert resp.status_code == 403, resp.text
@@ -324,11 +324,15 @@ async def test_operator_can_create_case(org_and_users, test_db):
     )
     resp = client.post(
         f"/v0/orgs/{org_id}/cases",
-        json={"case_id": "OP-CASE-1"},
+        json={"name": "OP-CASE-1"},
         headers=get_token_headers(org_and_users["member"]["token"]),
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["case_id"] == "OP-CASE-1"
+    body = resp.json()
+    assert body["name"] == "OP-CASE-1"
+    import analytiq_data as ad
+
+    assert ad.common.is_valid_object_id(body["case_id"])
 
 
 @pytest.mark.asyncio

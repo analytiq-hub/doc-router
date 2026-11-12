@@ -102,7 +102,6 @@ class DocumentsAPI:
         tag_ids: List[str] = None,
         metadata: Optional[Dict[str, str]] = None,
         case_id: Optional[str] | object = _CASE_ID_OMITTED,
-        create_case_if_missing: bool = False,
     ) -> Dict[str, str]:
         """
         Update a document
@@ -126,9 +125,7 @@ class DocumentsAPI:
             update_data["metadata"] = metadata
         if case_id is not _CASE_ID_OMITTED:
             update_data["case_id"] = case_id
-        if create_case_if_missing:
-            update_data["create_case_if_missing"] = create_case_if_missing
-            
+
         return self.client.request(
             "PUT",
             f"/v0/orgs/{organization_id}/documents/{document_id}",

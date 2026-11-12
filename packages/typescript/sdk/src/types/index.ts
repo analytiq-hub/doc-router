@@ -273,7 +273,6 @@ export interface UploadDocument {
   tag_ids?: string[]; // Optional list of tag IDs
   metadata?: Record<string, string>;
   case_id?: string;
-  create_case_if_missing?: boolean;
 }
 
 /** One file for POST .../documents/multipart (raw bytes, no base64). */
@@ -283,7 +282,6 @@ export interface UploadDocumentMultipartPart {
   tag_ids?: string[];
   metadata?: Record<string, string>;
   case_id?: string;
-  create_case_if_missing?: boolean;
 }
 
 export interface UploadDocumentsParams {
@@ -336,7 +334,6 @@ export interface UpdateDocumentParams {
   tagIds?: string[];
   metadata?: Record<string, string>;
   caseId?: string | null;
-  createCaseIfMissing?: boolean;
 }
 
 export interface DeleteDocumentParams {
@@ -783,7 +780,7 @@ export interface ListUsersResponse {
 // Tag types
 export interface Case {
   case_id: string;
-  display_name: string;
+  name: string;
   tag_ids: string[];
   metadata: Record<string, string>;
   document_count: number;
@@ -813,14 +810,13 @@ export interface ListCasesResponse {
 }
 
 export interface CreateCaseParams {
-  case_id?: string;
-  display_name?: string;
+  name: string;
   tag_ids?: string[];
   metadata?: Record<string, string>;
 }
 
 export interface UpdateCaseParams {
-  display_name?: string;
+  name?: string;
   tag_ids?: string[];
   metadata?: Record<string, string>;
 }

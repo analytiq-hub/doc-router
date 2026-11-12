@@ -158,7 +158,7 @@ export class DocRouterOrg {
 
   // ---------------- Documents ----------------
 
-  async uploadDocuments(params: { documents: Array<{ name: string; content: string; tag_ids?: string[]; metadata?: Record<string, string>; case_id?: string; create_case_if_missing?: boolean; }>; }): Promise<UploadDocumentsResponse> {
+  async uploadDocuments(params: { documents: Array<{ name: string; content: string; tag_ids?: string[]; metadata?: Record<string, string>; case_id?: string; }>; }): Promise<UploadDocumentsResponse> {
     const documentsPayload = params.documents.map(doc => {
       // Handle both plain base64 and data URLs
       let base64Content: string;
@@ -176,7 +176,6 @@ export class DocRouterOrg {
         tag_ids?: string[];
         metadata?: Record<string, string>;
         case_id?: string;
-        create_case_if_missing?: boolean;
       } = {
         name: doc.name,
         content: base64Content,
@@ -184,7 +183,6 @@ export class DocRouterOrg {
       if (doc.tag_ids && doc.tag_ids.length > 0) payload.tag_ids = doc.tag_ids;
       if (doc.metadata) payload.metadata = doc.metadata;
       if (doc.case_id) payload.case_id = doc.case_id;
-      if (doc.create_case_if_missing) payload.create_case_if_missing = doc.create_case_if_missing;
       return payload;
     });
 
@@ -203,7 +201,6 @@ export class DocRouterOrg {
     if (params.tag_ids?.length) form.append('tag_ids', JSON.stringify(params.tag_ids));
     if (params.metadata && Object.keys(params.metadata).length) form.append('metadata', JSON.stringify(params.metadata));
     if (params.case_id?.trim()) form.append('case_id', params.case_id.trim());
-    if (params.create_case_if_missing) form.append('create_case_if_missing', 'true');
     return this.http.postFormData<UploadDocumentResponse>(
       `/v0/orgs/${this.organizationId}/documents/multipart`,
       form
@@ -311,19 +308,17 @@ export class DocRouterOrg {
   }
 
   async updateDocument(params: UpdateDocumentParams) {
-    const { documentId, documentName, tagIds, metadata, caseId, createCaseIfMissing } = params;
+    const { documentId, documentName, tagIds, metadata, caseId } = params;
     const updateData: {
       tag_ids?: string[];
       document_name?: string;
       metadata?: Record<string, string>;
       case_id?: string | null;
-      create_case_if_missing?: boolean;
     } = {};
     if (documentName !== undefined) updateData.document_name = documentName;
     if (tagIds !== undefined) updateData.tag_ids = tagIds;
     if (metadata !== undefined) updateData.metadata = metadata;
     if (caseId !== undefined) updateData.case_id = caseId;
-    if (createCaseIfMissing !== undefined) updateData.create_case_if_missing = createCaseIfMissing;
     return this.http.put(`/v0/orgs/${this.organizationId}/documents/${documentId}`, updateData);
   }
 
@@ -639,12 +634,11 @@ export class DocRouterOrg {
   async assignDocumentsToCase(params: {
     caseId: string;
     documentIds: string[];
-    createCaseIfMissing?: boolean;
   }): Promise<{ message: string; count: number }> {
-    const { caseId, documentIds, createCaseIfMissing = false } = params;
+    const { caseId, documentIds } = params;
     return this.http.post<{ message: string; count: number }>(
       `/v0/orgs/${this.organizationId}/cases/${encodeURIComponent(caseId)}/documents`,
-      { document_ids: documentIds, create_case_if_missing: createCaseIfMissing }
+      { document_ids: documentIds }
     );
   }
 

@@ -226,7 +226,7 @@ case = client.cases.create(organization_id, {"case_id": "CLM-100", "display_name
 cases = client.cases.list(organization_id, case_id_search="CLM")
 
 # Assign documents
-client.cases.assign_documents(organization_id, "CLM-100", ["doc-id-1"], create_case_if_missing=False)
+client.cases.assign_documents(organization_id, "CLM-100", ["doc-id-1"])
 
 # Case-scoped LLM run (queues worker job; returns 202)
 queued = client.cases.start_llm_run(organization_id, "CLM-100", prompt_id="...")

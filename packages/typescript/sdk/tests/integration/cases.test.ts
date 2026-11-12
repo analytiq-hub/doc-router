@@ -23,32 +23,33 @@ describe('Cases Integration Tests', () => {
   });
 
   test('create, get, list, update, delete case', async () => {
-    const caseId = `SDK-CASE-${Date.now()}`;
+    const caseName = `SDK-CASE-${Date.now()}`;
     const created = await client.createCase({
-      body: { case_id: caseId, display_name: 'SDK test case', metadata: { source: 'sdk-it' } },
+      body: { name: caseName, metadata: { source: 'sdk-it' } },
     });
-    expect(created.case_id).toBe(caseId);
+    const caseId = created.case_id;
+    expect(caseId).toMatch(/^[0-9a-f]{24}$/i);
     expect(created.metadata.source).toBe('sdk-it');
 
     const fetched = await client.getCase({ caseId });
-    expect(fetched.display_name).toBe('SDK test case');
+    expect(fetched.name).toBe(caseName);
 
-    const listed = await client.listCases({ caseIdSearch: caseId, limit: 10 });
+    const listed = await client.listCases({ caseIdSearch: caseName, limit: 10 });
     expect(listed.cases.some((c) => c.case_id === caseId)).toBe(true);
 
     const updated = await client.updateCase({
       caseId,
-      body: { display_name: 'Updated SDK case' },
+      body: { name: 'Updated SDK case' },
     });
-    expect(updated.display_name).toBe('Updated SDK case');
+    expect(updated.name).toBe('Updated SDK case');
 
     await client.deleteCase({ caseId, cascade: false });
     await expect(client.getCase({ caseId })).rejects.toThrow();
   });
 
   test('assign document via upload and list by case_id', async () => {
-    const caseId = `SDK-DOC-${Date.now()}`;
-    await client.createCase({ body: { case_id: caseId } });
+    const created = await client.createCase({ body: { name: `SDK-DOC-${Date.now()}` } });
+    const caseId = created.case_id;
 
     const upload = await client.uploadDocuments({
       documents: [

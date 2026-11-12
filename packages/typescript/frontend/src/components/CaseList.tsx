@@ -77,7 +77,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
 
   const filterFields: FilterField[] = useMemo(
     () => [
-      { field: 'display_name', label: 'Name', kind: 'text' as const },
+      { field: 'name', label: 'Name', kind: 'text' as const },
       { field: 'case_id', label: 'Case ID', kind: 'text' as const },
       {
         field: 'tag_ids',
@@ -94,7 +94,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
 
   const columns: DataTableColumn<Case>[] = [
     {
-      field: 'display_name',
+      field: 'name',
       headerName: 'Case name',
       flex: 1,
       minWidth: 180,
@@ -253,7 +253,7 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           description="Case properties"
           onClose={() => setViewing(null)}
           properties={[
-            { label: 'Name', value: viewing.display_name?.trim() || '—' },
+            { label: 'Name', value: viewing.name?.trim() || '—' },
             { label: 'Case ID', value: <span className="font-mono text-xs">{viewing.case_id}</span> },
             { label: 'Documents', value: String(viewing.document_count ?? 0) },
             {

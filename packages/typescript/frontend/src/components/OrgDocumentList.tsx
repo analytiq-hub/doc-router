@@ -186,7 +186,7 @@ export default function OrgDocumentList({
   const handleUpdateDocument = async (
     tagIds: string[],
     metadata: Record<string, string>,
-    caseOptions?: { caseId: string | null; createCaseIfMissing: boolean },
+    caseId?: string | null,
   ) => {
     if (!editingDocument) return
     try {
@@ -194,12 +194,7 @@ export default function OrgDocumentList({
         documentId: editingDocument.id,
         tagIds,
         metadata,
-        ...(caseOptions
-          ? {
-              caseId: caseOptions.caseId,
-              createCaseIfMissing: caseOptions.createCaseIfMissing,
-            }
-          : {}),
+        ...(caseId !== undefined ? { caseId } : {}),
       })
       refreshList()
     } catch (error) {
@@ -463,6 +458,7 @@ export default function OrgDocumentList({
 
       {editingDocument && (
         <DocumentUpdate
+          organizationId={organizationId}
           isOpen={isTagEditorOpen}
           onClose={() => {
             setIsTagEditorOpen(false)

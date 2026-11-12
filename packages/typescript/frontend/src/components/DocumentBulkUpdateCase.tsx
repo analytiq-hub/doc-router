@@ -19,7 +19,7 @@ type DocumentBulkUpdateCaseProps = {
   searchParameters: DocumentListSearchParameters;
   totalDocuments: number;
   selectedOperation: string;
-  onDataChange: (data: { caseId: string; createCaseIfMissing: boolean } | null) => void;
+  onDataChange: (data: { caseId: string } | null) => void;
   onProgress?: (processed: number, total: number) => void;
   onComplete?: () => void;
   disabled?: boolean;
@@ -41,20 +41,10 @@ export const DocumentBulkUpdateCase = forwardRef<DocumentBulkUpdateCaseRef, Docu
   ) => {
     const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
     const [caseId, setCaseId] = useState('');
-    const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false);
 
     const handleCaseChange = (value: string) => {
       setCaseId(value);
-      onDataChange(
-        selectedOperation === 'removeFromCase'
-          ? null
-          : { caseId: value, createCaseIfMissing }
-      );
-    };
-
-    const handleCreateChange = (value: boolean) => {
-      setCreateCaseIfMissing(value);
-      onDataChange({ caseId, createCaseIfMissing: value });
+      onDataChange(selectedOperation === 'removeFromCase' ? null : { caseId: value });
     };
 
     // Collect every matching id before changing anything. Assign and remove change
@@ -103,7 +93,6 @@ export const DocumentBulkUpdateCase = forwardRef<DocumentBulkUpdateCaseRef, Docu
             await docRouterOrgApi.assignDocumentsToCase({
               caseId: targetCaseId,
               documentIds: batch,
-              createCaseIfMissing,
             });
             processed += batch.length;
           } catch (error) {
@@ -151,10 +140,10 @@ export const DocumentBulkUpdateCase = forwardRef<DocumentBulkUpdateCaseRef, Docu
 
     return (
       <CaseAssignmentFields
+        organizationId={organizationId}
         caseId={caseId}
         onCaseIdChange={handleCaseChange}
-        createCaseIfMissing={createCaseIfMissing}
-        onCreateCaseIfMissingChange={handleCreateChange}
+        allowNameLookup={false}
         disabled={disabled}
       />
     );

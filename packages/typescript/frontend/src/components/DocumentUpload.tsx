@@ -46,7 +46,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
   const [validationError, setValidationError] = useState<string | null>(null)
   const [activeStep, setActiveStep] = useState(0)
   const [caseId, setCaseId] = useState(defaultCaseId ?? '')
-  const [createCaseIfMissing, setCreateCaseIfMissing] = useState(false)
 
   useEffect(() => {
     setCaseId(defaultCaseId ?? '')
@@ -104,7 +103,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
             tag_ids: selectedTags,
             metadata,
             case_id: caseId.trim() || undefined,
-            create_case_if_missing: createCaseIfMissing,
           }),
         ),
       )
@@ -126,7 +124,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
       setSelectedTags([])
       setMetadataFields([])
       setCaseId(defaultCaseId ?? '')
-      setCreateCaseIfMissing(false)
       setActiveStep(0)
     } catch (error) {
       console.error('Error uploading files:', error)
@@ -326,15 +323,11 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId, default
             </div>
 
             <div className="space-y-6">
-              <div className="space-y-2">
-                <Label>Case</Label>
-                <CaseAssignmentFields
-                  caseId={caseId}
-                  onCaseIdChange={setCaseId}
-                  createCaseIfMissing={createCaseIfMissing}
-                  onCreateCaseIfMissingChange={setCreateCaseIfMissing}
-                />
-              </div>
+              <CaseAssignmentFields
+                organizationId={organizationId}
+                caseId={caseId}
+                onCaseIdChange={setCaseId}
+              />
 
               <div className="space-y-2">
                 <Label>Tags</Label>

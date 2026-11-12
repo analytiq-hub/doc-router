@@ -63,7 +63,7 @@ type FlowsOperationData = {
   isAnalyzing?: boolean;
 };
 
-type CaseOperationData = { caseId: string; createCaseIfMissing: boolean };
+type CaseOperationData = { caseId: string };
 
 type OperationData =
   | TagsOperationData

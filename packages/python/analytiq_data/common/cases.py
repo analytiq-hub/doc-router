@@ -15,20 +15,33 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-CASE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+MAX_CASE_NAME_LENGTH = 256
 ASSIGN_BATCH_SIZE = 1000
 CASCADE_DELETE_BATCH_SIZE = 100
 
 
+def is_server_case_id(case_id: str) -> bool:
+    """Case ids use the same 24-hex ObjectId string format as document ids."""
+    return ad.common.is_valid_object_id(case_id)
+
+
+def generate_case_id() -> str:
+    return ad.common.create_id()
+
+
+def validate_case_name(name: str | None) -> str:
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Case name is required")
+    if len(name) > MAX_CASE_NAME_LENGTH:
+        raise ValueError(f"Case name must be at most {MAX_CASE_NAME_LENGTH} characters")
+    return name
+
+
 def validate_case_id(case_id: str) -> str:
     case_id = case_id.strip()
-    if not CASE_ID_PATTERN.match(case_id):
-        raise ValueError(
-            "case_id must be 1–128 characters: letters, digits, and . _ : - only"
-        )
-    # "." and ".." are dot segments: clients normalize /cases/.. to the parent URL.
-    if set(case_id) == {"."}:
-        raise ValueError("case_id cannot consist only of dots")
+    if not is_server_case_id(case_id):
+        raise ValueError("case_id must be a 24-character hexadecimal id")
     return case_id
 
 
@@ -129,20 +142,40 @@ async def count_documents_in_case(
     return counts[case_id]
 
 
-async def create_case(
+def case_name_from_row(case: dict) -> str:
+    """Human-readable case title from a Mongo case document."""
+    raw = case.get("name")
+    if raw is None:
+        raw = case.get("display_name")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return case["case_id"]
+
+
+async def resolve_case_for_assignment(
     analytiq_client,
     organization_id: str,
     *,
     case_id: str | None,
-    display_name: str | None,
+) -> str:
+    """Validate ``case_id`` for document assignment (cases are addressed only by id)."""
+    if case_id is None or not str(case_id).strip():
+        raise ValueError("case_id is required")
+    return await check_case_assignable(analytiq_client, organization_id, case_id)
+
+
+async def create_case(
+    analytiq_client,
+    organization_id: str,
+    *,
+    name: str,
     tag_ids: list[str] | None,
     metadata: dict[str, str] | None,
     created_by: str,
 ) -> dict:
     db = analytiq_client.mongodb_async[analytiq_client.env]
-    if case_id is None or not str(case_id).strip():
-        case_id = f"DR-{ad.common.create_id()}"
-    case_id = validate_case_id(case_id)
+    case_id = generate_case_id()
+    name = validate_case_name(name)
     tag_ids = tag_ids or []
     metadata = normalize_case_metadata(metadata)
 
@@ -152,7 +185,7 @@ async def create_case(
     doc = {
         "organization_id": organization_id,
         "case_id": case_id,
-        "display_name": (display_name or "").strip() or case_id,
+        "name": name,
         "tag_ids": tag_ids,
         "metadata": metadata,
         "deleting_at": None,
@@ -160,10 +193,7 @@ async def create_case(
         "created_at": now,
         "updated_at": now,
     }
-    try:
-        await _cases_coll(analytiq_client).insert_one(doc)
-    except DuplicateKeyError as e:
-        raise ValueError(f"Case {case_id} already exists") from e
+    await _cases_coll(analytiq_client).insert_one(doc)
     return doc
 
 
@@ -172,15 +202,15 @@ async def update_case(
     organization_id: str,
     case_id: str,
     *,
-    display_name: str | None = None,
+    name: str | None = None,
     tag_ids: list[str] | None = None,
     metadata: dict[str, str] | None = None,
 ) -> dict | None:
     case_id = validate_case_id(case_id)
     db = analytiq_client.mongodb_async[analytiq_client.env]
     update: dict[str, Any] = {"updated_at": datetime.now(UTC)}
-    if display_name is not None:
-        update["display_name"] = display_name.strip() or case_id
+    if name is not None:
+        update["name"] = validate_case_name(name)
     if tag_ids is not None:
         await _validate_tag_ids(db, organization_id, tag_ids)
         update["tag_ids"] = tag_ids
@@ -215,6 +245,7 @@ async def build_cases_match_query(
         term = re.escape(case_id_search.strip())
         query["$or"] = [
             {"case_id": {"$regex": term, "$options": "i"}},
+            {"name": {"$regex": term, "$options": "i"}},
             {"display_name": {"$regex": term, "$options": "i"}},
         ]
     if tag_ids:
@@ -234,7 +265,8 @@ async def build_cases_match_query(
 
 _CASE_LIST_FIELD_MAP: dict[str, str | None] = {
     "case_id": "case_id",
-    "display_name": "display_name",
+    "name": "name",
+    "display_name": "name",
     "updated_at": "updated_at",
     "created_at": "created_at",
     "tag_ids": "tag_ids",
@@ -348,46 +380,13 @@ async def check_case_assignable(
     return case_id
 
 
-async def _upsert_case_for_assign(
-    analytiq_client,
-    organization_id: str,
-    case_id: str,
-    created_by: str,
-    *,
-    session=None,
-) -> None:
-    now = datetime.now(UTC)
-    row = await _cases_coll(analytiq_client).find_one_and_update(
-        {"organization_id": organization_id, "case_id": case_id},
-        {
-            "$setOnInsert": {
-                "organization_id": organization_id,
-                "case_id": case_id,
-                "display_name": case_id,
-                "tag_ids": [],
-                "metadata": {},
-                "deleting_at": None,
-                "created_by": created_by,
-                "created_at": now,
-            },
-            "$set": {"updated_at": now},
-        },
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-        session=session,
-    )
-    if row and row.get("deleting_at") is not None:
-        raise LookupError("case_deleting")
-
-
 async def assign_documents_to_case(
     analytiq_client,
     organization_id: str,
     document_ids: list[str],
     case_id: str,
     *,
-    create_case_if_missing: bool,
-    created_by: str,
+    created_by: str = "",
     set_fields: dict[str, Any] | None = None,
 ) -> None:
     """
@@ -408,12 +407,7 @@ async def assign_documents_to_case(
         batch = doc_oids[start:start + ASSIGN_BATCH_SIZE]
 
         async def _run(session, batch=batch):
-            if create_case_if_missing:
-                await _upsert_case_for_assign(
-                    analytiq_client, organization_id, case_id, created_by, session=session
-                )
-            else:
-                await _touch_case(analytiq_client, organization_id, case_id, session=session)
+            await _touch_case(analytiq_client, organization_id, case_id, session=session)
 
             fields = {**(set_fields or {}), "case_id": case_id, "updated_at": datetime.now(UTC)}
             result = await _docs_coll(analytiq_client).update_many(

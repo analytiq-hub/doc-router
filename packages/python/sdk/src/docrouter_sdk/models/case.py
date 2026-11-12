@@ -5,21 +5,20 @@ from pydantic import BaseModel, Field
 
 
 class CaseCreate(BaseModel):
-    case_id: Optional[str] = None
-    display_name: Optional[str] = None
+    name: str = Field(min_length=1)
     tag_ids: List[str] = Field(default_factory=list)
     metadata: Dict[str, str] = Field(default_factory=dict)
 
 
 class CaseUpdate(BaseModel):
-    display_name: Optional[str] = None
+    name: Optional[str] = None
     tag_ids: Optional[List[str]] = None
     metadata: Optional[Dict[str, str]] = None
 
 
 class CaseOut(BaseModel):
     case_id: str
-    display_name: str
+    name: str
     tag_ids: List[str] = Field(default_factory=list)
     metadata: Dict[str, str] = Field(default_factory=dict)
     document_count: int

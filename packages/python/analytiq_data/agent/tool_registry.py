@@ -163,7 +163,6 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "tag_ids": {"type": "array", "items": {"type": "string"}, "description": "List of tag IDs to set on the document"},
                     "metadata": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Key-value metadata to set (string values only)"},
                     "case_id": {"type": "string", "description": "Assign case id; JSON null removes from case"},
-                    "create_case_if_missing": {"type": "boolean", "description": "When assigning case_id, create the case if needed", "default": False},
                 },
                 "additionalProperties": False,
             },
@@ -459,12 +458,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "create_case",
-            "description": "Create a document case (optional case_id; auto-generated if omitted).",
+            "description": "Create a document case (server assigns case_id; name required).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "case_id": {"type": "string"},
-                    "display_name": {"type": "string"},
+                    "name": {"type": "string", "description": "Case name (required)"},
                     "tag_ids": {"type": "array", "items": {"type": "string"}},
                     "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
                 },
@@ -476,12 +474,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "update_case",
-            "description": "Update case display name, tags, or metadata.",
+            "description": "Update case name, tags, or metadata.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "case_id": {"type": "string"},
-                    "display_name": {"type": "string"},
+                    "name": {"type": "string"},
                     "tag_ids": {"type": "array", "items": {"type": "string"}},
                     "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
                 },
@@ -516,7 +514,6 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "case_id": {"type": "string"},
                     "document_ids": {"type": "array", "items": {"type": "string"}},
-                    "create_case_if_missing": {"type": "boolean", "default": False},
                 },
                 "required": ["case_id", "document_ids"],
                 "additionalProperties": False,

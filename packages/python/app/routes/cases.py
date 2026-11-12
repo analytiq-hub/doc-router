@@ -25,21 +25,20 @@ cases_router = APIRouter(
 
 
 class CaseCreate(BaseModel):
-    case_id: Optional[str] = None
-    display_name: Optional[str] = None
+    name: str = Field(min_length=1, description="Case name (required; may repeat across cases)")
     tag_ids: List[str] = Field(default_factory=list)
     metadata: Dict[str, str] = Field(default_factory=dict)
 
 
 class CaseUpdate(BaseModel):
-    display_name: Optional[str] = None
+    name: Optional[str] = None
     tag_ids: Optional[List[str]] = None
     metadata: Optional[Dict[str, str]] = None
 
 
 class CaseOut(BaseModel):
     case_id: str
-    display_name: str
+    name: str
     tag_ids: List[str]
     metadata: Dict[str, str]
     document_count: int
@@ -56,7 +55,6 @@ class ListCasesResponse(BaseModel):
 
 class AssignDocumentsRequest(BaseModel):
     document_ids: List[str]
-    create_case_if_missing: bool = False
 
 
 class CaseRunRequest(BaseModel):
@@ -66,7 +64,7 @@ class CaseRunRequest(BaseModel):
 def _case_to_out(case: dict, document_count: int) -> CaseOut:
     return CaseOut(
         case_id=case["case_id"],
-        display_name=case.get("display_name") or case["case_id"],
+        name=ad.common.case_name_from_row(case),
         tag_ids=case.get("tag_ids") or [],
         metadata=case.get("metadata") or {},
         document_count=document_count,
@@ -133,6 +131,10 @@ async def list_cases_route(
         None,
         description="Substring match on case id or display name (case-insensitive)",
     ),
+    name_search: str | None = Query(
+        None,
+        description="Substring match on case display name (alias for searching by name)",
+    ),
     tag_ids: str | None = Query(None, description="Comma-separated tag IDs"),
     metadata_search: str | None = Query(None),
     updated_after: str | None = Query(None, description="ISO datetime; cases updated at or after"),
@@ -155,12 +157,13 @@ async def list_cases_route(
             filter_model = json.loads(filters)
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=400, detail="Invalid filters JSON") from e
+    search = (case_id_search or name_search or "").strip() or None
     cases, total = await ad.common.list_cases(
         analytiq_client,
         organization_id,
         skip=skip,
         limit=limit,
-        case_id_search=case_id_search,
+        case_id_search=search,
         tag_ids=tag_id_list,
         metadata_search=_parse_metadata_search(metadata_search),
         updated_after=_parse_optional_datetime(updated_after),
@@ -186,17 +189,13 @@ async def create_case_route(
         case = await ad.common.create_case(
             analytiq_client,
             organization_id,
-            case_id=body.case_id,
-            display_name=body.display_name,
+            name=body.name.strip(),
             tag_ids=body.tag_ids,
             metadata=body.metadata,
             created_by=current_user.user_id,
         )
     except ValueError as e:
-        msg = str(e)
-        if "already exists" in msg:
-            raise HTTPException(status_code=409, detail=msg)
-        raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=400, detail=str(e))
     count = await ad.common.count_documents_in_case(
         analytiq_client, organization_id, case["case_id"]
     )
@@ -240,7 +239,7 @@ async def update_case_route(
             analytiq_client,
             organization_id,
             case_id,
-            display_name=body.display_name,
+            name=body.name,
             tag_ids=body.tag_ids,
             metadata=body.metadata,
         )
@@ -311,13 +310,14 @@ async def assign_documents_route(
 ):
     analytiq_client = ad.common.get_analytiq_client()
     try:
-        ad.common.validate_case_id(case_id)
+        resolved = await ad.common.check_case_assignable(
+            analytiq_client, organization_id, case_id
+        )
         await ad.common.assign_documents_to_case(
             analytiq_client,
             organization_id,
             body.document_ids,
-            case_id,
-            create_case_if_missing=body.create_case_if_missing,
+            resolved,
             created_by=current_user.user_id,
         )
     except (ValueError, LookupError) as e:

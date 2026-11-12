@@ -32,7 +32,7 @@ def _case_to_dict(case: dict, document_count: int = 0) -> dict[str, Any]:
         updated = updated.isoformat()
     return {
         "case_id": case["case_id"],
-        "display_name": case.get("display_name") or case["case_id"],
+        "name": ad.common.case_name_from_row(case),
         "tag_ids": case.get("tag_ids") or [],
         "metadata": case.get("metadata") or {},
         "document_count": document_count,
@@ -140,10 +140,11 @@ async def create_case(context: dict, params: dict) -> dict[str, Any]:
     if not org_id:
         return {"error": "No organization context"}
     user_id = context.get("user_id") or context.get("created_by") or "agent"
-    case_id = params.get("case_id")
-    display_name = params.get("display_name")
+    name = params.get("name") or params.get("display_name")
     tag_ids = params.get("tag_ids")
     metadata = params.get("metadata")
+    if not name:
+        return {"error": "name is required"}
     if tag_ids is not None and not isinstance(tag_ids, list):
         return {"error": "tag_ids must be a list"}
     if metadata is not None and not isinstance(metadata, dict):
@@ -152,8 +153,7 @@ async def create_case(context: dict, params: dict) -> dict[str, Any]:
         row = await ad.common.create_case(
             context["analytiq_client"],
             org_id,
-            case_id=str(case_id).strip() if case_id else None,
-            display_name=display_name,
+            name=str(name),
             tag_ids=tag_ids,
             metadata=metadata,
             created_by=user_id,
@@ -170,7 +170,7 @@ async def update_case(context: dict, params: dict) -> dict[str, Any]:
     case_id = params.get("case_id")
     if not case_id:
         return {"error": "case_id is required"}
-    display_name = params.get("display_name")
+    name = params.get("name") or params.get("display_name")
     tag_ids = params.get("tag_ids")
     metadata = params.get("metadata")
     if tag_ids is not None and not isinstance(tag_ids, list):
@@ -182,7 +182,7 @@ async def update_case(context: dict, params: dict) -> dict[str, Any]:
             context["analytiq_client"],
             org_id,
             str(case_id),
-            display_name=display_name,
+            name=name,
             tag_ids=tag_ids,
             metadata=metadata,
         )
@@ -236,15 +236,16 @@ async def assign_documents_to_case(context: dict, params: dict) -> dict[str, Any
         return {"error": "case_id is required"}
     if not document_ids or not isinstance(document_ids, list):
         return {"error": "document_ids must be a non-empty list"}
-    create_if_missing = bool(params.get("create_case_if_missing", False))
     user_id = context.get("user_id") or ""
     try:
+        resolved = await ad.common.check_case_assignable(
+            context["analytiq_client"], org_id, str(case_id)
+        )
         await ad.common.assign_documents_to_case(
             context["analytiq_client"],
             org_id,
             [str(d) for d in document_ids],
-            str(case_id),
-            create_case_if_missing=create_if_missing,
+            resolved,
             created_by=user_id,
         )
     except (ValueError, LookupError) as e:

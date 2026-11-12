@@ -13,7 +13,6 @@ class DocumentUpload(BaseModel):
     tag_ids: List[str] = []
     metadata: Optional[Dict[str, str]] = {}
     case_id: Optional[str] = None
-    create_case_if_missing: bool = False
 
 class DocumentsUpload(BaseModel):
     documents: List[DocumentUpload]
@@ -53,7 +52,6 @@ class DocumentUpdate(BaseModel):
     tag_ids: List[str] = []
     metadata: Optional[Dict[str, str]] = {}
     case_id: Optional[str] = None
-    create_case_if_missing: bool = False
 
     def model_dump(self, **kwargs):
         kwargs.setdefault("exclude_unset", True)
