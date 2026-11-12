@@ -56,7 +56,7 @@ help:
 	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
 	@echo "  make tests-all               - Run all Python tests"
-	@echo "  make tests-ui                - Run UI tests"
+	@echo "  make tests-ui                - Run Puppeteer UI tests (needs dev on :5173 or BASE_URL)"
 	@echo "  make tests-ui-debug          - Run UI tests in debug mode"
 	@echo "  make tests-ts                - Run TypeScript SDK and MCP tests"
 	@echo "  make vitest                  - Run frontend Vitest unit tests (flows schema helpers, etc.)"
@@ -298,12 +298,13 @@ tests-all: tests tests-kb tests-scale
 
 setup-ui:
 	cd tests-ui && npm install
+	cd tests-ui && npx puppeteer browsers install chrome
 
 tests-ui: setup-ui
-	cd tests-ui && npm run test:ui
+	cd tests-ui && BASE_URL=$${BASE_URL:-http://localhost:5173} npm run test:ui
 
 tests-ui-debug: setup-ui
-	cd tests-ui && npm run test:ui:debug
+	cd tests-ui && BASE_URL=$${BASE_URL:-http://localhost:5173} npm run test:ui:debug
 
 tests-ts:
 	cd packages/typescript/sdk && npm install && npm run test:all

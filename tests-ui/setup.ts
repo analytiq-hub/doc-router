@@ -1,3 +1,4 @@
+import fs from 'fs';
 import puppeteer from 'puppeteer';
 
 declare global {
@@ -5,8 +6,31 @@ declare global {
   var page: puppeteer.Page;
 }
 
+function resolveChromeExecutable(): string | undefined {
+  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+
+  try {
+    const bundled = puppeteer.executablePath();
+    if (typeof bundled === 'string' && fs.existsSync(bundled)) return bundled;
+  } catch {
+    // Puppeteer has no cached build for this platform yet.
+  }
+
+  const systemCandidates = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ];
+  return systemCandidates.find((p) => fs.existsSync(p));
+}
+
 beforeAll(async () => {
+  const executablePath = resolveChromeExecutable();
   global.browser = await puppeteer.launch({
+    ...(executablePath ? { executablePath } : {}),
     headless: process.env.HEADLESS !== 'false',
     slowMo: process.env.SLOW_MO ? parseInt(process.env.SLOW_MO) : 0,
     devtools: process.env.DEVTOOLS === 'true',

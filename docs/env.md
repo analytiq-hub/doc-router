@@ -253,7 +253,7 @@ The following environment variables are used for various LLM providers:
 
 ### `BASE_URL`
 - **Purpose**: Base URL for UI testing
-- **Default**: `"http://localhost:3000"`
+- **Default**: `"http://localhost:5173"` (`make dev` Vite); use `http://localhost:3000` for compose edge
 - **Usage**: UI test configuration (`tests-ui/utils/test-helpers.ts`)
 
 ### `API_URL`

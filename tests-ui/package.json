@@ -4,6 +4,7 @@
   "private": true,
   "description": "Puppeteer + Jest UI tests for Doc Router",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
     "test:ui": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js",
     "test:ui:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --watch",
     "test:ui:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.config.js --coverage",

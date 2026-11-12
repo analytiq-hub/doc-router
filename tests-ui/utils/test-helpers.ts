@@ -1,6 +1,7 @@
 import { Page } from 'puppeteer';
 
-export const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+/** Vite dev (`make dev`); override with BASE_URL for compose edge on :3000. */
+export const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
 export const API_URL = process.env.API_URL || 'http://localhost:8000';
 
 export async function waitForApp(page: Page) {
