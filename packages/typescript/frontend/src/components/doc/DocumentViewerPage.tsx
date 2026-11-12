@@ -8,7 +8,7 @@ import {
   PanelResizeHandle,
   type ImperativePanelGroupHandle,
 } from 'react-resizable-panels';
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, type SetStateAction } from 'react';
 import type { HighlightInfo } from '@/types/index';
 import type { PDFViewerControlsType } from '@/components/Layout';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -62,6 +62,27 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
   const onViewerPageChange = useCallback((page: number) => setPdfPage(page), []);
   const onViewerFileNameChange = useCallback((name: string | null) => setViewerFileName(name), []);
 
+  /** react-resizable-panels requires at least one child; auto-show the other pane when hiding the last one. */
+  const setShowPdfPanelGuarded = useCallback((update: SetStateAction<boolean>) => {
+    setShowPdfPanel((pdf) => {
+      const next = typeof update === 'function' ? update(pdf) : update;
+      if (!next) {
+        setShowRightPanel((right) => (right ? right : true));
+      }
+      return next;
+    });
+  }, []);
+
+  const setShowRightPanelGuarded = useCallback((update: SetStateAction<boolean>) => {
+    setShowRightPanel((right) => {
+      const next = typeof update === 'function' ? update(right) : update;
+      if (!next) {
+        setShowPdfPanel((pdf) => (pdf ? pdf : true));
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const check = () => setIsSmallScreen(window.innerWidth <= AGENT_PANEL_BREAKPOINT);
     check();
@@ -76,9 +97,9 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
   useEffect(() => {
     const controls: PDFViewerControlsType = {
       showRightPanel,
-      setShowRightPanel,
+      setShowRightPanel: setShowRightPanelGuarded,
       showPdfPanel,
-      setShowPdfPanel,
+      setShowPdfPanel: setShowPdfPanelGuarded,
       isSmallScreen,
       rightPanelTab,
     };
@@ -90,7 +111,14 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
     return () => {
       delete window.pdfViewerControls;
     };
-  }, [showRightPanel, showPdfPanel, isSmallScreen, rightPanelTab]);
+  }, [
+    showRightPanel,
+    showPdfPanel,
+    isSmallScreen,
+    rightPanelTab,
+    setShowPdfPanelGuarded,
+    setShowRightPanelGuarded,
+  ]);
 
   useEffect(() => {
     const has =
@@ -115,7 +143,11 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
   const rightPanelSize = showRightPanel ? panelLayout[layoutIdx++] : undefined;
 
   useLayoutEffect(() => {
-    panelGroupRef.current?.setLayout(getDocPagePanelLayout(showPdfPanel, showRightPanel));
+    const panelCount = (showPdfPanel ? 1 : 0) + (showRightPanel ? 1 : 0);
+    if (panelCount === 0) return;
+    const layout = getDocPagePanelLayout(showPdfPanel, showRightPanel);
+    if (layout.length !== panelCount) return;
+    panelGroupRef.current?.setLayout(layout);
   }, [showPdfPanel, showRightPanel]);
 
   if (!id) return <div>No PDF ID provided</div>;
