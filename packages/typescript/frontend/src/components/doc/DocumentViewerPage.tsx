@@ -8,8 +8,7 @@ import {
   PanelResizeHandle,
   type ImperativePanelGroupHandle,
 } from 'react-resizable-panels';
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, Suspense } from 'react';
-import PDFSidebar from '@/components/PDFSidebar';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import type { HighlightInfo } from '@/types/index';
 import type { PDFViewerControlsType } from '@/components/Layout';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -22,6 +21,13 @@ const AGENT_PANEL_BREAKPOINT = 640;
 
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
   ssr: false,
+});
+
+const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading panel…</div>
+  ),
 });
 
 export type DocumentViewerPageProps = {
@@ -148,22 +154,14 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
             {showRightPanel && (
               <Panel id="doc-sidebar" defaultSize={rightPanelSize!} minSize={22} order={2}>
                 <div className={cn(panelShell, 'overflow-hidden')}>
-                  <Suspense
-                    fallback={
-                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                        Loading panel…
-                      </div>
-                    }
-                  >
-                    <PDFSidebar
-                      organizationId={organizationId}
-                      id={pdfId}
-                      pdfDocument={pdfDocument}
-                      onHighlight={setHighlightInfo}
-                      pdfPage={pdfPage}
-                      fileName={viewerFileName}
-                    />
-                  </Suspense>
+                  <PDFSidebar
+                    organizationId={organizationId}
+                    id={pdfId}
+                    pdfDocument={pdfDocument}
+                    onHighlight={setHighlightInfo}
+                    pdfPage={pdfPage}
+                    fileName={viewerFileName}
+                  />
                 </div>
               </Panel>
             )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { GetDocumentResponse } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
@@ -10,7 +10,7 @@ type PDFInfoPanelProps = {
   documentId: string;
 };
 
-function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="py-2 text-sm">
       <dt className="text-xs text-muted-foreground">{label}</dt>
