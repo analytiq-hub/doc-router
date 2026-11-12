@@ -162,7 +162,6 @@ export default function AgentChat({
   onEditAndResubmit,
   disabled,
 }: AgentChatProps) {
-  const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const turnRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [stickyQuestion, setStickyQuestion] = useState<string | null>(null);
@@ -193,7 +192,10 @@ export default function AgentChat({
   const lastStickyRef = useRef<{ text: string | null; index: number } | null>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = scrollRef.current;
+    if (!container) return;
+    // scrollIntoView also scrolls the document; keep scroll inside the chat panel only.
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
   const updateStickyQuestion = useCallback(() => {
@@ -443,7 +445,6 @@ export default function AgentChat({
               {error}
             </div>
           )}
-          <div ref={endRef} />
           </div>
         </div>
       </div>
