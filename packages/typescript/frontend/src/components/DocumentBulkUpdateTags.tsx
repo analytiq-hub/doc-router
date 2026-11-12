@@ -1,7 +1,7 @@
 import { toastActionError } from '@/utils/toastActionError';
 import { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { Tag } from '@docrouter/sdk';
-import TagSelector from './TagSelector';
+import { TagCheckboxList } from '@/components/TagCheckboxList'
 import { DocRouterOrgApi } from '@/utils/api';
 import { toast } from 'react-hot-toast';
 import { buildListDocumentsQuery, DocumentListSearchParameters } from '@/utils/documentListQuery';
@@ -164,9 +164,9 @@ export const DocumentBulkUpdateTags = forwardRef<DocumentBulkUpdateTagsRef, Docu
       <label className="block text-sm font-medium text-gray-700 mb-2">
         {selectedOperation === 'addTags' ? 'Select tags to add:' : 'Select tags to remove:'}
       </label>
-      <TagSelector
-        availableTags={availableTags}
-        selectedTagIds={selectedTagIds}
+      <TagCheckboxList
+        tags={availableTags}
+        selectedIds={selectedTagIds}
         onChange={handleTagChange}
         disabled={disabled || totalDocuments === 0}
       />
