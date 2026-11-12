@@ -83,7 +83,7 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 ---
 
-### Phase 4 — Standard CRUD lists (2–3 weeks, repeatable) — **in progress**
+### Phase 4 — Standard CRUD lists (2–3 weeks, repeatable) — **complete** (`frontend-shadcn`)
 
 **Tags (`frontend-shadcn`):** ✅ orchestrator list stack; create via dialog; `/tags/:tagId` edit unchanged.
 
@@ -93,9 +93,9 @@ Orchestrator documents the intended look in **`../doc-orchestrator/docs/design/u
 
 **Forms (`frontend-shadcn`):** ✅ `DataTable` + `TagCell`; rename/clone with name uniqueness; create stays `?tab=form-create` (Form.io builder).
 
-**Cases (`frontend-shadcn`):** ✅ `DataTable` + `FilterBuilder` + React Query (`useOrgCases`); `TagCell`; metadata search field; `PageHeader`; create stays `?tab=case-create`. Delete dialog still MUI (Phase 4/6).
+**Cases (`frontend-shadcn`):** ✅ `DataTable` + `FilterBuilder` + React Query (`useOrgCases`); `TagCell`; metadata search field; `PageHeader`; create stays `?tab=case-create`. ✅ shadcn `CaseDeleteDialog`; `CaseAssignmentFields` on shadcn `Field`/`Input`.
 
-**Knowledge bases (`frontend-shadcn`):** ✅ `DataTable` + filters + `useOrgKnowledgeBases` (polling while indexing); `TagCell`; `ConfirmDialog` delete; KB detail tabs unchanged; properties modal still MUI.
+**Knowledge bases (`frontend-shadcn`):** ✅ `DataTable` + filters + `useOrgKnowledgeBases` (polling while indexing); `TagCell`; `ConfirmDialog` delete; ✅ KB properties via `PropertiesDialog`; ✅ KB indexed-documents tab on `DataTable` + `useOrgKBDocuments`.
 
 Per entity (start with **Tags** or **Prompts**):
 
@@ -128,7 +128,7 @@ Dashboard, document list, upload (keep react-dropzone), bulk-run dialogs — Hea
 - ✅ Upload wizard: shadcn controls + `TagCheckboxList`; removed legacy MUI `DocumentList.tsx`
 - ✅ Org dashboard: `PageHeader`, shadcn `Card`/`Button`, Lucide, React Query counts + `TagBadge`
 - ✅ Tour guide: popover-style panel with arrow pointing at `data-tour` targets (auto-flips/clamps to viewport)
-- ⏳ Case delete / KB info modals; PDF viewer (Phase 8)
+- ⏳ PDF viewer (Phase 8)
 
 ---
 

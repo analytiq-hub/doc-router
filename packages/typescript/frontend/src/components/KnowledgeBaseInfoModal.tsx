@@ -1,20 +1,47 @@
-import { toastActionError } from '@/utils/toastActionError';
-import React, { useState, useMemo } from "react";
-import { KnowledgeBase } from "@docrouter/sdk";
-import BadgeIcon from "@mui/icons-material/Badge";
-import SyncIcon from "@mui/icons-material/Sync";
-import { Chip, Button } from "@mui/material";
-import { toast } from "react-toastify";
-import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import DraggablePanel from "@/components/DraggablePanel";
-import { formatLocalDate } from "@/utils/date";
+'use client'
+
+import { Loader2, RefreshCw } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import type { KnowledgeBase, KBStatus } from '@docrouter/sdk'
+
+import { PropertiesDialog, type Property } from '@/components/PropertiesDialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { DocRouterOrgApi } from '@/utils/api'
+import { toastActionError } from '@/utils/toastActionError'
+import { formatLocalDate } from '@/utils/date'
+import { toast } from 'react-toastify'
 
 interface KnowledgeBaseInfoModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  kb: KnowledgeBase;
-  organizationId: string;
-  onReconcile?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  kb: KnowledgeBase
+  organizationId: string
+  onReconcile?: () => void
+}
+
+function statusVariant(status: KBStatus): 'success' | 'warning' | 'danger' | 'outline' {
+  switch (status) {
+    case 'active':
+      return 'success'
+    case 'indexing':
+      return 'warning'
+    case 'error':
+      return 'danger'
+    default:
+      return 'outline'
+  }
+}
+
+function formatInterval(seconds?: number) {
+  if (!seconds) return 'N/A'
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
+function emptyEm(value: React.ReactNode, fallback = '—') {
+  if (value === null || value === undefined || value === '') return <span className="text-muted-foreground italic">{fallback}</span>
+  return value
 }
 
 const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
@@ -24,358 +51,164 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
   organizationId,
   onReconcile,
 }) => {
-  const [isReconciling, setIsReconciling] = useState(false);
-  const docRouterOrgApi = useMemo(
-    () => new DocRouterOrgApi(organizationId),
-    [organizationId],
-  );
+  const [isReconciling, setIsReconciling] = useState(false)
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId])
 
-  if (!isOpen) return null;
+  const properties = useMemo<Property[]>(() => {
+    const preprocess = kb.chunking_preprocess
+    return [
+      { label: 'Name', value: kb.name },
+      {
+        label: 'Status',
+        value: (
+          <Badge variant={statusVariant(kb.status)} className="capitalize">
+            {kb.status}
+          </Badge>
+        ),
+      },
+      { label: 'Description', value: emptyEm(kb.description, 'No description') },
+      {
+        label: 'System prompt',
+        value: (
+          <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-xs">
+            {kb.system_prompt || 'No system prompt'}
+          </pre>
+        ),
+      },
+      { label: 'KB ID', value: <span className="font-mono text-xs">{kb.kb_id}</span> },
+      { label: 'Embedding model', value: <span className="font-mono text-xs">{kb.embedding_model}</span> },
+      { label: 'Dimensions', value: String(kb.embedding_dimensions) },
+      { label: 'Chunker', value: kb.chunker_type },
+      { label: 'Chunk size', value: `${kb.chunk_size} tokens` },
+      { label: 'Chunk overlap', value: `${kb.chunk_overlap} tokens` },
+      {
+        label: 'Chunk preset',
+        value: emptyEm(
+          kb.chunking_preset != null ? kb.chunking_preset : null,
+          '(legacy default)',
+        ),
+      },
+      {
+        label: 'Preprocess',
+        value: preprocess ? (
+          <ul className="list-inside list-disc text-xs">
+            <li>prefer_markdown: {String(preprocess.prefer_markdown)}</li>
+            <li>strip_page_numbers: {String(preprocess.strip_page_numbers)}</li>
+            <li>strip_page_breaks: {String(preprocess.strip_page_breaks)}</li>
+            <li>prepend_heading_path: {String(preprocess.prepend_heading_path)}</li>
+            <li>heading_split_depth: {preprocess.heading_split_depth}</li>
+            <li>
+              strip_patterns:{' '}
+              {preprocess.strip_patterns?.length
+                ? `${preprocess.strip_patterns.length} regex(es)`
+                : 'none'}
+            </li>
+          </ul>
+        ) : (
+          <span className="text-muted-foreground italic text-xs">Legacy KB (no custom preprocess)</span>
+        ),
+      },
+      { label: 'Coalesce neighbors', value: String(kb.coalesce_neighbors ?? 1) },
+      {
+        label: 'Min vector score',
+        value:
+          kb.min_vector_score != null ? (
+            String(kb.min_vector_score)
+          ) : (
+            <span className="text-muted-foreground">None (no cutoff)</span>
+          ),
+      },
+      { label: 'Documents', value: kb.document_count.toLocaleString() },
+      { label: 'Chunks', value: kb.chunk_count.toLocaleString() },
+      {
+        label: 'Tag IDs',
+        value:
+          (kb.tag_ids?.length ?? 0) > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {(kb.tag_ids ?? []).map((tagId) => (
+                <span key={tagId} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                  {tagId}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground italic">No tags</span>
+          ),
+      },
+      { label: 'Created', value: formatLocalDate(kb.created_at) },
+      { label: 'Updated', value: formatLocalDate(kb.updated_at) },
+      {
+        label: 'Reconcile',
+        value: (
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-2">
+              <span>Periodic:</span>
+              <Badge variant={kb.reconcile_enabled ? 'success' : 'outline'}>
+                {kb.reconcile_enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+            </div>
+            {kb.reconcile_enabled && kb.reconcile_interval_seconds ? (
+              <p>Interval: {formatInterval(kb.reconcile_interval_seconds)}</p>
+            ) : null}
+            <p>
+              Last run:{' '}
+              {kb.last_reconciled_at ? (
+                formatLocalDate(kb.last_reconciled_at)
+              ) : (
+                <span className="text-muted-foreground italic">Never</span>
+              )}
+            </p>
+          </div>
+        ),
+      },
+    ]
+  }, [kb])
+
+  if (!isOpen) return null
 
   const handleReconcile = async () => {
-    setIsReconciling(true);
+    setIsReconciling(true)
     try {
       const result = await docRouterOrgApi.reconcileKnowledgeBase({
         kbId: kb.kb_id,
         dry_run: false,
-      });
+      })
       toast.success(
         `Reconciliation complete: ${result.missing_documents.length} missing, ` +
           `${result.stale_documents.length} stale, ${result.orphaned_vectors} orphaned vectors`,
-      );
-      if (onReconcile) {
-        onReconcile();
-      }
+      )
+      onReconcile?.()
     } catch (error) {
-      toastActionError('Reconciliation failed', error);
+      toastActionError('Reconciliation failed', error)
     } finally {
-      setIsReconciling(false);
+      setIsReconciling(false)
     }
-  };
-
-  const formatInterval = (seconds?: number) => {
-    if (!seconds) return "N/A";
-    if (seconds < 60) return `${seconds}s`;
-    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  };
-
-  const getStatusColor = (
-    status: string,
-  ): "success" | "warning" | "error" | "default" => {
-    switch (status) {
-      case "active":
-        return "success";
-      case "indexing":
-        return "warning";
-      case "error":
-        return "error";
-      default:
-        return "default";
-    }
-  };
+  }
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-[70] bg-black bg-opacity-50"
-        onClick={onClose}
-        role="presentation"
-      />
-      <DraggablePanel
-        open
-        resetToken={kb.kb_id}
-        anchorPercent={{ x: 50, y: 45 }}
-        width="min(100vw - 32px, 42rem)"
-        height="min(90vh, 820px)"
-        zIndex={71}
-        ariaLabel="Knowledge base properties"
-        title={
-          <>
-            <BadgeIcon className="shrink-0 text-primary-600" fontSize="small" />
-            <span className="truncate">Knowledge Base Properties</span>
-          </>
-        }
-        headerActions={
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md bg-primary-600 px-3 py-1.5 text-xs text-white hover:bg-primary-700"
-          >
+    <PropertiesDialog
+      title="Knowledge base properties"
+      description={kb.name}
+      properties={properties}
+      columns={2}
+      onClose={onClose}
+      footer={
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/40 px-4 py-3">
+          <Button type="button" variant="outline" size="sm" disabled={isReconciling} onClick={() => void handleReconcile()}>
+            {isReconciling ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <RefreshCw data-icon="inline-start" />
+            )}
+            {isReconciling ? 'Reconciling…' : 'Reconcile now'}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Close
-          </button>
-        }
-      >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Name
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.name}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Status
-                </label>
-                <div className="pt-2">
-                  <Chip
-                    label={kb.status}
-                    color={getStatusColor(kb.status)}
-                    size="small"
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-2">
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Description
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.description || (
-                    <span className="text-gray-500 italic">No description</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="col-span-2">
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  System Prompt
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm whitespace-pre-wrap">
-                  {kb.system_prompt || (
-                    <span className="text-gray-500 italic">
-                      No system prompt
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  KB ID
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm break-all">
-                  {kb.kb_id}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Embedding Model
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm">
-                  {kb.embedding_model}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Embedding Dimensions
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.embedding_dimensions}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Chunker Type
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.chunker_type}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Chunk Size
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.chunk_size} tokens
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Chunk Overlap
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.chunk_overlap} tokens
-                </div>
-              </div>
-
-              <div className="col-span-2">
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Chunking preprocessing
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border text-sm space-y-1">
-                  <div>
-                    <span className="text-gray-500">Preset: </span>
-                    {kb.chunking_preset != null ? (
-                      kb.chunking_preset
-                    ) : (
-                      <span className="text-gray-500 italic">(legacy default)</span>
-                    )}
-                  </div>
-                  {kb.chunking_preprocess ? (
-                    <ul className="list-disc list-inside text-xs text-gray-700 mt-1">
-                      <li>prefer_markdown: {String(kb.chunking_preprocess.prefer_markdown)}</li>
-                      <li>strip_page_numbers: {String(kb.chunking_preprocess.strip_page_numbers)}</li>
-                      <li>strip_page_breaks: {String(kb.chunking_preprocess.strip_page_breaks)}</li>
-                      <li>prepend_heading_path: {String(kb.chunking_preprocess.prepend_heading_path)}</li>
-                      <li>heading_split_depth: {kb.chunking_preprocess.heading_split_depth}</li>
-                      <li>
-                        strip_patterns:{' '}
-                        {kb.chunking_preprocess.strip_patterns?.length
-                          ? `${kb.chunking_preprocess.strip_patterns.length} regex(es)`
-                          : 'none'}
-                      </li>
-                    </ul>
-                  ) : (
-                    <span className="text-gray-500 text-xs">No custom preprocess stored (legacy KB).</span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Coalesce Neighbors
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.coalesce_neighbors ?? 1}
-                </div>
-              </div>
-
-              <div className="col-span-2 border-t border-gray-100 pt-3 mt-1">
-                <label className="text-sm font-semibold text-gray-700 block mb-2">
-                  Search &amp; retrieval
-                </label>
-                <div>
-                  <span className="text-xs text-gray-500 block mb-1">
-                    Min vector score (vector-only fallback)
-                  </span>
-                  <div className="text-gray-900 bg-gray-50 p-2 rounded border text-sm">
-                    {kb.min_vector_score != null ? (
-                      kb.min_vector_score
-                    ) : (
-                      <span className="text-gray-600">None (no cutoff)</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Document Count
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.document_count.toLocaleString()}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Chunk Count
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.chunk_count.toLocaleString()}
-                </div>
-              </div>
-
-              <div className="col-span-2">
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Tag IDs
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.tag_ids && kb.tag_ids.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {kb.tag_ids.map((tagId, index) => (
-                        <span
-                          key={index}
-                          className="font-mono text-xs bg-primary-100 text-primary-800 px-2 py-1 rounded"
-                        >
-                          {tagId}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-gray-500 italic">No tags</span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Created At
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {formatLocalDate(kb.created_at)}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-1">
-                  Updated At
-                </label>
-                <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {formatLocalDate(kb.updated_at)}
-                </div>
-              </div>
-
-              <div className="col-span-2 border-t pt-4 mt-2">
-                <label className="text-sm font-semibold text-gray-700 block mb-2">
-                  Reconciliation
-                </label>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">
-                      Periodic Reconciliation:
-                    </label>
-                    <Chip
-                      label={kb.reconcile_enabled ? "Enabled" : "Disabled"}
-                      color={kb.reconcile_enabled ? "success" : "default"}
-                      size="small"
-                    />
-                  </div>
-                  {kb.reconcile_enabled && kb.reconcile_interval_seconds && (
-                    <div className="text-sm text-gray-600">
-                      Interval: {formatInterval(kb.reconcile_interval_seconds)}
-                    </div>
-                  )}
-                  {kb.last_reconciled_at && (
-                    <div className="text-sm text-gray-600">
-                      Last reconciled: {formatLocalDate(kb.last_reconciled_at)}
-                    </div>
-                  )}
-                  {!kb.last_reconciled_at && (
-                    <div className="text-sm text-gray-500 italic">
-                      Never reconciled
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center border-t border-gray-200 px-6 py-3">
-            <Button
-              variant="outlined"
-              startIcon={<SyncIcon />}
-              onClick={handleReconcile}
-              disabled={isReconciling}
-              className="text-primary-600 border-primary-600 hover:bg-primary-50"
-            >
-              {isReconciling ? "Reconciling..." : "Reconcile Now"}
-            </Button>
-          </div>
+          </Button>
         </div>
-      </DraggablePanel>
-    </>
-  );
-};
+      }
+    />
+  )
+}
 
-export default KnowledgeBaseInfoModal;
+export default KnowledgeBaseInfoModal

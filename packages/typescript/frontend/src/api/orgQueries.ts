@@ -163,6 +163,20 @@ export function useOrgDocuments(organizationId: string, params: OrgDocumentListP
   })
 }
 
+export type OrgKBDocumentsParams = {
+  skip: number
+  limit: number
+}
+
+export function useOrgKBDocuments(organizationId: string, kbId: string, params: OrgKBDocumentsParams) {
+  return useQuery({
+    queryKey: [...orgKeys.knowledgeBases(organizationId), kbId, 'documents', params] as const,
+    queryFn: () => orgApi(organizationId).listKBDocuments({ kbId, skip: params.skip, limit: params.limit }),
+    placeholderData: (previous) => previous,
+    enabled: Boolean(kbId),
+  })
+}
+
 export function useInvalidateOrgLists(organizationId: string) {
   const client = useQueryClient()
   return {

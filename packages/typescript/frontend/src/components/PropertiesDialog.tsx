@@ -22,12 +22,14 @@ export function PropertiesDialog({
   description,
   properties,
   columns = 1,
+  footer,
   onClose,
 }: {
   title: string
   description?: string
   properties: Property[]
   columns?: 1 | 2
+  footer?: ReactNode
   onClose: () => void
 }) {
   const popup = useRef<HTMLDivElement>(null)
@@ -130,11 +132,13 @@ export function PropertiesDialog({
             </div>
           ))}
         </dl>
-        <div className="flex shrink-0 justify-end border-t bg-muted/40 px-4 py-3">
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </div>
+        {footer ?? (
+          <div className="flex shrink-0 justify-end border-t bg-muted/40 px-4 py-3">
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
