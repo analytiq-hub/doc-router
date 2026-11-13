@@ -25,6 +25,8 @@ export type ExtractionPromptRowProps = {
   bodyId: string
   onToggle: () => void
   actions: (RowAction | false | null | undefined)[]
+  /** Extra controls beside the menu, shown only while the row is open. */
+  headerActions?: ReactNode
   children: ReactNode
 }
 
@@ -43,6 +45,7 @@ export function ExtractionPromptRow({
   bodyId,
   onToggle,
   actions,
+  headerActions,
   children,
 }: ExtractionPromptRowProps) {
   const busy = Boolean(running || loading)
@@ -89,10 +92,11 @@ export function ExtractionPromptRow({
             ) : null}
           </span>
         </button>
+        {open ? headerActions : null}
         <RowActionsMenu label={ariaLabel} actions={actions} />
       </div>
       {open ? (
-        <div id={bodyId} className="flex flex-col gap-3 pb-3 pl-7 pr-1">
+        <div id={bodyId} className="flex flex-col gap-3 pb-3 pl-1 pr-1">
           {children}
         </div>
       ) : null}

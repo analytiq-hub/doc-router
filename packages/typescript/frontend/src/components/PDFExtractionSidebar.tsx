@@ -1,7 +1,20 @@
 import React, { useEffect, useState, useMemo, useRef, useId } from 'react';
-import { Check, Download, FileText, Pencil, Play, RefreshCw, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, FileText, Maximize2, Pencil, Play, Plus, RefreshCw, X } from 'lucide-react';
 import { ExtractionPromptRow } from '@/components/pdf/ExtractionPromptRow';
 import { resultPreview } from '@/lib/results';
+import {
+  resultCellText,
+  resultCollapsibleNodes,
+  resultContainerStartsCollapsed,
+  blankResultValue,
+  coerceEditedValue,
+  removeResultItemAtPath,
+  resultItemSummary,
+  resultListSample,
+  resultValueAtPath,
+  setResultValueAtPath,
+} from '@/lib/resultTree';
+import { cn } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +26,7 @@ import type { Prompt } from '@docrouter/sdk';
 import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/hooks/useOCRBlocks';
+import { usePromptResults } from '@/hooks/usePromptResults';
 import DraggablePanel from '@/components/DraggablePanel';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
@@ -32,21 +46,33 @@ interface EditingState {
 // Update the type definition to handle nested structures
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
+/** Shared look for clickable result rows: full-width, quiet until hovered or focused. */
+/**
+ * Fields are laid out on a shared grid so values line up in one column: names (as wide as the
+ * longest name, at most 40%), values, and a slot for row actions. Rows join it as subgrids.
+ */
+const RESULT_GRID_CLASS = 'grid grid-cols-[fit-content(40%)_minmax(0,1fr)_auto] gap-x-2';
+
+const DISCLOSURE_HINT = 'Alt/Option-click to open or close everything inside';
+
+const RESULT_ROW_CLASS =
+  'min-w-0 flex-1 rounded-sm px-1 text-left outline-none enabled:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50';
+
 const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
-  const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
   const [matchingPrompts, setMatchingPrompts] = useState<Prompt[]>([]);
   const [runningPrompts, setRunningPrompts] = useState<Set<string>>(new Set());
   const [expandedPrompt, setExpandedPrompt] = useState<string>('default');
-  const [loadingPrompts, setLoadingPrompts] = useState<Set<string>>(new Set());
-  const [prefetchingPrompts, setPrefetchingPrompts] = useState<Set<string>>(new Set());
-  const [failedPrompts, setFailedPrompts] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
+  const [resultNodeOverrides, setResultNodeOverrides] = useState<Map<string, boolean>>(new Map());
+  /** The row last located in the document, so it stays marked while the user reads the PDF. */
+  const [activeFindKey, setActiveFindKey] = useState<string | null>(null);
+  /** A list of objects opened as a full table in a floating panel. */
+  const [tableView, setTableView] = useState<{ promptId: string; path: string; label: string } | null>(null);
   const [documentState, setDocumentState] = useState<string | null>(null);
-  const defaultLlmFetchStartedRef = React.useRef(false);
   /** Cycle index for repeated Search on the same extraction (first click = 1st match, then next match). */
   const extractionFindCycleRef = useRef<{ sig: string; index: number } | null>(null);
 
@@ -58,62 +84,45 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   const [runInfoLoading, setRunInfoLoading] = useState(false);
   const [runInfoResult, setRunInfoResult] = useState<GetLLMResultResponse | null>(null);
 
-  // Refs mirror state so the fetch effect can read current values without being in the dependency array
-  const llmResultsRef = React.useRef(llmResults);
-  const loadingPromptsRef = React.useRef(loadingPrompts);
-  const prefetchingPromptsRef = React.useRef(prefetchingPrompts);
-  const failedPromptsRef = React.useRef(failedPrompts);
-  llmResultsRef.current = llmResults;
-  loadingPromptsRef.current = loadingPrompts;
-  prefetchingPromptsRef.current = prefetchingPrompts;
-  failedPromptsRef.current = failedPrompts;
-
-  const getStatusFromError = (err: unknown): number | undefined => {
-    if (!err || typeof err !== 'object') return undefined;
-    const maybe = err as { status?: unknown; response?: { status?: unknown } };
-    const rawStatus = maybe.status ?? maybe.response?.status;
-    if (typeof rawStatus === 'number') return rawStatus;
-    if (typeof rawStatus === 'string') {
-      const parsed = Number(rawStatus);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    }
-    return undefined;
-  };
-
-  const getMessageFromError = (err: unknown): string => {
-    if (err instanceof Error) return err.message;
-    if (!err || typeof err !== 'object') return '';
-    const maybe = err as { message?: unknown };
-    return typeof maybe.message === 'string' ? maybe.message : '';
-  };
-
   useEffect(() => {
-    defaultLlmFetchStartedRef.current = false;
     extractionFindCycleRef.current = null;
-    setPrefetchingPrompts(new Set());
+    setResultNodeOverrides(new Map());
+    setActiveFindKey(null);
+    setTableView(null);
   }, [id]);
 
-  const matchingPromptIds = useMemo(
-    () => matchingPrompts.map((p) => p.prompt_revid).sort().join('\0'),
-    [matchingPrompts],
+  const promptResultIds = useMemo(
+    () => [
+      ...(organization?.default_prompt_enabled === false ? [] : ['default']),
+      ...matchingPrompts.map((prompt) => prompt.prompt_revid),
+    ],
+    [matchingPrompts, organization?.default_prompt_enabled],
   );
+  const isDocumentProcessing =
+    documentState === 'ocr_processing' || documentState === 'llm_processing';
+  const {
+    byPrompt: promptResultState,
+    results: llmResults,
+    setResult: setPromptResult,
+    fetchResult: fetchPromptResult,
+  } = usePromptResults({
+    organizationId,
+    documentId: id,
+    promptRevIds: promptResultIds,
+    enabled: !isDocumentProcessing,
+  });
 
-  // Fetch document metadata (state, name) then load prompts and default LLM result.
+  // Fetch document metadata and matching prompts. Prompt results are shared TanStack queries below.
   useEffect(() => {
     const fetchData = async () => {
-      let fetchedState: string | null = null;
       let fetchedName: string | null = null;
-      let defaultPromptEnabled = true;
 
       try {
         try {
           const orgResponse = await docRouterAccountApi.getOrganization(organizationId);
           setOrganization(orgResponse);
-          defaultPromptEnabled = orgResponse.default_prompt_enabled !== false;
         } catch (error) {
           console.error('Error fetching organization metadata:', error);
-          // If we cannot load the organization, fall back to enabled behavior
-          defaultPromptEnabled = true;
         }
 
         try {
@@ -122,61 +131,15 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
             fileType: 'pdf',
             includeContent: false,
           });
-          fetchedState = docResponse.state;
           fetchedName = docResponse.document_name ?? null;
-          setDocumentState(fetchedState);
+          setDocumentState(docResponse.state);
           setDocumentName(fetchedName);
         } catch (error) {
           console.error('Error fetching document metadata:', error);
         }
 
-        const isProcessing = fetchedState === 'ocr_processing' || fetchedState === 'llm_processing';
-        const alreadyHaveDefault =
-          llmResultsRef.current['default'] ||
-          loadingPromptsRef.current.has('default') ||
-          failedPromptsRef.current.has('default') ||
-          defaultLlmFetchStartedRef.current;
-        const needDefault = defaultPromptEnabled && !isProcessing && !alreadyHaveDefault;
-
-        if (needDefault) {
-          defaultLlmFetchStartedRef.current = true;
-          setLoadingPrompts(prev => new Set(prev).add('default'));
-        }
-
-        const listPromptsPromise = docRouterOrgApi.listPrompts({ document_id: id, limit: 100 });
-        const defaultPromise = needDefault
-          ? docRouterOrgApi
-              .getLLMResult({ documentId: id, promptRevId: 'default', promptRevIdFallback: false })
-              .then((data): { success: true; data: GetLLMResultResponse } => ({ success: true, data }))
-              .catch((error): { success: false; error: unknown } => ({ success: false, error }))
-          : Promise.resolve<null>(null);
-
-        const [promptsResponse, defaultResult] = await Promise.all([listPromptsPromise, defaultPromise]);
-
+        const promptsResponse = await docRouterOrgApi.listPrompts({ document_id: id, limit: 100 });
         setMatchingPrompts(promptsResponse.prompts);
-
-        if (needDefault && defaultResult !== null) {
-          if (defaultResult.success) {
-            setLlmResults(prev => ({ ...prev, 'default': defaultResult.data }));
-            setFailedPrompts(prev => {
-              const next = new Set(prev);
-              next.delete('default');
-              return next;
-            });
-          } else {
-            const errorMessage = defaultResult.error instanceof Error ? defaultResult.error.message : String(defaultResult.error);
-            const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
-            if (!isNotFound) {
-              console.error('Error fetching default results:', defaultResult.error);
-              setFailedPrompts(prev => new Set(prev).add('default'));
-            }
-          }
-          setLoadingPrompts(prev => {
-            const next = new Set(prev);
-            next.delete('default');
-            return next;
-          });
-        }
       } catch (error) {
         console.error('Error fetching prompts:', error);
       }
@@ -195,91 +158,12 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       try {
         const docResponse = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         setDocumentState(docResponse.state);
-        if (defaultPromptEnabled &&
-            (docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') &&
-            !llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
-          setLoadingPrompts(prev => new Set(prev).add('default'));
-          try {
-            const defaultResults = await docRouterOrgApi.getLLMResult({
-              documentId: id, promptRevId: 'default', promptRevIdFallback: false,
-            });
-            setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
-          } catch (error) {
-            // If the backend doesn't have a result yet, show "No results available"
-            // instead of treating it as a permanent failure.
-            const status = getStatusFromError(error);
-            if (status !== 404) {
-              setFailedPrompts(prev => new Set(prev).add('default'));
-            }
-          }
-          setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
-        }
       } catch (error) {
         console.error('Error polling document state:', error);
       }
     }, 2000);
     return () => clearInterval(pollInterval);
-  }, [documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts, organization]);
-
-  // Load results for tagged prompts so collapsed row previews are correct before the user expands.
-  useEffect(() => {
-    const isProcessing =
-      documentState === 'ocr_processing' || documentState === 'llm_processing';
-    if (isProcessing || matchingPrompts.length === 0) return;
-
-    let cancelled = false;
-
-    const prefetchOne = async (promptId: string) => {
-      if (
-        llmResultsRef.current[promptId] ||
-        loadingPromptsRef.current.has(promptId) ||
-        prefetchingPromptsRef.current.has(promptId) ||
-        failedPromptsRef.current.has(promptId)
-      ) {
-        return;
-      }
-
-      setPrefetchingPrompts((prev) => new Set(prev).add(promptId));
-      try {
-        const results = await docRouterOrgApi.getLLMResult({
-          documentId: id,
-          promptRevId: promptId,
-          promptRevIdFallback: true,
-        });
-        if (cancelled) return;
-        setLlmResults((prev) => ({ ...prev, [promptId]: results }));
-        setFailedPrompts((prev) => {
-          const next = new Set(prev);
-          next.delete(promptId);
-          return next;
-        });
-      } catch (error) {
-        if (cancelled) return;
-        const status = getStatusFromError(error);
-        const message = getMessageFromError(error).toLowerCase();
-        const isNotFound = status === 404 || message.includes('not found');
-        if (!isNotFound) {
-          console.error('Error prefetching LLM results:', error);
-          setFailedPrompts((prev) => new Set(prev).add(promptId));
-        }
-      } finally {
-        setPrefetchingPrompts((prev) => {
-          const next = new Set(prev);
-          next.delete(promptId);
-          return next;
-        });
-      }
-    };
-
-    const prefetchMatchingPromptResults = async () => {
-      await Promise.all(matchingPrompts.map((prompt) => prefetchOne(prompt.prompt_revid)));
-    };
-
-    void prefetchMatchingPromptResults();
-    return () => {
-      cancelled = true;
-    };
-  }, [matchingPromptIds, matchingPrompts, documentState, id, docRouterOrgApi]);
+  }, [documentState, id, docRouterOrgApi, organization]);
 
   useEffect(() => {
     if (documentName) {
@@ -287,52 +171,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     }
   }, [id, organizationId, documentName, loadOCRBlocks]);
 
-  const handlePromptChange = async (promptId: string) => {
+  const handlePromptChange = (promptId: string) => {
     if (expandedPrompt === promptId) {
       setExpandedPrompt('');
       return;
     }
 
     setExpandedPrompt(promptId);
-
-    if (!llmResults[promptId]) {
-      setLoadingPrompts(prev => new Set(prev).add(promptId));
-      try {
-        const results = await docRouterOrgApi.getLLMResult({
-          documentId: id, 
-          promptRevId: promptId,
-          promptRevIdFallback: true
-        });
-        setLlmResults(prev => ({
-          ...prev,
-          [promptId]: results
-        }));
-        setFailedPrompts(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(promptId);
-          return newSet;
-        });
-      } catch (error) {
-        const status = getStatusFromError(error);
-        const message = getMessageFromError(error).toLowerCase();
-        const isNotFound = status === 404 || message.includes('not found');
-
-        if (!isNotFound) {
-          console.error('Error fetching LLM results:', error);
-          // Check if document is still processing - if so, don't mark as failed
-          const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
-          if (!isProcessing) {
-            setFailedPrompts(prev => new Set(prev).add(promptId));
-          }
-        }
-      } finally {
-        setLoadingPrompts(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(promptId);
-          return newSet;
-        });
-      }
-    }
   };
 
   const handleRunPrompt = async (promptId: string) => {
@@ -344,16 +189,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         force: true
       });
       
-      const result = await docRouterOrgApi.getLLMResult({
-        documentId: id,
-        promptRevId: promptId,
-        promptRevIdFallback: false
-      });
-      
-      setLlmResults(prev => ({
-        ...prev,
-        [promptId]: result
-      }));
+      await fetchPromptResult(promptId, false);
     } catch (error) {
       console.error('Error running prompt:', error);
     } finally {
@@ -378,11 +214,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     setRunInfoLoading(true);
     setRunInfoResult(null);
     try {
-      const result = await docRouterOrgApi.getLLMResult({
-        documentId: id,
-        promptRevId: promptId,
-        promptRevIdFallback: true
-      });
+      const result = await fetchPromptResult(promptId, true);
       setRunInfoResult(result);
     } catch (err) {
       console.error('Error loading run info:', err);
@@ -428,6 +260,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         ? { ...full, blocks: [full.blocks[idx]], pdfFallbackHits: undefined }
         : { ...full, blocks: [], pdfFallbackHits: [pdfHits[idx]] };
 
+    setActiveFindKey(resultNodeKey(promptId, key));
     onHighlight(highlightInfo);
   };
 
@@ -436,101 +269,47 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     setEditing({ promptId, key, value });
   };
 
+  /** Apply a change to a copy of the stored result and save it. Returns whether it was saved. */
+  const saveResultChange = async (promptId: string, mutate: (draft: JsonValue) => boolean) => {
+    const current = llmResults[promptId];
+    if (!current) return false;
+    const draft = JSON.parse(JSON.stringify(current.updated_llm_result)) as JsonValue;
+    if (!mutate(draft)) {
+      console.error('Result path not found; nothing saved.');
+      return false;
+    }
+    // Use the stored prompt_revid from the result (not the requested key) so that
+    // when GET was done with fallback=true we update the actual stored record.
+    const result = await docRouterOrgApi.updateLLMResult({
+      documentId: id,
+      promptId: current.prompt_revid,
+      result: draft as Record<string, JsonValue>,
+      isVerified: false,
+    });
+    setPromptResult(promptId, result);
+    return true;
+  };
+
   const handleSave = async () => {
     if (!editing) return;
-
     try {
-      const currentResult = llmResults[editing.promptId];
-      if (!currentResult) return;
-
-      // Create a deep copy of the current result
-      const updatedResult = JSON.parse(JSON.stringify(currentResult.updated_llm_result));
-      
-      // Check if we're dealing with an array item - matches patterns like "items[2]" or "items[2].name"
-      const arrayItemRegex = /(.*?)\[(\d+)\](\..*)?$/;
-      const matches = editing.key.match(arrayItemRegex);
-      
-      if (matches) {
-        // Extract array path, index, and any nested path that follows
-        const arrayPath = matches[1];      // e.g., "items" 
-        const index = parseInt(matches[2], 10); // e.g., 2
-        const nestedPath = matches[3] ? matches[3].substring(1) : null; // e.g., "name" (without the leading dot)
-        
-        // Navigate to the array
-        let current = updatedResult;
-        const pathParts = arrayPath.split('.');
-        
-        // Navigate to the containing array
-        for (const part of pathParts) {
-          if (current[part] !== undefined) {
-            current = current[part];
-          } else {
-            console.error('Array path not found:', arrayPath);
-            return;
-          }
-        }
-        
-        // Make sure we found the array and the index is valid
-        if (Array.isArray(current) && index >= 0 && index < current.length) {
-          if (nestedPath) {
-            // We need to update a property inside an object in the array
-            const nestedPathParts = nestedPath.split('.');
-            const arrayItem = current[index];
-            
-            // Navigate to the nested object that contains the property to update
-            let currentNested = arrayItem;
-            for (let i = 0; i < nestedPathParts.length - 1; i++) {
-              const part = nestedPathParts[i];
-              if (!currentNested[part]) {
-                currentNested[part] = {};
-              }
-              currentNested = currentNested[part];
-            }
-            
-            // Update the nested property
-            const lastKey = nestedPathParts[nestedPathParts.length - 1];
-            currentNested[lastKey] = editing.value;
-          } else {
-            // Update the array item directly (it's a primitive value)
-            current[index] = editing.value;
-          }
-        }
-      } else {
-        // Handle normal path (non-array) - existing logic
-        const pathParts = editing.key.split('.');
-        let current = updatedResult;
-        
-        // Navigate to the nested object that contains the property to update
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          current = current[pathParts[i]];
-          if (!current) break;
-        }
-        
-        // Update the value if we found the containing object
-        if (current) {
-          const lastKey = pathParts[pathParts.length - 1];
-          current[lastKey] = editing.value;
-        }
-      }
-
-      // Use the stored prompt_revid from the result (not the requested key) so that
-      // when GET was done with fallback=true we update the actual stored record.
-      const result = await docRouterOrgApi.updateLLMResult({
-        documentId: id,
-        promptId: currentResult.prompt_revid,
-        result: updatedResult,
-        isVerified: false
-      });
-
-      setLlmResults(prev => ({
-        ...prev,
-        [editing.promptId]: result
-      }));
-      setEditing(null);
+      const saved = await saveResultChange(editing.promptId, (draft) =>
+        setResultValueAtPath(
+          draft,
+          editing.key,
+          coerceEditedValue(resultValueAtPath(draft, editing.key), editing.value),
+        ),
+      );
+      if (saved) setEditing(null);
     } catch (error) {
       console.error('Error saving edit:', error);
     }
   };
+
+  // Leaving edit mode closes any open input; an unsaved change there is dropped, as with Cancel.
+  useEffect(() => {
+    if (!editMode) setEditing(null);
+  }, [editMode]);
 
   const handleCancel = () => {
     setEditing(null);
@@ -544,287 +323,376 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
            typeof value === 'boolean';
   };
 
-  // Update the renderNestedValue function to handle arrays with editing capabilities
-  const renderNestedValue = (
-    promptId: string, 
-    parentKey: string, 
-    value: JsonValue, 
-    level: number = 0,
-    onFind: (promptId: string, key: string, value: string) => void,
-    onEdit: (promptId: string, key: string, value: string) => void,
-    editing: EditingState | null,
-    handleSave: () => void,
-    handleCancel: () => void,
-    editMode: boolean = false
+  const resultNodeKey = (promptId: string, path: string) => `${promptId}\0${path || '$root'}`;
+
+  const setResultNodeOpen = (promptId: string, path: string, open: boolean) => {
+    setResultNodeOverrides((previous) => {
+      const next = new Map(previous);
+      next.set(resultNodeKey(promptId, path), open);
+      return next;
+    });
+  };
+
+  const collapsibleNodes = (promptId: string) => {
+    const payload = llmResults[promptId]?.updated_llm_result;
+    return payload ? resultCollapsibleNodes(payload as { [key: string]: JsonValue }) : [];
+  };
+
+  /** Open or close every group at `path` and below (all groups when `path` is empty). */
+  const setResultSubtree = (promptId: string, path: string, open: boolean) => {
+    const inside = (nodePath: string) =>
+      !path || nodePath === path || nodePath.startsWith(`${path}.`) || nodePath.startsWith(`${path}[`);
+    setResultNodeOverrides((previous) => {
+      const next = new Map(previous);
+      collapsibleNodes(promptId)
+        .filter((node) => inside(node.path))
+        .forEach((node) => next.set(resultNodeKey(promptId, node.path), open));
+      return next;
+    });
+  };
+
+  /** Alt/Option-click opens or closes everything inside a group; a plain click toggles just it. */
+  const toggleResultNode = (event: React.MouseEvent, promptId: string, path: string, open: boolean) => {
+    if (event.altKey) setResultSubtree(promptId, path, !open);
+    else setResultNodeOpen(promptId, path, !open);
+  };
+
+  const isNodeOpen = (promptId: string, path: string, defaultOpen: boolean) =>
+    resultNodeOverrides.get(resultNodeKey(promptId, path)) ?? defaultOpen;
+
+  /** Indent the first two levels only; deeper nesting relies on its group headers. */
+  const groupBodyClass = (level: number) =>
+    cn(RESULT_GRID_CLASS, level <= 2 && 'ml-1.5 border-l border-border pl-1.5');
+
+  /** Open a value for editing, first saving any other edit in progress so it is not lost. */
+  const startEdit = async (promptId: string, path: string, stringValue: string) => {
+    if (editing && (editing.promptId !== promptId || editing.key !== path)) {
+      const stored = resultValueAtPath(
+        (llmResults[editing.promptId]?.updated_llm_result ?? null) as JsonValue,
+        editing.key,
+      );
+      if ((stored?.toString() ?? '') !== editing.value) await handleSave();
+    }
+    handleEdit(promptId, path, stringValue);
+  };
+
+  /**
+   * A single value. Clicking the row finds the value in the document, or, in edit mode,
+   * opens it for editing. Names sit in the grid's first column, values in the second.
+   */
+  const renderLeaf = (
+    promptId: string,
+    label: string | null,
+    path: string,
+    value: JsonValue,
+    options: { actions?: React.ReactNode } = {},
   ) => {
-    // If the value is editable (string, number, boolean, null), render it with edit controls
-    if (isEditableValue(value)) {
-      const stringValue = value?.toString() ?? '';
-      const isEmpty = stringValue === '' || stringValue === 'null' || value === null;
-      const fullKey = parentKey;
-      
-      if (editing && editing.promptId === promptId && editing.key === fullKey) {
-        return (
-          <div className="flex min-w-0 items-center gap-2">
+    const stringValue = value?.toString() ?? '';
+    const isEmpty = stringValue.trim() === '' || stringValue === 'null';
+
+    if (editing && editing.promptId === promptId && editing.key === path) {
+      return (
+        <div key={path} className="col-span-full grid grid-cols-subgrid items-center px-1 py-0.5 text-sm">
+          {label ? (
+            <span className="truncate text-primary" title={label}>
+              {label}
+            </span>
+          ) : null}
+          <div className={cn('flex min-w-0 items-center gap-0.5', label ? 'col-span-2' : 'col-span-full')}>
             <Input
               type="text"
               value={editing.value}
               onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-              className="min-w-0 flex-1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleSave();
+                if (e.key === 'Escape') handleCancel();
+              }}
+              className="h-7 min-w-0 flex-1 px-2 text-sm md:text-sm"
               autoFocus
             />
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Button type="button" variant="ghost" size="icon-sm" onClick={handleSave} title="Save changes">
-                <Check className="text-success" />
-              </Button>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={handleCancel} title="Cancel">
-                <X className="text-destructive" />
-              </Button>
-            </div>
-          </div>
-        );
-      }
-      
-      return (
-        <div className="group flex items-start justify-between gap-2">
-          <span
-            className={`min-w-0 flex-1 break-words text-sm whitespace-pre-wrap ${
-              isEmpty ? 'text-muted-foreground italic' : 'text-foreground'
-            }`}
-          >
-            {isEmpty ? '—' : stringValue}
-          </span>
-          <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onFind(promptId, fullKey, stringValue)}
-              title="Find in document"
-              disabled={isEmpty}
-            >
-              <Search />
+            <Button type="button" variant="ghost" size="icon-xs" onClick={handleSave} title="Save changes">
+              <Check className="text-success" />
             </Button>
-            {editMode ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onEdit(promptId, fullKey, stringValue)}
-                title="Edit value"
-              >
-                <Pencil />
-              </Button>
-            ) : null}
+            <Button type="button" variant="ghost" size="icon-xs" onClick={handleCancel} title="Cancel">
+              <X className="text-destructive" />
+            </Button>
           </div>
         </div>
       );
     }
-    
-    // If it's an object, render each property recursively
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      // If the object is empty, render an empty state
-      if (Object.keys(value).length === 0) {
-        return (
-          <span className="text-sm text-muted-foreground">No fields</span>
-        );
-      }
-      
-      return (
-        <dl className={level > 0 ? 'flex flex-col gap-1 border-l border-border pl-3' : 'flex flex-col gap-2'}>
-          {Object.entries(value).map(([key, val]) => {
-            const fullKey = parentKey ? `${parentKey}.${key}` : key;
-            return (
-              <div key={fullKey} className="min-w-0 text-sm">
-                <dt className="text-xs text-muted-foreground">{key}</dt>
-                <dd className="break-words">
-                  {renderNestedValue(promptId, fullKey, val, level + 1, onFind, onEdit, editing, handleSave, handleCancel, editMode)}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      );
-    }
-    
-    // If it's an array, render with editing capabilities
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        return (
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>None</span>
-            {editMode ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleArrayItemAdd(promptId, parentKey, [])}
-              >
-                Add item
-              </Button>
+
+    return (
+      <div key={path} className="col-span-full grid grid-cols-subgrid items-start">
+        <button
+          type="button"
+          disabled={isEmpty && !editMode}
+          title={editMode || isEmpty ? undefined : 'Find in document'}
+          onClick={() =>
+            void (editMode
+              ? startEdit(promptId, path, stringValue)
+              : handleFind(promptId, path, stringValue))
+          }
+          className={cn(
+            RESULT_ROW_CLASS,
+            'col-span-2 grid grid-cols-subgrid py-1 text-sm',
+            editMode && 'cursor-text',
+            activeFindKey === resultNodeKey(promptId, path) && 'bg-primary/10',
+          )}
+        >
+          {label ? (
+            <span className="truncate text-primary" title={label}>
+              {label}
+            </span>
+          ) : null}
+          <span
+            className={cn(
+              'min-w-0 break-words whitespace-pre-wrap',
+              !label && 'col-span-2',
+              isEmpty ? 'text-muted-foreground' : 'font-medium text-foreground',
+              editMode && !isEmpty && 'underline decoration-muted-foreground/50 decoration-dotted underline-offset-4',
+            )}
+          >
+            {isEmpty ? '—' : stringValue}
+          </span>
+        </button>
+        {options.actions}
+      </div>
+    );
+  };
+
+  /** A label with nothing under it (empty list or object). */
+  const renderEmpty = (path: string, label: string | null, text: string, action?: React.ReactNode) => (
+    <div key={path} className="col-span-full grid min-h-7 grid-cols-subgrid items-center px-1 text-sm">
+      {label ? (
+        <span className="truncate text-primary" title={label}>
+          {label}
+        </span>
+      ) : null}
+      <div className={cn('flex min-w-0 items-center gap-1.5', label ? 'col-span-2' : 'col-span-full')}>
+        <span className="flex-1 text-muted-foreground">{text}</span>
+        {action}
+      </div>
+    </div>
+  );
+
+  /** One-line disclosure header (`▸ line_items · 12`) with its content underneath. */
+  const renderGroup = (
+    promptId: string,
+    label: string,
+    path: string,
+    count: string,
+    level: number,
+    defaultOpen: boolean,
+    body: () => React.ReactNode,
+    headerActions?: React.ReactNode,
+  ) => {
+    const open = isNodeOpen(promptId, path, defaultOpen);
+    return (
+      <div key={path} className="col-span-full min-w-0">
+        <div className="flex min-w-0 items-center gap-0.5">
+          <button
+            type="button"
+            className={cn(RESULT_ROW_CLASS, 'flex items-center gap-1 py-1 text-sm')}
+            aria-expanded={open}
+            title={DISCLOSURE_HINT}
+            onClick={(event) => toggleResultNode(event, promptId, path, open)}
+          >
+            {open ? (
+              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="min-w-0 truncate font-semibold text-foreground">{label}</span>
+            <span className="shrink-0 text-muted-foreground">· {count}</span>
+          </button>
+          {headerActions}
+        </div>
+        {open ? <div className={groupBodyClass(level)}>{body()}</div> : null}
+      </div>
+    );
+  };
+
+  const renderObjectFields = (
+    promptId: string,
+    path: string,
+    value: { [key: string]: JsonValue },
+    level: number,
+  ) =>
+    Object.entries(value).map(([key, child]) =>
+      renderEntry(promptId, key, path ? `${path}.${key}` : key, child, level + 1),
+    );
+
+  /** An object inside a list: collapsed to a one-line summary until opened. */
+  const renderListItem = (
+    promptId: string,
+    path: string,
+    item: { [key: string]: JsonValue },
+    index: number,
+    level: number,
+  ) => {
+    const open = isNodeOpen(promptId, path, false);
+    const summary = resultItemSummary(item);
+    const hasFields = Object.keys(item).length > 0;
+    return (
+      <div key={path} className="col-span-full min-w-0">
+        <div className="flex min-w-0 items-center gap-0.5">
+          <button
+            type="button"
+            className={cn(RESULT_ROW_CLASS, 'flex items-center gap-1 py-1 text-sm')}
+            aria-expanded={open}
+            disabled={!hasFields}
+            title={hasFields ? DISCLOSURE_HINT : undefined}
+            onClick={(event) => toggleResultNode(event, promptId, path, open)}
+          >
+            {open ? (
+              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {summary.title ?? (hasFields ? `Item ${index + 1}` : 'No fields')}
+            </span>
+            {summary.value ? (
+              <span className="shrink-0 text-muted-foreground tabular-nums">{summary.value}</span>
             ) : null}
+          </button>
+          {editMode ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => handleArrayItemDelete(promptId, path)}
+              title="Delete item"
+            >
+              <X className="text-destructive" />
+            </Button>
+          ) : null}
+        </div>
+        {open ? (
+          <div className={groupBodyClass(level + 1)}>
+            {renderObjectFields(promptId, path, item, level + 1)}
           </div>
-        );
-      }
-      
-      // For arrays with primitive values, display with edit controls
-      const isPrimitiveArray = value.every(item => isEditableValue(item));
-      
-      if (isPrimitiveArray) {
-        return (
-          <ol className="flex list-decimal flex-col gap-2 pl-5">
-            {value.map((item, index) => {
-              // Ensure array path is constructed properly for searching
-              const arrayItemKey = `${parentKey}[${index}]`;
-              const stringValue = item?.toString() ?? '';
-              
-              if (editing && editing.promptId === promptId && editing.key === arrayItemKey) {
-                return (
-                  <li key={index} className="flex min-w-0 items-center gap-2">
-                    <Input
-                      type="text"
-                      value={editing.value}
-                      onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                      className="min-w-0 flex-1"
-                      autoFocus
-                    />
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={handleSave} title="Save changes">
-                      <Check className="text-success" />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={handleCancel} title="Cancel">
-                      <X className="text-destructive" />
-                    </Button>
-                  </li>
-                );
-              }
-              
-              return (
-                <li key={index} className="group flex items-start gap-2">
-                  <span className="min-w-0 flex-1 break-words text-sm">{stringValue}</span>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        const searchableValue = stringValue.trim();
-                        if (searchableValue !== '') {
-                          onFind(promptId, arrayItemKey, searchableValue);
-                        }
-                      }}
-                      title="Find in document"
-                      disabled={!stringValue || stringValue === 'null'}
-                    >
-                      <Search />
-                    </Button>
-                    {editMode ? (
-                      <>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => onEdit(promptId, arrayItemKey, stringValue)}
-                          title="Edit item"
-                        >
-                          <Pencil />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleArrayItemDelete(promptId, arrayItemKey)}
-                          title="Delete item"
-                        >
-                          <X className="text-destructive" />
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-            
-            {editMode ? (
-              <li className="list-none">
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderListItems = (promptId: string, path: string, value: JsonValue[], level: number) => {
+    return (
+      <>
+        {value.map((item, index) => {
+          const itemPath = `${path}[${index}]`;
+          if (isEditableValue(item)) {
+            return renderLeaf(
+              promptId,
+              String(index + 1),
+              itemPath,
+              item,
+              {
+                actions: editMode ? (
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleArrayItemAdd(promptId, parentKey, value)}
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => handleArrayItemDelete(promptId, itemPath)}
+                  title="Delete item"
                 >
-                  Add item
+                  <X className="text-destructive" />
                 </Button>
-              </li>
-            ) : null}
-          </ol>
+              ) : null,
+              },
+            );
+          }
+          if (Array.isArray(item)) {
+            return renderEntry(promptId, String(index + 1), itemPath, item, level + 1);
+          }
+          return renderListItem(promptId, itemPath, item as { [key: string]: JsonValue }, index, level);
+        })}
+      </>
+    );
+  };
+
+  /** One labelled field of the result: a value row, or a group for a list or object. */
+  const renderEntry = (
+    promptId: string,
+    label: string,
+    path: string,
+    value: JsonValue,
+    level: number,
+  ): React.ReactNode => {
+    if (isEditableValue(value)) {
+      return renderLeaf(promptId, label, path, value);
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return renderEmpty(
+          path,
+          label,
+          'None',
+          editMode ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => void handleArrayAdd(promptId, path)}
+            >
+              Add item
+            </Button>
+          ) : null,
         );
       }
-      
-      // For arrays of objects, render a more structured editor with proper paths
-      return (
-        <ol className="flex list-decimal flex-col gap-3 pl-5">
-          {value.map((item, index) => {
-            const arrayItemKey = `${parentKey}[${index}]`;
-            
-            return (
-              <li key={index} className="min-w-0">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  {editMode ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="ml-auto"
-                      onClick={() => handleArrayItemDelete(promptId, arrayItemKey)}
-                      title="Delete item"
-                    >
-                      <X className="text-destructive" />
-                    </Button>
-                  ) : null}
-                </div>
-                {typeof item === 'object' && item !== null ? (
-                  renderNestedValue(
-                    promptId,
-                    arrayItemKey,
-                    item,
-                    level + 1,
-                    onFind,
-                    onEdit,
-                    editing,
-                    handleSave,
-                    handleCancel,
-                    editMode
-                  )
-                ) : (
-                  <span className="text-sm">{item?.toString() ?? ''}</span>
-                )}
-              </li>
-            );
-          })}
-          
+      const isObjectList = value.every(
+        (item) => item !== null && typeof item === 'object' && !Array.isArray(item),
+      );
+      return renderGroup(
+        promptId,
+        label,
+        path,
+        String(value.length),
+        level,
+        !resultContainerStartsCollapsed(value, level),
+        () => renderListItems(promptId, path, value, level),
+        <>
           {editMode ? (
-            <li className="list-none">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => handleArrayObjectAdd(promptId, parentKey, value)}
-              >
-                Add item
-              </Button>
-            </li>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => void handleArrayAdd(promptId, path)}
+              title="Add item"
+            >
+              <Plus />
+            </Button>
           ) : null}
-        </ol>
+          {isObjectList ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setTableView({ promptId, path, label })}
+              title="Open as table"
+            >
+              <Maximize2 />
+            </Button>
+          ) : null}
+        </>,
       );
     }
-    
-    // Fallback for any other type
-    return (
-      <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-2 text-xs whitespace-pre-wrap break-words">
-        {JSON.stringify(value, null, 2)}
-      </pre>
+
+    const fields = value as { [key: string]: JsonValue };
+    const fieldCount = Object.keys(fields).length;
+    if (fieldCount === 0) {
+      return renderEmpty(path, label, 'No fields');
+    }
+    return renderGroup(
+      promptId,
+      label,
+      path,
+      fieldCount === 1 ? '1 field' : `${fieldCount} fields`,
+      level,
+      !resultContainerStartsCollapsed(fields, level),
+      () => renderObjectFields(promptId, path, fields, level),
     );
   };
 
@@ -833,10 +701,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     if (!result) {
       const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
 
-      if (
-        (loadingPrompts.has(promptId) || prefetchingPrompts.has(promptId)) &&
-        !isProcessing
-      ) {
+      if (promptResultState[promptId]?.pending && !isProcessing) {
         return (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner className="size-4" aria-label="Loading results" />
@@ -854,7 +719,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
           </p>
         );
       }
-      if (failedPrompts.has(promptId)) {
+      if (promptResultState[promptId]?.failed) {
         return (
           <Alert variant="destructive">
             <AlertDescription>Failed to load results.</AlertDescription>
@@ -864,39 +729,46 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       return <p className="text-sm text-muted-foreground">No results on this document yet.</p>;
     }
 
-    const payload = result.updated_llm_result;
+    const payload = result.updated_llm_result as { [key: string]: JsonValue };
     const entries = Object.entries(payload);
-
-    if (entries.length === 1) {
-      return (
-        <div className="text-sm break-words">
-          {renderNestedValue(
-            promptId,
-            entries[0][0],
-            entries[0][1],
-            0,
-            handleFind,
-            handleEdit,
-            editing,
-            handleSave,
-            handleCancel,
-            editMode,
-          )}
-        </div>
-      );
+    // A lone field needs no label: show its value (or its fields) directly.
+    const lone = entries.length === 1 ? entries[0] : null;
+    const loneObject =
+      lone && lone[1] !== null && typeof lone[1] === 'object' && !Array.isArray(lone[1])
+        ? (lone[1] as { [key: string]: JsonValue })
+        : null;
+    let content: React.ReactNode;
+    if (entries.length === 0) {
+      content = <span className="col-span-full px-1 text-sm text-muted-foreground">No fields</span>;
+    } else if (lone && isEditableValue(lone[1])) {
+      content = renderLeaf(promptId, null, lone[0], lone[1]);
+    } else if (lone && loneObject && Object.keys(loneObject).length > 0) {
+      content = renderObjectFields(promptId, lone[0], loneObject, 0);
+    } else if (lone) {
+      content = renderEntry(promptId, lone[0], lone[0], lone[1], 0);
+    } else {
+      content = renderObjectFields(promptId, '', payload, 0);
     }
+    return <div className={RESULT_GRID_CLASS}>{content}</div>;
+  };
 
-    return renderNestedValue(
-      promptId,
-      '',
-      payload,
-      0,
-      handleFind,
-      handleEdit,
-      editing,
-      handleSave,
-      handleCancel,
-      editMode,
+  /** One button in the prompt header: expand everything, or collapse it once all is open. */
+  const expandToggle = (promptId: string) => {
+    const nodes = collapsibleNodes(promptId);
+    if (nodes.length === 0) return null;
+    const allOpen = nodes.every((node) => isNodeOpen(promptId, node.path, node.defaultOpen));
+    const label = allOpen ? 'Collapse all' : 'Expand all';
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => setResultSubtree(promptId, '', !allOpen)}
+        title={label}
+        aria-label={label}
+      >
+        {allOpen ? <ChevronsDownUp /> : <ChevronsUpDown />}
+      </Button>
     );
   };
 
@@ -905,11 +777,11 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     if (result) {
       return { text: resultPreview(result.updated_llm_result as Record<string, unknown>) };
     }
-    if (prefetchingPrompts.has(promptId)) {
+    if (promptResultState[promptId]?.pending) {
       return { text: '' };
     }
     const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
-    if (loadingPrompts.has(promptId) || runningPrompts.has(promptId) || isProcessing) {
+    if (runningPrompts.has(promptId) || isProcessing) {
       if (isProcessing) {
         return {
           text:
@@ -918,7 +790,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
       }
       return { text: runningPrompts.has(promptId) ? 'Running…' : 'Loading…' };
     }
-    if (failedPrompts.has(promptId)) {
+    if (promptResultState[promptId]?.failed) {
       return { text: 'Failed to load results', failed: true };
     }
     return { text: 'Not run yet' };
@@ -959,199 +831,49 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
 
   const listBaseId = useId();
 
-  // Add these new handler functions to the component
-  const handleArrayItemDelete = async (promptId: string, arrayKey: string) => {
-    // Only allow array item deletion when edit mode is enabled
+  const handleArrayItemDelete = async (promptId: string, itemPath: string) => {
     if (!editMode) return;
-    
     try {
-      const result = llmResults[promptId];
-      if (!result) return;
-
-      // Create a deep copy of the current result
-      const updatedResult = JSON.parse(JSON.stringify(result.updated_llm_result));
-      
-      // Extract the array path and index from the arrayKey
-      const arrayItemRegex = /(.*?)\[(\d+)\](\..*)?$/;
-      const matches = arrayKey.match(arrayItemRegex);
-      
-      if (!matches) {
-        console.error('Invalid array key format:', arrayKey);
-        return;
-      }
-      
-      const arrayPath = matches[1];      // e.g., "items"
-      const arrayIndex = parseInt(matches[2], 10); // e.g., 2
-      
-      // Navigate to the array
-      let current = updatedResult;
-      const pathParts = arrayPath.split('.');
-      
-      // Navigate to the containing array
-      for (const part of pathParts) {
-        if (current[part] !== undefined) {
-          current = current[part];
-        } else {
-          console.error('Array path not found:', arrayPath);
-          return;
-        }
-      }
-      
-      // Make sure we found the array and the index is valid
-      if (Array.isArray(current) && arrayIndex >= 0 && arrayIndex < current.length) {
-        // Remove the item at the specified index
-        current.splice(arrayIndex, 1);
-        
-        // Update the result with API (use stored prompt_revid for fallback compatibility)
-        const apiResult = await docRouterOrgApi.updateLLMResult({
-          documentId: id,
-          promptId: result.prompt_revid,
-          result: updatedResult,
-          isVerified: false
-        });
-
-        setLlmResults(prev => ({
-          ...prev,
-          [promptId]: apiResult
-        }));
-      }
+      await saveResultChange(promptId, (draft) => removeResultItemAtPath(draft, itemPath));
     } catch (error) {
       console.error('Error deleting array item:', error);
     }
   };
 
-  const handleArrayItemAdd = async (promptId: string, arrayKey: string, currentArray: JsonValue[]) => {
-    // Only allow array item addition when edit mode is enabled
+  /** Append a blank item shaped like the list's other items, open it, and start naming it. */
+  const handleArrayAdd = async (promptId: string, arrayPath: string) => {
     if (!editMode) return;
-    
     try {
-      const result = llmResults[promptId];
-      if (!result) return;
+      let itemPath = '';
+      let item: JsonValue = '';
+      const saved = await saveResultChange(promptId, (draft) => {
+        const list = resultValueAtPath(draft, arrayPath);
+        if (!Array.isArray(list)) return false;
+        const sample = resultListSample(draft, arrayPath);
+        item = sample === undefined ? '' : blankResultValue(sample);
+        itemPath = `${arrayPath}[${list.length}]`;
+        list.push(item);
+        return true;
+      });
+      if (!saved) return;
 
-      // Create a deep copy of the current result
-      const updatedResult = JSON.parse(JSON.stringify(result.updated_llm_result));
-      
-      // Determine default value based on existing array items
-      let defaultValue: JsonValue = "";
-      if (currentArray.length > 0) {
-        const firstItem = currentArray[0];
-        if (typeof firstItem === 'string') defaultValue = "";
-        else if (typeof firstItem === 'number') defaultValue = 0;
-        else if (typeof firstItem === 'boolean') defaultValue = false;
-        else if (firstItem === null) defaultValue = null;
-      }
-      
-      // Find the array to modify
-      const pathParts = arrayKey.split('.');
-      let current = updatedResult;
-      let parent = updatedResult;
-      let lastKey = arrayKey;
-      
-      // Navigate to the containing object
-      for (let i = 0; i < pathParts.length; i++) {
-        const part = pathParts[i];
-        parent = current;
-        lastKey = part;
-        if (current[part] !== undefined) {
-          current = current[part];
-        } else {
-          console.error('Path not found:', arrayKey);
-          return;
+      setResultNodeOpen(promptId, arrayPath, true);
+      const added = item as JsonValue;
+      if (isEditableValue(added)) {
+        setEditing({ promptId, key: itemPath, value: added?.toString() ?? '' });
+      } else if (added !== null && !Array.isArray(added)) {
+        setResultNodeOpen(promptId, itemPath, true);
+        const firstLeaf = Object.entries(added).find(([, value]) => isEditableValue(value));
+        if (firstLeaf) {
+          setEditing({
+            promptId,
+            key: `${itemPath}.${firstLeaf[0]}`,
+            value: firstLeaf[1]?.toString() ?? '',
+          });
         }
-      }
-      
-      // Add the new item to the array
-      if (Array.isArray(parent[lastKey])) {
-        parent[lastKey].push(defaultValue);
-        
-        // Update the result with API (use stored prompt_revid for fallback compatibility)
-        const apiResult = await docRouterOrgApi.updateLLMResult({
-          documentId: id,
-          promptId: result.prompt_revid,
-          result: updatedResult,
-          isVerified: false
-        });
-
-        setLlmResults(prev => ({
-          ...prev,
-          [promptId]: apiResult
-        }));
       }
     } catch (error) {
       console.error('Error adding array item:', error);
-    }
-  };
-
-  const handleArrayObjectAdd = async (promptId: string, arrayKey: string, currentArray: JsonValue[]) => {
-    // Only allow array object addition when edit mode is enabled
-    if (!editMode) return;
-    
-    try {
-      const result = llmResults[promptId];
-      if (!result) return;
-
-      // Create a deep copy of the current result
-      const updatedResult = JSON.parse(JSON.stringify(result.updated_llm_result));
-      
-      // Determine default object structure based on existing array items
-      let defaultValue: JsonValue = {};
-      if (currentArray.length > 0) {
-        const firstItem = currentArray[0];
-        if (typeof firstItem === 'object' && firstItem !== null) {
-          // Create an empty object with the same keys
-          defaultValue = Object.fromEntries(
-            Object.keys(firstItem).map(key => {
-              // Set default values based on the type of each field
-              const val = (firstItem as Record<string, JsonValue>)[key];
-              if (typeof val === 'string') return [key, ""];
-              if (typeof val === 'number') return [key, 0];
-              if (typeof val === 'boolean') return [key, false];
-              if (val === null) return [key, null];
-              if (Array.isArray(val)) return [key, []];
-              return [key, {}];
-            })
-          );
-        }
-      }
-      
-      // Find the array to modify
-      const pathParts = arrayKey.split('.');
-      let current = updatedResult;
-      let parent = updatedResult;
-      let lastKey = arrayKey;
-      
-      // Navigate to the containing object
-      for (let i = 0; i < pathParts.length; i++) {
-        const part = pathParts[i];
-        parent = current;
-        lastKey = part;
-        if (current[part] !== undefined) {
-          current = current[part];
-        } else {
-          console.error('Path not found:', arrayKey);
-          return;
-        }
-      }
-      
-      // Add the new object to the array
-      if (Array.isArray(parent[lastKey])) {
-        parent[lastKey].push(defaultValue);
-        
-        // Update the result with API (use stored prompt_revid for fallback compatibility)
-        const apiResult = await docRouterOrgApi.updateLLMResult({
-          documentId: id,
-          promptId: result.prompt_revid,
-          result: updatedResult,
-          isVerified: false
-        });
-
-        setLlmResults(prev => ({
-          ...prev,
-          [promptId]: apiResult
-        }));
-      }
-    } catch (error) {
-      console.error('Error adding array object:', error);
     }
   };
 
@@ -1251,6 +973,21 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     }
   };
 
+  // Rows for the open table view, read live so corrections and re-runs show up.
+  const tableSource = tableView
+    ? resultValueAtPath(
+        (llmResults[tableView.promptId]?.updated_llm_result ?? null) as JsonValue,
+        tableView.path,
+      )
+    : undefined;
+  const tableRows = Array.isArray(tableSource)
+    ? tableSource.filter(
+        (row): row is { [key: string]: JsonValue } =>
+          row !== null && typeof row === 'object' && !Array.isArray(row),
+      )
+    : null;
+  const tableColumns = tableRows ? [...new Set(tableRows.flatMap((row) => Object.keys(row)))] : [];
+
   const defaultPromptEnabledForRender = organization?.default_prompt_enabled !== false;
 
   return (
@@ -1276,7 +1013,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto overscroll-y-contain">
+      <div className="@container min-h-0 flex-1 overflow-auto overscroll-y-contain">
         {defaultPromptEnabledForRender ? (
           <ExtractionPromptRow
             ariaLabel={llmResults.default?.prompt_display_name ?? 'Document Summary'}
@@ -1290,13 +1027,14 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
             preview={collapsedPreview('default').text}
             previewFailed={collapsedPreview('default').failed}
             running={runningPrompts.has('default')}
-            loading={loadingPrompts.has('default')}
-            failed={failedPrompts.has('default')}
+            loading={promptResultState.default?.pending}
+            failed={promptResultState.default?.failed}
             isVerified={llmResults.default?.is_verified}
             isEdited={llmResults.default?.is_edited}
             bodyId={`${listBaseId}-default`}
             onToggle={() => void handlePromptChange('default')}
             actions={promptRowActions('default')}
+            headerActions={expandToggle('default')}
           >
             {renderPromptResults('default')}
           </ExtractionPromptRow>
@@ -1327,13 +1065,14 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
                 preview={previewMeta.text}
                 previewFailed={previewMeta.failed}
                 running={runningPrompts.has(promptId)}
-                loading={loadingPrompts.has(promptId) && isExpanded}
-                failed={failedPrompts.has(promptId)}
+                loading={promptResultState[promptId]?.pending && isExpanded}
+                failed={promptResultState[promptId]?.failed}
                 isVerified={llmResult?.is_verified}
                 isEdited={llmResult?.is_edited}
                 bodyId={`${listBaseId}-${promptId}`}
                 onToggle={() => void handlePromptChange(promptId)}
                 actions={promptRowActions(promptId)}
+                headerActions={expandToggle(promptId)}
               >
                 {renderPromptResults(promptId)}
               </ExtractionPromptRow>
@@ -1341,6 +1080,69 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
           })
         )}
       </div>
+
+      {tableRows ? (
+        <DraggablePanel
+          open
+          resetToken={`${id}-${tableView?.promptId ?? ''}-${tableView?.path ?? ''}`}
+          anchorPercent={{ x: 50, y: 50 }}
+          width="min(100vw - 32px, 56rem)"
+          height="min(70vh, 640px)"
+          zIndex={60}
+          ariaLabel={`${tableView?.label ?? 'Items'} table`}
+          title={<span className="truncate">{tableView?.label}</span>}
+          headerActions={
+            <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTableView(null)} title="Close">
+              <X />
+            </Button>
+          }
+        >
+          {/* Styled scrollbars stay visible (macOS overlay scrollbars hide the horizontal one) and take
+              their own space, so the last column is never under the vertical bar. */}
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto [&::-webkit-scrollbar]:size-2.5 [&::-webkit-scrollbar-corner]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent">
+            <table className="w-full border-collapse text-sm">
+              <thead className="sticky top-0 z-10 bg-muted text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="w-8 px-2 py-1.5 font-medium">#</th>
+                  {tableColumns.map((column) => (
+                    <th key={column} className="min-w-36 px-2 py-1.5 font-medium whitespace-nowrap">
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map((row, index) => (
+                  <tr key={index} className="border-t border-border align-top">
+                    <td className="px-2 py-1 text-xs text-muted-foreground tabular-nums">{index + 1}</td>
+                    {tableColumns.map((column) => {
+                      const cell = row[column];
+                      const cellPath = `${tableView!.path}[${index}].${column}`;
+                      const findable = isEditableValue(cell) && cell !== null && cell !== undefined && String(cell).trim() !== '';
+                      return (
+                        <td key={column} className="p-0">
+                          <button
+                            type="button"
+                            disabled={!findable}
+                            title={findable ? 'Find in document' : undefined}
+                            onClick={() => void handleFind(tableView!.promptId, cellPath, String(cell))}
+                            className={cn(
+                              'w-full px-2 py-1 text-left whitespace-pre-wrap [overflow-wrap:anywhere] outline-none enabled:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 disabled:text-muted-foreground',
+                              activeFindKey === resultNodeKey(tableView!.promptId, cellPath) && 'bg-primary/10',
+                            )}
+                          >
+                            {resultCellText(cell)}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DraggablePanel>
+      ) : null}
 
       {runInfoOpen && (
         <>
