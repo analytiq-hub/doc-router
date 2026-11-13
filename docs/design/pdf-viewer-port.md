@@ -175,7 +175,7 @@ Port orchestrator toolbar tools per `doc-orchestrator/docs/design/pdf-viewer.md`
 - [ ] Text tab page sync while scrolling.
 - [ ] Toolbar find via `pdfSearch`.
 - [ ] Annotations: download annotated copy works; no server persistence.
-- [ ] No `@mui` / `react-pdf` in `src/`.
+- [x] No `@mui` / `react-pdf` in `src` (deps removed from `package.json`).
 - [ ] `npm run typecheck` + `npm run build`.
 
 ---
