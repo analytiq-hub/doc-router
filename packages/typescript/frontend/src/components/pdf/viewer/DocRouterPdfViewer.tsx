@@ -76,7 +76,7 @@ export default function DocRouterPdfViewer({
       fileName={fileName}
       onPageChange={onViewerPageChange}
       onDocumentReady={onPdfDocumentReady}
-      loadingOverlay={loading ? 'Loading PDF…' : undefined}
+      loading={loading ? 'Loading PDF…' : undefined}
     />
   );
 }

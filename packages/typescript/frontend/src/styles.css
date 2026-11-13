@@ -97,3 +97,43 @@
       sans-serif;
   }
 }
+
+/* PDF.js viewer (components/pdf/viewer/PdfViewerCore.tsx) */
+.pdf-viewer-scroller .pdfViewer {
+  @apply py-3;
+}
+.pdf-viewer-scroller .pdfViewer.removePageBorders .page {
+  @apply mx-auto mb-3 shadow-md;
+}
+.pdf-marker .textLayer {
+  user-select: none;
+}
+.pdf-marker .textLayer :is(span, br) {
+  pointer-events: none;
+}
+.pdfViewer .canvasWrapper svg.highlightOutline {
+  --outline-color: var(--input);
+  --hover-outline-color: var(--border);
+}
+.pdf-erasing .annotationEditorLayer,
+.pdf-erasing .annotationEditorLayer * {
+  cursor: crosshair;
+}
+.textLayer {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+.textLayer[data-main-rotation='90'],
+.textLayer[data-main-rotation='180'],
+.textLayer[data-main-rotation='270'] {
+  transform-origin: 0 0;
+}
+.textLayer[data-main-rotation='90'] {
+  transform: rotate(90deg) translateY(-100%);
+}
+.textLayer[data-main-rotation='180'] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+.textLayer[data-main-rotation='270'] {
+  transform: rotate(270deg) translateX(-100%);
+}

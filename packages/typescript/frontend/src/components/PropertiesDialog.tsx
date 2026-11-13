@@ -1,21 +1,21 @@
-import { GripVertical, X } from 'lucide-react'
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
-import { cn } from 'cn'
+import { GripVertical, X } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { cn } from 'cn';
 
 export interface Property {
-  label: string
-  value: ReactNode
+  label: string;
+  value: ReactNode;
 }
 
 interface Position {
-  left: number
-  top: number
+  left: number;
+  top: number;
 }
 
-const KEEP_VISIBLE = 48
+const KEEP_VISIBLE = 48;
 
 export function PropertiesDialog({
   title,
@@ -25,58 +25,59 @@ export function PropertiesDialog({
   footer,
   onClose,
 }: {
-  title: string
-  description?: string
-  properties: Property[]
-  columns?: 1 | 2
-  footer?: ReactNode
-  onClose: () => void
+  title: string;
+  description?: string;
+  properties: Property[];
+  columns?: 1 | 2;
+  /** Replaces the default Close-only footer when set. */
+  footer?: ReactNode;
+  onClose: () => void;
 }) {
-  const popup = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ startX: number; startY: number; left: number; top: number; width: number } | null>(null)
-  const offset = useRef({ x: 0, y: 0 })
-  const [position, setPosition] = useState<Position | null>(null)
+  const popup = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ startX: number; startY: number; left: number; top: number; width: number } | null>(null);
+  const offset = useRef({ x: 0, y: 0 });
+  const [position, setPosition] = useState<Position | null>(null);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
-      if (document.querySelector('[role="menu"][data-open], [role="alertdialog"], [data-slot="dialog-overlay"]')) return
-      onClose()
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [onClose])
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (document.querySelector('[role="menu"][data-open], [role="alertdialog"], [data-slot="dialog-overlay"]')) return;
+      onClose();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [onClose]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !popup.current || (event.target as HTMLElement).closest('button')) return
-    const rect = popup.current.getBoundingClientRect()
-    drag.current = { startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top, width: rect.width }
-    offset.current = { x: 0, y: 0 }
-    setPosition({ left: rect.left, top: rect.top })
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
+    if (event.button !== 0 || !popup.current || (event.target as HTMLElement).closest('button')) return;
+    const rect = popup.current.getBoundingClientRect();
+    drag.current = { startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top, width: rect.width };
+    offset.current = { x: 0, y: 0 };
+    setPosition({ left: rect.left, top: rect.top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
   const moveDrag = (event: PointerEvent<HTMLDivElement>) => {
-    const start = drag.current
-    if (!start || !popup.current) return
-    const left = Math.min(Math.max(start.left + event.clientX - start.startX, KEEP_VISIBLE - start.width), window.innerWidth - KEEP_VISIBLE)
-    const top = Math.min(Math.max(start.top + event.clientY - start.startY, 0), window.innerHeight - KEEP_VISIBLE)
-    offset.current = { x: left - start.left, y: top - start.top }
-    popup.current.style.transform = `translate3d(${offset.current.x}px, ${offset.current.y}px, 0)`
-  }
+    const start = drag.current;
+    if (!start || !popup.current) return;
+    const left = Math.min(Math.max(start.left + event.clientX - start.startX, KEEP_VISIBLE - start.width), window.innerWidth - KEEP_VISIBLE);
+    const top = Math.min(Math.max(start.top + event.clientY - start.startY, 0), window.innerHeight - KEEP_VISIBLE);
+    offset.current = { x: left - start.left, y: top - start.top };
+    popup.current.style.transform = `translate3d(${offset.current.x}px, ${offset.current.y}px, 0)`;
+  };
   const endDrag = () => {
-    const start = drag.current
-    if (!start) return
-    drag.current = null
-    setPosition({ left: start.left + offset.current.x, top: start.top + offset.current.y })
-    if (popup.current) popup.current.style.transform = ''
-  }
+    const start = drag.current;
+    if (!start) return;
+    drag.current = null;
+    setPosition({ left: start.left + offset.current.x, top: start.top + offset.current.y });
+    if (popup.current) popup.current.style.transform = '';
+  };
 
-  const rows: Property[][] = []
-  for (let i = 0; i < properties.length; i += columns) rows.push(properties.slice(i, i + columns))
+  const rows: Property[][] = [];
+  for (let i = 0; i < properties.length; i += columns) rows.push(properties.slice(i, i + columns));
 
   const placement: CSSProperties | undefined = position
     ? { left: position.left, top: position.top, translate: 'none' }
-    : undefined
+    : undefined;
 
   return (
     <Dialog open modal={false} onOpenChange={(open) => !open && onClose()}>
@@ -86,7 +87,7 @@ export function PropertiesDialog({
         showCloseButton={false}
         style={placement}
         className={cn(
-          'flex max-h-11/12 flex-col gap-0 overflow-hidden p-0 shadow-xl ring-foreground/20',
+          'flex max-h-11/12 flex-col gap-0 overflow-hidden p-0 shadow-xl ring-foreground/20 sm:max-w-md',
           columns === 2 && 'sm:max-w-2xl',
         )}
       >
@@ -141,5 +142,5 @@ export function PropertiesDialog({
         )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
