@@ -90,7 +90,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   useEffect(() => {
     defaultLlmFetchStartedRef.current = false;
     extractionFindCycleRef.current = null;
+    setPrefetchingPrompts(new Set());
   }, [id]);
+
+  const matchingPromptIds = useMemo(
+    () => matchingPrompts.map((p) => p.prompt_revid).sort().join('\0'),
+    [matchingPrompts],
+  );
 
   // Fetch document metadata (state, name) then load prompts and default LLM result.
   useEffect(() => {
@@ -257,13 +263,11 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
           setFailedPrompts((prev) => new Set(prev).add(promptId));
         }
       } finally {
-        if (!cancelled) {
-          setPrefetchingPrompts((prev) => {
-            const next = new Set(prev);
-            next.delete(promptId);
-            return next;
-          });
-        }
+        setPrefetchingPrompts((prev) => {
+          const next = new Set(prev);
+          next.delete(promptId);
+          return next;
+        });
       }
     };
 
@@ -275,7 +279,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     return () => {
       cancelled = true;
     };
-  }, [matchingPrompts, documentState, id, docRouterOrgApi]);
+  }, [matchingPromptIds, matchingPrompts, documentState, id, docRouterOrgApi]);
 
   useEffect(() => {
     if (documentName) {
@@ -291,7 +295,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
 
     setExpandedPrompt(promptId);
 
-    if (!llmResults[promptId] && !prefetchingPromptsRef.current.has(promptId)) {
+    if (!llmResults[promptId]) {
       setLoadingPrompts(prev => new Set(prev).add(promptId));
       try {
         const results = await docRouterOrgApi.getLLMResult({
@@ -829,16 +833,20 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     if (!result) {
       const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
 
-      if (prefetchingPrompts.has(promptId) && !loadingPrompts.has(promptId)) {
-        return null;
+      if (
+        (loadingPrompts.has(promptId) || prefetchingPrompts.has(promptId)) &&
+        !isProcessing
+      ) {
+        return (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner className="size-4" aria-label="Loading results" />
+          </p>
+        );
       }
 
-      if (loadingPrompts.has(promptId) || isProcessing) {
-        const processingMessage = isProcessing
-          ? documentState === 'ocr_processing'
-            ? 'Processing OCR…'
-            : 'Processing LLM…'
-          : 'Loading…';
+      if (isProcessing) {
+        const processingMessage =
+          documentState === 'ocr_processing' ? 'Processing OCR…' : 'Processing LLM…';
         return (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner className="size-4" />
