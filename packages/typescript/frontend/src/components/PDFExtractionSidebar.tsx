@@ -41,6 +41,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   const [runningPrompts, setRunningPrompts] = useState<Set<string>>(new Set());
   const [expandedPrompt, setExpandedPrompt] = useState<string>('default');
   const [loadingPrompts, setLoadingPrompts] = useState<Set<string>>(new Set());
+  const [prefetchingPrompts, setPrefetchingPrompts] = useState<Set<string>>(new Set());
   const [failedPrompts, setFailedPrompts] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
@@ -60,9 +61,11 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   // Refs mirror state so the fetch effect can read current values without being in the dependency array
   const llmResultsRef = React.useRef(llmResults);
   const loadingPromptsRef = React.useRef(loadingPrompts);
+  const prefetchingPromptsRef = React.useRef(prefetchingPrompts);
   const failedPromptsRef = React.useRef(failedPrompts);
   llmResultsRef.current = llmResults;
   loadingPromptsRef.current = loadingPrompts;
+  prefetchingPromptsRef.current = prefetchingPrompts;
   failedPromptsRef.current = failedPrompts;
 
   const getStatusFromError = (err: unknown): number | undefined => {
@@ -212,6 +215,68 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     return () => clearInterval(pollInterval);
   }, [documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts, organization]);
 
+  // Load results for tagged prompts so collapsed row previews are correct before the user expands.
+  useEffect(() => {
+    const isProcessing =
+      documentState === 'ocr_processing' || documentState === 'llm_processing';
+    if (isProcessing || matchingPrompts.length === 0) return;
+
+    let cancelled = false;
+
+    const prefetchOne = async (promptId: string) => {
+      if (
+        llmResultsRef.current[promptId] ||
+        loadingPromptsRef.current.has(promptId) ||
+        prefetchingPromptsRef.current.has(promptId) ||
+        failedPromptsRef.current.has(promptId)
+      ) {
+        return;
+      }
+
+      setPrefetchingPrompts((prev) => new Set(prev).add(promptId));
+      try {
+        const results = await docRouterOrgApi.getLLMResult({
+          documentId: id,
+          promptRevId: promptId,
+          promptRevIdFallback: true,
+        });
+        if (cancelled) return;
+        setLlmResults((prev) => ({ ...prev, [promptId]: results }));
+        setFailedPrompts((prev) => {
+          const next = new Set(prev);
+          next.delete(promptId);
+          return next;
+        });
+      } catch (error) {
+        if (cancelled) return;
+        const status = getStatusFromError(error);
+        const message = getMessageFromError(error).toLowerCase();
+        const isNotFound = status === 404 || message.includes('not found');
+        if (!isNotFound) {
+          console.error('Error prefetching LLM results:', error);
+          setFailedPrompts((prev) => new Set(prev).add(promptId));
+        }
+      } finally {
+        if (!cancelled) {
+          setPrefetchingPrompts((prev) => {
+            const next = new Set(prev);
+            next.delete(promptId);
+            return next;
+          });
+        }
+      }
+    };
+
+    const prefetchMatchingPromptResults = async () => {
+      await Promise.all(matchingPrompts.map((prompt) => prefetchOne(prompt.prompt_revid)));
+    };
+
+    void prefetchMatchingPromptResults();
+    return () => {
+      cancelled = true;
+    };
+  }, [matchingPrompts, documentState, id, docRouterOrgApi]);
+
   useEffect(() => {
     if (documentName) {
       loadOCRBlocks(organizationId, id, documentName);
@@ -225,8 +290,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     }
 
     setExpandedPrompt(promptId);
-    
-    if (!llmResults[promptId]) {
+
+    if (!llmResults[promptId] && !prefetchingPromptsRef.current.has(promptId)) {
       setLoadingPrompts(prev => new Set(prev).add(promptId));
       try {
         const results = await docRouterOrgApi.getLLMResult({
@@ -764,6 +829,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     if (!result) {
       const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
 
+      if (prefetchingPrompts.has(promptId) && !loadingPrompts.has(promptId)) {
+        return null;
+      }
+
       if (loadingPrompts.has(promptId) || isProcessing) {
         const processingMessage = isProcessing
           ? documentState === 'ocr_processing'
@@ -827,6 +896,9 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
     const result = llmResults[promptId];
     if (result) {
       return { text: resultPreview(result.updated_llm_result as Record<string, unknown>) };
+    }
+    if (prefetchingPrompts.has(promptId)) {
+      return { text: '' };
     }
     const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
     if (loadingPrompts.has(promptId) || runningPrompts.has(promptId) || isProcessing) {
@@ -1247,7 +1319,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
                 preview={previewMeta.text}
                 previewFailed={previewMeta.failed}
                 running={runningPrompts.has(promptId)}
-                loading={loadingPrompts.has(promptId)}
+                loading={loadingPrompts.has(promptId) && isExpanded}
                 failed={failedPrompts.has(promptId)}
                 isVerified={llmResult?.is_verified}
                 isEdited={llmResult?.is_edited}
