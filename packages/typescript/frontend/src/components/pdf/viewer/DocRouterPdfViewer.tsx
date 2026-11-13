@@ -1,7 +1,10 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { HighlightInfo } from '@/types/index';
 import { useDocRouterPdfDocument } from '@/hooks/useDocRouterPdfDocument';
+import { useDocRouterHighlightNavigation } from '@/hooks/useDocRouterHighlightNavigation';
+import { useDocRouterOcrBbox } from '@/hooks/useDocRouterOcrBbox';
+import { useDocRouterOverlays } from '@/hooks/useDocRouterOverlays';
 import { PdfViewerCore } from '@/components/pdf/viewer/PdfViewerCore';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { cn } from 'cn';
@@ -16,14 +19,11 @@ export type DocRouterPdfViewerProps = {
   onViewerFileNameChange?: (fileName: string | null) => void;
 };
 
-/**
- * Doc-router shell: API loader + PdfViewerCore (Track B). Overlays and full toolbar land in later phases.
- */
 export default function DocRouterPdfViewer({
   organizationId,
   id,
-  highlightInfo: _highlightInfo,
-  initialShowBoundingBoxes: _initialShowBoundingBoxes,
+  highlightInfo,
+  initialShowBoundingBoxes = false,
   onPdfDocumentReady,
   onViewerPageChange,
   onViewerFileNameChange,
@@ -32,6 +32,31 @@ export default function DocRouterPdfViewer({
     organizationId,
     id,
   );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const onPageChange = useCallback(
+    (page: number) => {
+      setCurrentPage(page);
+      onViewerPageChange?.(page);
+    },
+    [onViewerPageChange],
+  );
+
+  const { showBoundingBoxes, ocrBlocksForBoxes } = useDocRouterOcrBbox(
+    organizationId,
+    id,
+    fileName,
+    documentState,
+    initialShowBoundingBoxes,
+  );
+
+  const boxes = useDocRouterOverlays(highlightInfo, showBoundingBoxes, ocrBlocksForBoxes);
+  const pageNavigation = useDocRouterHighlightNavigation(highlightInfo, currentPage);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [id]);
+
   useEffect(() => {
     onViewerFileNameChange?.(fileName ? fileName : null);
   }, [fileName, onViewerFileNameChange]);
@@ -74,8 +99,10 @@ export default function DocRouterPdfViewer({
     <PdfViewerCore
       url={fileUrl}
       fileName={fileName}
-      onPageChange={onViewerPageChange}
+      onPageChange={onPageChange}
       onDocumentReady={onPdfDocumentReady}
+      boxes={boxes}
+      pageNavigation={pageNavigation}
       loading={loading ? 'Loading PDF…' : undefined}
     />
   );

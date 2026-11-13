@@ -414,12 +414,16 @@ const annotatedName = (fileName: string) => `${fileName.replace(/\.pdf$/i, '')} 
  * called when the file's version is gone (404 or 409), so the caller can ask for the current one.
  * `loading` replaces the placeholder shown until the first page is drawn.
  */
+export type PageNavigationRequest = { page: number; seq: number }
+
 export type PdfViewerCoreProps = {
   url: string
   fileName?: string
   onPageChange?: (page: number) => void
   onDocumentReady?: (pdf: PDFDocumentProxy) => void
   boxes?: PageRect[]
+  /** Bumps `seq` to jump the viewer when extraction highlight cycles pages. */
+  pageNavigation?: PageNavigationRequest
   loading?: ReactNode
   className?: string
   initialPage?: number
@@ -431,6 +435,7 @@ export function PdfViewerCore({
   onPageChange,
   onDocumentReady,
   boxes = [],
+  pageNavigation,
   loading,
   className,
   initialPage = 1,
@@ -641,6 +646,14 @@ export function PdfViewerCore({
     },
     [pdf],
   )
+
+  const lastPageNavSeq = useRef(0)
+  useEffect(() => {
+    if (!pageNavigation || !ready || pageNavigation.seq === lastPageNavSeq.current) return
+    lastPageNavSeq.current = pageNavigation.seq
+    goTo(pageNavigation.page)
+    scrollWithin(pageNavigation.page)
+  }, [pageNavigation, ready, goTo, scrollWithin])
 
   // Find: search the PDF's text whenever the (debounced) query changes. Matches show as pages are
   // searched; searching reads every page, so it also loads the rest of the file.

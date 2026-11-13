@@ -2,7 +2,7 @@
 
 Port doc-router’s document PDF pane from **react-pdf + MUI** to orchestrator-style **`pdfjs-dist` `PDFViewer`** with doc-router **loader, highlight adapter, and API wiring**. Reference implementation: sibling tree `../doc-orchestrator` (`components/PdfViewer.tsx`, `lib/pdfSearch.ts`, `lib/pdfGeometry.ts`, `docs/design/pdf-viewer.md`).
 
-**Status:** Phase 2 in progress — full orchestrator `PdfViewerCore` (toolbar, annotations, `pdfSearch` find); overlays + doc-router menus next.  
+**Status:** Phase 4 in progress — `useDocRouterOverlays`, highlight page jump, `?bbox` OCR load wired to v2 viewer; Phase 5 doc-router menus next.  
 **Branch:** `devel` → cutover on `main` after soak.
 
 ---
