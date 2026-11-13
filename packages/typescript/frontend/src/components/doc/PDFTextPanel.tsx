@@ -65,8 +65,8 @@ export default function PDFTextPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex shrink-0 items-center gap-2">
-        <p className="text-xs text-muted-foreground">
+      <div className="flex shrink-0 items-start gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-snug text-muted-foreground">
           {ocrType ? `Engine: ${ocrType}` : 'Extracted text'}
           {nPages ? ` · page ${Math.min(page, nPages)} of ${nPages}` : page > 1 ? ` · page ${page}` : null}
         </p>
@@ -74,7 +74,7 @@ export default function PDFTextPanel({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="ml-auto"
+          className="shrink-0"
           aria-label="Refresh OCR text"
           onClick={() => void load()}
         >

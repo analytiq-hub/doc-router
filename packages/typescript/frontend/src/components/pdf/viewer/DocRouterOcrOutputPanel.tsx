@@ -61,7 +61,10 @@ export function DocRouterOcrOutputPanel({
         }
       >
         <Tabs value={kind} onValueChange={(v) => onKindChange(v as OcrPanelKind)} className="flex min-h-0 flex-1 flex-col">
-          <TabsList variant="line" className="mx-2 mt-1 h-9 w-full justify-start">
+          <TabsList
+            variant="line"
+            className="mx-2 mt-1 h-9 w-full max-w-full justify-start overflow-x-auto overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             <TabsTrigger value="text">Text</TabsTrigger>
             <TabsTrigger value="markdown">Markdown</TabsTrigger>
             <TabsTrigger value="html">Web</TabsTrigger>

@@ -42,9 +42,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { useBlocker } from 'react-router-dom'
 
-import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { PropertiesDialog, type Property } from '@/components/PropertiesDialog'
 import { Button } from '@/components/ui/button'
@@ -477,7 +475,6 @@ export function PdfViewerCore({
   const [erasing, setErasing] = useState(false)
   // Whether there are annotations (to save), and whether some are not saved yet.
   const [annotated, setAnnotated] = useState(false)
-  const [unsaved, setUnsaved] = useState(false)
   const [saving, setSaving] = useState(false)
   // The page divs PDF.js has drawn, by page number: overlays are mounted into them.
   const [pageDivs, setPageDivs] = useState<Map<number, HTMLElement>>(new Map())
@@ -582,14 +579,6 @@ export function PdfViewerCore({
         const eventBus = eventBusRef.current
         if (!viewer || !eventBus) return
         index.current = new Map()
-        // Called on the first annotation change after a save, and when it is saved (typed as null
-        // in pdfjs-dist, but meant to be set, as PDF.js's own viewer does).
-        const storage = loaded.annotationStorage as unknown as {
-          onSetModified: (() => void) | null
-          onResetModified: (() => void) | null
-        }
-        storage.onSetModified = () => setUnsaved(true)
-        storage.onResetModified = () => setUnsaved(false)
         eventBus.on('pagesinit', () => {
           if (cancelled) return
           viewer.currentScaleValue = 'page-width'
@@ -610,7 +599,6 @@ export function PdfViewerCore({
     return () => {
       cancelled = true
       setAnnotated(false)
-      setUnsaved(false)
       void task.destroy()
     }
   }, [url, pdfjsReady])
@@ -736,15 +724,6 @@ export function PdfViewerCore({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [openFind])
-
-  // Annotations are not saved anywhere: ask before leaving the document with some not saved.
-  const blocker = useBlocker(unsaved)
-  useEffect(() => {
-    if (!unsaved) return
-    const onBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [unsaved])
 
   // Highlight text: a press on the text layer's background (not on a span) would start PDF.js's
   // freehand highlight; stop it before PDF.js sees it, and let the text selection start instead.
@@ -1365,14 +1344,6 @@ export function PdfViewerCore({
           onClose={() => setProperties(null)}
         />
       ) : null}
-      <ConfirmDialog
-        open={blocker.state === 'blocked'}
-        title="Leave this document?"
-        message="Your annotations are not saved. Use Save with annotations to keep a copy, or leave and lose them."
-        confirmLabel="Leave"
-        onConfirm={() => blocker.proceed?.()}
-        onClose={() => blocker.reset?.()}
-      />
     </div>
   )
 }

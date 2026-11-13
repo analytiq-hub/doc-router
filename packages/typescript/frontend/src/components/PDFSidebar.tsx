@@ -154,7 +154,11 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight, pdfPage, fil
           className="flex h-full min-h-0 flex-1 flex-col gap-0"
         >
           <div className="shrink-0 border-b px-2 pt-2">
-            <TabsList variant="line" aria-label="Document panel" className="h-9 w-full flex-wrap justify-start gap-0">
+            <TabsList
+              variant="line"
+              aria-label="Document panel"
+              className="h-9 w-full max-w-full justify-start gap-0 overflow-x-auto overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               <TabsTrigger value="extraction">{TAB_LABELS.extraction}</TabsTrigger>
               {showFlowsTab ? <TabsTrigger value="flows">{TAB_LABELS.flows}</TabsTrigger> : null}
               {showFormsTab ? <TabsTrigger value="forms">{TAB_LABELS.forms}</TabsTrigger> : null}
