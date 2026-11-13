@@ -104,10 +104,22 @@ export function useDocRouterOcrBbox(
     }
   }, [ocrBlocksForBoxes, fileName, organizationId, documentId]);
 
+  const toggleBoundingBoxes = useCallback(async () => {
+    const next = !showBoundingBoxes;
+    setShowBoundingBoxes(next);
+    if (next) await ensureBboxBlocks();
+  }, [showBoundingBoxes, ensureBboxBlocks]);
+
+  const resetOcrBlocksForBoxes = useCallback(() => {
+    setOcrBlocksForBoxes(null);
+  }, []);
+
   return {
     showBoundingBoxes,
     setShowBoundingBoxes,
+    toggleBoundingBoxes,
     ocrBlocksForBoxes,
     ensureBboxBlocks,
+    resetOcrBlocksForBoxes,
   };
 }

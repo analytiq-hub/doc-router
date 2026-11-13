@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import {
   fetchDocumentPdfFile,
@@ -13,6 +13,7 @@ export type UseDocRouterPdfDocumentResult = {
   fetchError: string | null;
   fileUrl: string | null;
   documentState: string | null;
+  setDocumentState: Dispatch<SetStateAction<string | null>>;
   fileName: string;
   fileSize: number;
 };
@@ -192,6 +193,7 @@ export function useDocRouterPdfDocument(
     fetchError,
     fileUrl,
     documentState,
+    setDocumentState,
     fileName,
     fileSize,
   };

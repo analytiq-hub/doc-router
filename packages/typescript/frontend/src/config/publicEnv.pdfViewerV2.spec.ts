@@ -6,8 +6,13 @@ describe('publicPdfViewerV2', () => {
     vi.unstubAllEnvs();
   });
 
-  it('is false when unset', () => {
+  it('is true when unset (v2 default)', () => {
     vi.stubEnv('VITE_PDF_VIEWER_V2', '');
+    expect(publicPdfViewerV2()).toBe(true);
+  });
+
+  it('is false when explicitly disabled', () => {
+    vi.stubEnv('VITE_PDF_VIEWER_V2', '0');
     expect(publicPdfViewerV2()).toBe(false);
   });
 

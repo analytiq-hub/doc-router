@@ -26,8 +26,9 @@ export function publicAppFavicon(fallback = '/favicon.ico'): string {
   return readPublic('VITE_APP_FAVICON', fallback) || fallback;
 }
 
-/** Orchestrator-style pdfjs-dist viewer (Track B). Set `VITE_PDF_VIEWER_V2=1` to enable. */
+/** Orchestrator-style pdfjs-dist viewer (Track B). Off when `VITE_PDF_VIEWER_V2=0` or `false`. */
 export function publicPdfViewerV2(): boolean {
-  const raw = readPublic('VITE_PDF_VIEWER_V2', '');
-  return raw === '1' || raw.toLowerCase() === 'true';
+  const raw = readPublic('VITE_PDF_VIEWER_V2', '1');
+  if (raw === '0' || raw.toLowerCase() === 'false') return false;
+  return raw === '1' || raw.toLowerCase() === 'true' || raw === '';
 }

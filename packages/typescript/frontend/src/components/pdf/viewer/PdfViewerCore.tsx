@@ -424,6 +424,8 @@ export type PdfViewerCoreProps = {
   boxes?: PageRect[]
   /** Bumps `seq` to jump the viewer when extraction highlight cycles pages. */
   pageNavigation?: PageNavigationRequest
+  /** Doc-router items in the toolbar more menu (OCR, bbox, …). */
+  menuExtras?: ReactNode
   loading?: ReactNode
   className?: string
   initialPage?: number
@@ -436,6 +438,7 @@ export function PdfViewerCore({
   onDocumentReady,
   boxes = [],
   pageNavigation,
+  menuExtras,
   loading,
   className,
   initialPage = 1,
@@ -978,7 +981,7 @@ export function PdfViewerCore({
           variant="ghost"
           size="icon-sm"
           aria-label="Previous page"
-          className="hidden @xl:inline-flex"
+          className="shrink-0"
           disabled={current <= 1}
           onClick={() => goTo(current - 1)}
         >
@@ -1004,7 +1007,7 @@ export function PdfViewerCore({
           variant="ghost"
           size="icon-sm"
           aria-label="Next page"
-          className="hidden @xl:inline-flex"
+          className="shrink-0"
           disabled={current >= total}
           onClick={() => goTo(current + 1)}
         >
@@ -1248,6 +1251,14 @@ export function PdfViewerCore({
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
+                <DropdownMenuItem disabled={!ready || current <= 1} onClick={() => goTo(current - 1)}>
+                  <ChevronLeft />
+                  Previous page
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!ready || current >= total} onClick={() => goTo(current + 1)}>
+                  <ChevronRight />
+                  Next page
+                </DropdownMenuItem>
                 <DropdownMenuItem disabled={!ready} onClick={() => goTo(1)}>
                   <ArrowUpToLine />
                   First page
@@ -1268,6 +1279,7 @@ export function PdfViewerCore({
                   Rotate counterclockwise
                 </DropdownMenuItem>
               </DropdownMenuGroup>
+              {menuExtras}
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={!pdf} onClick={() => pdf && void documentProperties(pdf, fileName).then(setProperties)}>
                 <Info />

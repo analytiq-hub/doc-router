@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { toast } from 'sonner';
 import type { HighlightInfo } from '@/types/index';
+import { DocRouterOrgApi } from '@/utils/api';
 import { useDocRouterPdfDocument } from '@/hooks/useDocRouterPdfDocument';
 import { useDocRouterHighlightNavigation } from '@/hooks/useDocRouterHighlightNavigation';
 import { useDocRouterOcrBbox } from '@/hooks/useDocRouterOcrBbox';
+import { useDocRouterOcrOutput } from '@/hooks/useDocRouterOcrOutput';
 import { useDocRouterOverlays } from '@/hooks/useDocRouterOverlays';
 import { PdfViewerCore } from '@/components/pdf/viewer/PdfViewerCore';
+import { DocRouterMenuExtras } from '@/components/pdf/viewer/docRouterMenuExtras';
+import { DocRouterOcrOutputPanel } from '@/components/pdf/viewer/DocRouterOcrOutputPanel';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { toastActionError } from '@/utils/toastActionError';
 import { cn } from 'cn';
 
 export type DocRouterPdfViewerProps = {
@@ -28,7 +34,8 @@ export default function DocRouterPdfViewer({
   onViewerPageChange,
   onViewerFileNameChange,
 }: DocRouterPdfViewerProps) {
-  const { loading, fetchError, fileUrl, documentState, fileName } = useDocRouterPdfDocument(
+  const api = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const { loading, fetchError, fileUrl, documentState, setDocumentState, fileName } = useDocRouterPdfDocument(
     organizationId,
     id,
   );
@@ -42,16 +49,36 @@ export default function DocRouterPdfViewer({
     [onViewerPageChange],
   );
 
-  const { showBoundingBoxes, ocrBlocksForBoxes } = useDocRouterOcrBbox(
-    organizationId,
-    id,
-    fileName,
-    documentState,
-    initialShowBoundingBoxes,
-  );
+  const { showBoundingBoxes, toggleBoundingBoxes, ocrBlocksForBoxes, resetOcrBlocksForBoxes } =
+    useDocRouterOcrBbox(organizationId, id, fileName, documentState, initialShowBoundingBoxes);
+
+  const ocrOutput = useDocRouterOcrOutput(organizationId, id, fileName);
 
   const boxes = useDocRouterOverlays(highlightInfo, showBoundingBoxes, ocrBlocksForBoxes);
   const pageNavigation = useDocRouterHighlightNavigation(highlightInfo, currentPage);
+
+  const handleRerunOcr = useCallback(async () => {
+    try {
+      await api.runOCR({ documentId: id });
+      resetOcrBlocksForBoxes();
+      setDocumentState('ocr_processing');
+      toast.info('OCR requeued');
+    } catch (err) {
+      toastActionError('Failed to rerun OCR', err);
+    }
+  }, [api, id, resetOcrBlocksForBoxes, setDocumentState]);
+
+  const menuExtras = (
+    <DocRouterMenuExtras
+      fileName={fileName}
+      showBoundingBoxes={showBoundingBoxes}
+      ocrPanelOpen={ocrOutput.ocrPanelKind != null}
+      onToggleBoundingBoxes={() => void toggleBoundingBoxes()}
+      onOpenOcrOutput={ocrOutput.openOcrOutput}
+      onDownloadOcrJson={ocrOutput.downloadOcrJson}
+      onRerunOcr={handleRerunOcr}
+    />
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -96,14 +123,35 @@ export default function DocRouterPdfViewer({
   }
 
   return (
-    <PdfViewerCore
-      url={fileUrl}
-      fileName={fileName}
-      onPageChange={onPageChange}
-      onDocumentReady={onPdfDocumentReady}
-      boxes={boxes}
-      pageNavigation={pageNavigation}
-      loading={loading ? 'Loading PDF…' : undefined}
-    />
+    <>
+      <PdfViewerCore
+        url={fileUrl}
+        fileName={fileName}
+        onPageChange={onPageChange}
+        onDocumentReady={onPdfDocumentReady}
+        boxes={boxes}
+        pageNavigation={pageNavigation}
+        menuExtras={menuExtras}
+        loading={loading ? 'Loading PDF…' : undefined}
+      />
+      {ocrOutput.ocrPanelKind ? (
+        <DocRouterOcrOutputPanel
+          documentId={id}
+          fileName={fileName}
+          kind={ocrOutput.ocrPanelKind}
+          metadataType={ocrOutput.ocrMetadataType}
+          onClose={() => ocrOutput.setOcrPanelKind(null)}
+          onKindChange={ocrOutput.setOcrPanelKind}
+          onDownload={ocrOutput.downloadPanelExport}
+          text={{ loading: ocrOutput.ocrLoading, error: ocrOutput.ocrError, content: ocrOutput.ocrText }}
+          markdown={{
+            loading: ocrOutput.ocrMarkdownLoading,
+            error: ocrOutput.ocrMarkdownError,
+            content: ocrOutput.ocrMarkdown,
+          }}
+          html={{ loading: ocrOutput.ocrHtmlLoading, error: ocrOutput.ocrHtmlError, content: ocrOutput.ocrHtml }}
+        />
+      ) : null}
+    </>
   );
 }

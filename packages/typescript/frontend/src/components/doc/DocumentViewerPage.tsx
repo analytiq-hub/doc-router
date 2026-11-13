@@ -14,21 +14,13 @@ import type { PDFViewerControlsType } from '@/components/Layout';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { EXTRACTION_HIGHLIGHT_AUTO_CLEAR_MS } from '@/constants/extractionHighlight';
 import { cn } from 'cn';
-import { MuiPdfThemeIsland } from '@/components/pdf/MuiPdfThemeIsland';
-import { publicPdfViewerV2 } from '@/config/publicEnv';
 import { sidebarTabFromQuery } from '@/utils/docPageUrl';
 
 const AGENT_PANEL_BREAKPOINT = 640;
 
-const pdfViewerV2 = publicPdfViewerV2();
-
-const PDFViewer = dynamic(
-  () =>
-    pdfViewerV2
-      ? import('@/components/pdf/viewer/DocRouterPdfViewer')
-      : import('@/components/PDFViewer'),
-  { ssr: false },
-);
+const PDFViewer = dynamic(() => import('@/components/pdf/viewer/DocRouterPdfViewer'), {
+  ssr: false,
+});
 
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
@@ -160,7 +152,7 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
   if (!id) return <div>No PDF ID provided</div>;
   const pdfId = Array.isArray(id) ? id[0] : id;
 
-  const pageBody = (
+  return (
     <div className={cn('flex min-h-0 flex-1 flex-col overflow-hidden')}>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <PanelGroup
@@ -219,7 +211,4 @@ export default function DocumentViewerPage({ organizationId, id }: DocumentViewe
         </div>
     </div>
   );
-
-  if (pdfViewerV2) return pageBody;
-  return <MuiPdfThemeIsland>{pageBody}</MuiPdfThemeIsland>;
 }
