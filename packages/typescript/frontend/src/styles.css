@@ -115,6 +115,16 @@
   --outline-color: var(--input);
   --hover-outline-color: var(--border);
 }
+/* PDF.js uses multiply (physical marker on white paper). Pale yellow disappears on
+   full-bleed color pages; hard-light keeps contrast on saturated backgrounds. */
+.pdf-viewer-scroller .canvasWrapper svg.highlight {
+  mix-blend-mode: hard-light;
+}
+@media screen and (forced-colors: active) {
+  .pdf-viewer-scroller .canvasWrapper svg.highlight {
+    mix-blend-mode: difference;
+  }
+}
 .pdf-erasing .annotationEditorLayer,
 .pdf-erasing .annotationEditorLayer * {
   cursor: crosshair;
