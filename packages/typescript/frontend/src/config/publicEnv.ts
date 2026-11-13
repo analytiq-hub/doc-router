@@ -25,3 +25,9 @@ export function publicAppName(fallback = 'Smart Document Router'): string {
 export function publicAppFavicon(fallback = '/favicon.ico'): string {
   return readPublic('VITE_APP_FAVICON', fallback) || fallback;
 }
+
+/** Orchestrator-style pdfjs-dist viewer (Track B). Set `VITE_PDF_VIEWER_V2=1` to enable. */
+export function publicPdfViewerV2(): boolean {
+  const raw = readPublic('VITE_PDF_VIEWER_V2', '');
+  return raw === '1' || raw.toLowerCase() === 'true';
+}

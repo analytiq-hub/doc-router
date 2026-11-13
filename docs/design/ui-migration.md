@@ -175,12 +175,13 @@ Keep **React Flow**. Flow workspace chrome now uses shadcn primitives; no `@head
 
 ---
 
-### Phase 8 — PDF viewer (2+ weeks or hybrid)
+### Phase 8 — PDF viewer — **Track B (approved)**
 
-`PDFViewer.tsx` is deeply MUI.
+**Plan:** [pdf-viewer-port.md](./pdf-viewer-port.md) — port orchestrator `PdfViewer` (`pdfjs-dist`), highlight adapter, **`pdfSearch`**, **annotations**, toolbar matches orchestrator. Supersedes hybrid-toolbar-first option.
 
-- **Recommended:** MUI **island** until Phases 3–6 complete; toolbar port optional.
-- **Full port:** align with orchestrator `PdfViewer` when resourced.
+**Decisions (locked):** flat extraction rects v1; port `pdfSearch`; annotations in v1; orchestrator toolbar/filename layout.
+
+**In progress:** not started (legacy `PDFViewer.tsx` + `MuiPdfThemeIsland` remain until cutover).
 
 ---
 

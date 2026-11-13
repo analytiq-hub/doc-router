@@ -461,7 +461,7 @@ const PDFViewer = ({
     }
     const ac = new AbortController();
     setSearchBusy(true);
-    void searchPdf(pdf, q, false, ac.signal)
+    void searchPdf(pdf as PDFDocumentProxy, q, false, ac.signal)
       .then((hits) => {
         if (!ac.signal.aborted) {
           setSearchHits(hits);
@@ -525,7 +525,7 @@ const PDFViewer = ({
 
   const handleLoadSuccess = (pdf: pdfjs.PDFDocumentProxy) => {
     pdfDocRef.current = pdf;
-    onPdfDocumentReady?.(pdf);
+    onPdfDocumentReady?.(pdf as PDFDocumentProxy);
     setPdfLoadVersion((v) => v + 1);
     setNumPages(pdf.numPages);
     setPageNumber(1);

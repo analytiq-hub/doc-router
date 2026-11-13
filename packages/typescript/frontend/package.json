@@ -47,6 +47,7 @@
     "lucide-react": "^0.503.0",
     "monaco-editor": "^0.55",
     "mongodb": "^6.9.0",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19",
     "react-data-grid": "^7.0.0-beta.47",
     "react-diff-viewer-continued": "^4.4.0",
@@ -91,6 +92,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
+    "pdfjs-dist": "$pdfjs-dist",
     "cookie": "1.1.1",
     "dompurify": ">=3.3.4",
     "postcss-selector-parser": ">=7.1.6",
