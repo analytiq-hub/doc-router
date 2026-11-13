@@ -77,6 +77,21 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
         '@docrouter/sdk': path.resolve(__dirname, '../sdk/src/index.ts'),
       },
+      // Base UI composite widgets (tabs, menu, …) share one CompositeRootContext; Vite must not
+      // prebundle duplicate copies into separate chunks (breaks TabsList ↔ TabsTrigger in dev).
+      dedupe: ['@base-ui/react', '@base-ui/utils'],
+    },
+    optimizeDeps: {
+      include: [
+        '@base-ui/react',
+        '@base-ui/react/tabs',
+        '@base-ui/react/dialog',
+        '@base-ui/react/menu',
+        '@base-ui/react/popover',
+        '@base-ui/react/slider',
+        '@base-ui/react/switch',
+        '@base-ui/react/tooltip',
+      ],
     },
     define: publicEnvDefine(mode),
     server: {
