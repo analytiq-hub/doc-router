@@ -281,13 +281,16 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       minWidth: 180,
       renderCell: ({ row }) =>
         canConfigWrite ? (
-          <Link to={editPath(row)} className="text-primary hover:underline">
-            <span className="line-clamp-2" title={row.name}>
-              {row.name}
-            </span>
+          <Link to={editPath(row)} className="text-primary hover:underline" title={row.name}>
+            {row.name}
           </Link>
         ) : (
-          <button type="button" className="text-left hover:underline" onClick={() => setViewing(row)}>
+          <button
+            type="button"
+            className="block min-w-0 max-w-full truncate text-left hover:underline"
+            title={row.name}
+            onClick={() => setViewing(row)}
+          >
             {row.name}
           </button>
         ),
