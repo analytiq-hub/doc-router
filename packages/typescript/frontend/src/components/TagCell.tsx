@@ -53,14 +53,24 @@ export function TagCell({ tags }: { tags: Tag[] }) {
       {hidden.length ? (
         <Tooltip>
           <TooltipTrigger
-            render={<Badge variant="outline" tabIndex={0} />}
+            render={
+              <Badge
+                variant="outline"
+                tabIndex={0}
+                className="bg-card hover:bg-card data-popup-open:bg-card focus-visible:ring-1"
+              />
+            }
             aria-label={`${hidden.length} more tags: ${hidden.map((tag) => tag.name).join(', ')}`}
           >
             +{hidden.length}
           </TooltipTrigger>
-          <TooltipContent className="flex max-w-xs flex-wrap gap-1">
+          <TooltipContent
+            appearance="popover"
+            sideOffset={6}
+            className="flex max-w-xs flex-wrap gap-1 px-2 py-1.5"
+          >
             {hidden.map((tag) => (
-              <TagBadge key={tag.id} tag={tag} />
+              <TagBadge key={tag.id} tag={tag} soft />
             ))}
           </TooltipContent>
         </Tooltip>
