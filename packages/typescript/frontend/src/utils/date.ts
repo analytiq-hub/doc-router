@@ -29,6 +29,27 @@ export function formatLocalDate(dateInput: string | Date): string {
     return `${datePart}, ${timePart}`;
 }
 
+/** Compact saved-at line for revision version menus (no seconds). */
+export function formatRevisionSavedAt(dateInput: string | Date): string {
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (Number.isNaN(date.getTime())) {
+        return typeof dateInput === 'string' ? dateInput : '';
+    }
+    const now = new Date();
+    const isCurrentYear = date.getFullYear() === now.getFullYear();
+    const datePart = date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        ...(isCurrentYear ? {} : { year: 'numeric' }),
+    });
+    const timePart = date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    return `${datePart}, ${timePart}`;
+}
+
 /** Relative time for credential details (e.g. "3 months ago"). */
 export function formatRelativeTime(dateInput: string | Date): string {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
