@@ -10,10 +10,9 @@ import { getApiErrorMsg } from '@/utils/api';
 import Editor from "@monaco-editor/react";
 import InfoTooltip from '@/components/InfoTooltip';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { ArrowLeftRight, ChevronDown, ChevronRight, GripVertical, IdCard } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from '@/utils/appRouter';
-import SchemaInfoModal from './SchemaInfoModal';
 import SchemaVersionSelector from './SchemaVersionSelector';
 import SchemaVersionCompareModal from './SchemaVersionCompareModal';
 import SchemaDiffView from './SchemaDiffView';
@@ -222,7 +221,6 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [currentSchemaId, setCurrentSchemaId] = useState<string | null>(null);
   const [currentSchemaFull, setCurrentSchemaFull] = useState<Schema | null>(null);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [viewingVersion, setViewingVersion] = useState<number | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
@@ -1278,15 +1276,6 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
               </button>
             </>
           )}
-          {currentSchemaFull && (
-            <button
-              onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-              title="Schema Properties"
-            >
-              <IdCard className="size-5" />
-            </button>
-          )}
           <InfoTooltip 
             title="About Schemas"
             content={
@@ -1633,15 +1622,8 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
         </form>
       </div>
       
-      {/* Info Modal */}
       {currentSchemaFull && (
         <>
-          <SchemaInfoModal
-            isOpen={isInfoModalOpen}
-            onClose={() => setIsInfoModalOpen(false)}
-            schema={currentSchemaFull}
-          />
-          
           {/* Compare Versions Modal */}
           <SchemaVersionCompareModal
             isOpen={isCompareModalOpen}

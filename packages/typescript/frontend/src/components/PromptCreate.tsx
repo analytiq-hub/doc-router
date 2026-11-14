@@ -25,8 +25,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useRouter } from '@/utils/appRouter';
 import Editor from "@monaco-editor/react";
-import { ArrowLeftRight, IdCard } from 'lucide-react';
-import PromptInfoModal from './PromptInfoModal';
+import { ArrowLeftRight } from 'lucide-react';
 import PromptVersionSelector from './PromptVersionSelector';
 import PromptVersionCompareModal from './PromptVersionCompareModal';
 import PromptDiffView from './PromptDiffView';
@@ -58,7 +57,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [diffLeft, setDiffLeft] = useState<Prompt | null>(null);
   const [diffRight, setDiffRight] = useState<Prompt | null>(null);
   const [schemas, setSchemas] = useState<Schema[]>([]);
@@ -415,15 +413,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               </button>
             </>
           )}
-          {currentPromptFull && (
-            <button
-              onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-              title="Prompt Properties"
-            >
-              <IdCard className="size-5" />
-            </button>
-          )}
           <InfoTooltip 
             title="Configuring Prompts"
             content={
@@ -727,15 +716,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             setDiffLeft(leftPrompt);
             setDiffRight(rightPrompt);
           }}
-        />
-      )}
-      
-      {/* Info Modal */}
-      {currentPromptFull && (
-        <PromptInfoModal
-          isOpen={isInfoModalOpen}
-          onClose={() => setIsInfoModalOpen(false)}
-          prompt={currentPromptFull}
         />
       )}
       

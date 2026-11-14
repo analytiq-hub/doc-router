@@ -30,8 +30,7 @@ const Editor = dynamic(() => import("@monaco-editor/react"), {
 });
 import InfoTooltip from '@/components/InfoTooltip';
 import { FormComponent } from '@/types/ui';
-import { ArrowLeftRight, IdCard } from 'lucide-react';
-import FormInfoModal from './FormInfoModal';
+import { ArrowLeftRight } from 'lucide-react';
 import FormVersionSelector from './FormVersionSelector';
 import FormVersionCompareModal from './FormVersionCompareModal';
 import FormDiffView from './FormDiffView';
@@ -57,7 +56,6 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
   const [activeTab, setActiveTab] = useState<'builder' | 'mapper' | 'json'>('builder');
   const [jsonForm, setJsonForm] = useState('');
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [diffLeft, setDiffLeft] = useState<Form | null>(null);
   const [diffRight, setDiffRight] = useState<Form | null>(null);
 
@@ -216,15 +214,6 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 <span>Compare Versions</span>
               </button>
             </>
-          )}
-          {currentFormFull && (
-            <button
-              onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-              title="Form Properties"
-            >
-              <IdCard className="size-5" />
-            </button>
           )}
           <InfoTooltip 
             title="About Forms"
@@ -468,15 +457,6 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
             setDiffLeft(leftForm);
             setDiffRight(rightForm);
           }}
-        />
-      )}
-      
-      {/* Info Modal */}
-      {currentFormFull && (
-        <FormInfoModal
-          isOpen={isInfoModalOpen}
-          onClose={() => setIsInfoModalOpen(false)}
-          form={currentFormFull}
         />
       )}
       
