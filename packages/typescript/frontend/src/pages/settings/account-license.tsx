@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LicenseAdminView } from '@docrouter/sdk';
 import { DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
-import { settingsDescriptionClass, settingsPageTitleClass } from '@/components/settingsTypography';
+import { settingsDescriptionClass } from '@/components/settingsTypography';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,12 +106,10 @@ const LicensePage: React.FC = () => {
 
   return (
       <div className="max-w-2xl space-y-6">
-        <div>
-          <h1 className={settingsPageTitleClass}>License</h1>
-          <p className={`${settingsDescriptionClass} mt-1`}>
-            View and replace the product license for this deployment.
-          </p>
-        </div>
+        <SettingsPageHeader
+          title="License"
+          subtitle="View and replace the product license for this deployment."
+        />
 
         {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
 

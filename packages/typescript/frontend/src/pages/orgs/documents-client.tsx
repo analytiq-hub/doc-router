@@ -51,21 +51,19 @@ export default function DocumentsPageClient({ organizationId }: DocumentsPageCli
   }
 
   return (
-    <OrgPageContainer>
-      <div data-tour="documents">
-        <PageHeader
-          title="Documents"
-          subtitle="Browse uploaded files, rerun extraction, and manage tags and metadata."
-          actions={
-            !capabilitiesLoading && canUpload ? (
-              <Button onClick={() => router.push(uploadPath)} data-tour="upload-documents">
-                <Plus data-icon="inline-start" />
-                Upload documents
-              </Button>
-            ) : null
-          }
-        />
-      </div>
+    <OrgPageContainer data-tour="documents">
+      <PageHeader
+        title="Documents"
+        subtitle="Browse uploaded files, rerun extraction, and manage tags and metadata."
+        actions={
+          !capabilitiesLoading && canUpload ? (
+            <Button onClick={() => router.push(uploadPath)} data-tour="upload-documents">
+              <Plus data-icon="inline-start" />
+              Upload documents
+            </Button>
+          ) : null
+        }
+      />
       <OrgDocumentList organizationId={organizationId} initialCaseIdFilter={caseIdFromQuery} />
     </OrgPageContainer>
   )

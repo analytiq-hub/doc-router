@@ -1,15 +1,19 @@
 'use client'
 
 import React from 'react';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import OrganizationTokenManager from '@/components/OrganizationTokenManager';
 
-const AccessTokensPage: React.FC = () => {
+const OrganizationTokensPage: React.FC = () => {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Organization Token Management</h2>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="Organization tokens"
+        subtitle="API tokens scoped to the organization selected in the header."
+      />
       <OrganizationTokenManager />
     </div>
   );
 };
 
-export default AccessTokensPage; 
+export default OrganizationTokensPage;

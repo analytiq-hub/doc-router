@@ -1,12 +1,13 @@
-'use client';
+'use client'
 
 import React from 'react';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import AzureConfigManager from '@/components/AzureConfigManager';
 
 const AzureConfigPage: React.FC = () => {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Azure Setup</h2>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader title="Azure setup" subtitle="Azure storage and integration settings." />
       <AzureConfigManager />
     </div>
   );

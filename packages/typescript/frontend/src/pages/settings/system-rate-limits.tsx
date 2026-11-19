@@ -1,12 +1,16 @@
 'use client';
 
 import React from 'react';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import SystemSettingsManager from '@/components/SystemSettingsManager';
 
 const SystemRateLimitsPage: React.FC = () => {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Rate limits</h2>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="Rate limits"
+        subtitle="Per-pod Textract concurrency. LLM limits are configured on the models table."
+      />
       <SystemSettingsManager section="limits" />
     </div>
   );

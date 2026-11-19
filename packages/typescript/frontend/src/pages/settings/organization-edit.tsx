@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouteParams } from '@/utils/useRouteParams';
-import { PageHeader } from '@/components/PageHeader';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import OrganizationEdit from '@/components/OrganizationEdit';
 
 interface OrganizationEditPageProps {
@@ -14,8 +14,8 @@ interface OrganizationEditPageProps {
 const OrganizationEditPage: React.FC<OrganizationEditPageProps> = (props) => {
   const { organizationId } = useRouteParams(props);
   return (
-    <div className="flex max-w-4xl flex-col gap-6">
-      <PageHeader title="General" subtitle="The organization's name, type, and feature flags." />
+    <div className="flex max-w-4xl flex-col gap-4">
+      <SettingsPageHeader title="General" subtitle="The organization's name, type, and feature flags." />
       <OrganizationEdit organizationId={organizationId} section="general" />
     </div>
   );

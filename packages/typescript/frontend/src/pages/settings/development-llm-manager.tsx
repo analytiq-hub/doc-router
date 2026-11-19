@@ -1,25 +1,28 @@
 'use client'
 
 import React from 'react';
-import LLMManager from '@/components/LLMManager';
 import { Link } from 'react-router-dom';
 import { List } from 'lucide-react';
 
+import LLMManager from '@/components/LLMManager';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
+import { Button } from '@/components/ui/button';
+
 const LLMManagerPage: React.FC = () => {
   return (
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900">LLM Management</h2>
-          <Link 
-            to="/settings/account/development/llm-manager/models"
-            className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
-          >
-            <List className="size-5" />
-            View All Models
-          </Link>
-        </div>
-        <LLMManager />
-      </div>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="LLM"
+        subtitle="Enable providers and manage API keys."
+        actions={
+          <Button variant="secondary" render={<Link to="/settings/account/development/llm-manager/models" />}>
+            <List data-icon="inline-start" />
+            View all models
+          </Button>
+        }
+      />
+      <LLMManager />
+    </div>
   );
 };
 

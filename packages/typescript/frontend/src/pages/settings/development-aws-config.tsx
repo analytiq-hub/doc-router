@@ -1,12 +1,16 @@
 'use client'
 
 import React from 'react';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import AWSConfigManager from '@/components/AWSConfigManager';
 
 const AWSConfigPage: React.FC = () => {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">AWS Setup</h2>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="AWS setup"
+        subtitle="Credentials and S3 bucket for on-prem document storage."
+      />
       <AWSConfigManager />
     </div>
   );

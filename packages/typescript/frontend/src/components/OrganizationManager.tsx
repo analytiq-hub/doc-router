@@ -14,7 +14,7 @@ import { RowActionsMenu } from '@/components/RowActionsMenu'
 import { SearchInput } from '@/components/SearchInput'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SettingsPageHeader } from '@/components/SettingsPageHeader'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -263,14 +263,17 @@ const OrganizationManager: React.FC = () => {
   const rangeEnd = pagination.page * pagination.pageSize + organizations.length
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-lg">Organization management</CardTitle>
-        <Button type="button" onClick={() => setIsAddOpen(true)}>
-          Add organization
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="Your organizations"
+        subtitle="Organizations you belong to. Open one to manage its settings."
+        actions={
+          <Button type="button" onClick={() => setIsAddOpen(true)}>
+            Add organization
+          </Button>
+        }
+      />
+      <div className="flex flex-col gap-4">
         <ErrorAlert error={error} />
         <div className="flex flex-col gap-3 sm:flex-row">
           <SearchInput
@@ -302,7 +305,7 @@ const OrganizationManager: React.FC = () => {
               ? `Showing ${rangeStart}–${rangeEnd} of ${totalCount} organizations`
               : 'No organizations found'}
         </p>
-      </CardContent>
+      </div>
 
       {isAddOpen ? (
         <CreateOrganizationDialog
@@ -322,7 +325,7 @@ const OrganizationManager: React.FC = () => {
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleteId(null)}
       />
-    </Card>
+    </div>
   )
 }
 

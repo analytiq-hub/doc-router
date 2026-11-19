@@ -1,12 +1,16 @@
 'use client';
 
 import React from 'react';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import SystemSettingsManager from '@/components/SystemSettingsManager';
 
 const SystemQueuesPage: React.FC = () => {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Queues</h2>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="Queues"
+        subtitle="Worker counts per queue type in each queue-worker process."
+      />
       <SystemSettingsManager section="queues" />
     </div>
   );

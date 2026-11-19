@@ -1,12 +1,16 @@
-'use client';
+'use client'
 
 import React from 'react';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
 import GCPConfigManager from '@/components/GCPConfigManager';
 
 const GCPConfigPage: React.FC = () => {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">GCP Setup</h2>
+    <div className="flex flex-col gap-4">
+      <SettingsPageHeader
+        title="GCP setup"
+        subtitle="Service account and project settings for Google Cloud integrations."
+      />
       <GCPConfigManager />
     </div>
   );

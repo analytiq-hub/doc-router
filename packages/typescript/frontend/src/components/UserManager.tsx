@@ -8,12 +8,12 @@ import type { User, UserCreate } from '@docrouter/sdk'
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type DataTableColumn, type PaginationModel } from '@/components/data-table'
+import { SettingsPageHeader } from '@/components/SettingsPageHeader'
 import { RowActionsMenu } from '@/components/RowActionsMenu'
 import { SearchInput } from '@/components/SearchInput'
 import UserAddModal from '@/components/UserAddModal'
 import UserInviteModal from '@/components/UserInviteModal'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDebounced } from '@/lib/useDebounced'
 import { DocRouterAccountApi } from '@/utils/api'
 import { signOut } from '@/utils/signOut'
@@ -151,19 +151,22 @@ const UserManager: React.FC = () => {
   const rangeEnd = pagination.page * pagination.pageSize + users.length
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-lg">User management</CardTitle>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => setIsAddOpen(true)}>
-            Add user
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => setIsInviteOpen(true)}>
-            Invite user
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="flex max-w-4xl flex-col gap-4">
+      <SettingsPageHeader
+        title="Users"
+        subtitle="Accounts on this deployment. Add a user with a password or send an email invitation."
+        actions={
+          <>
+            <Button type="button" onClick={() => setIsAddOpen(true)}>
+              Add user
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setIsInviteOpen(true)}>
+              Invite user
+            </Button>
+          </>
+        }
+      />
+      <div className="flex flex-col gap-4">
         <SearchInput
           className="w-full max-w-md"
           value={searchQuery}
@@ -186,7 +189,7 @@ const UserManager: React.FC = () => {
               ? `Showing ${rangeStart}–${rangeEnd} of ${totalCount} users`
               : 'No users found'}
         </p>
-      </CardContent>
+      </div>
 
       {isAddOpen ? (
         <UserAddModal open onClose={() => setIsAddOpen(false)} onAdd={handleAddUser} />
@@ -213,7 +216,7 @@ const UserManager: React.FC = () => {
         onConfirm={() => void confirmDelete()}
         onClose={() => setUserToDelete(null)}
       />
-    </Card>
+    </div>
   )
 }
 

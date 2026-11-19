@@ -1,28 +1,28 @@
 'use client'
 
 import React from 'react';
-import LLMModelsConfig from '@/components/LLMModelsConfig';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 
+import LLMModelsConfig from '@/components/LLMModelsConfig';
+import { SettingsPageHeader } from '@/components/SettingsPageHeader';
+import { Button } from '@/components/ui/button';
+
 const ModelsPage: React.FC = () => {
   return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <Link 
-            to="/settings/account/development/llm-manager"
-            className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
-          >
-            <ArrowLeft className="size-5" />
-            Back to Providers
-          </Link>
-        </div>
-        
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Language Models Configuration</h2>
-          <LLMModelsConfig />
-        </div>
+    <div className="flex flex-col gap-4">
+      <div>
+        <Button variant="ghost" size="sm" render={<Link to="/settings/account/development/llm-manager" />}>
+          <ArrowLeft data-icon="inline-start" />
+          Back to providers
+        </Button>
       </div>
+      <SettingsPageHeader
+        title="Language models"
+        subtitle="Enable models and set per-model concurrency limits."
+      />
+      <LLMModelsConfig />
+    </div>
   );
 };
 
