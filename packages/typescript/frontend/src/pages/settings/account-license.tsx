@@ -3,10 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LicenseAdminView } from '@docrouter/sdk';
 import { DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
-import SettingsLayout, {
-  settingsDescriptionClass,
-  settingsPageTitleClass,
-} from '@/components/SettingsLayout';
+import { settingsDescriptionClass, settingsPageTitleClass } from '@/components/settingsTypography';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,7 +104,6 @@ const LicensePage: React.FC = () => {
   };
 
   return (
-    <SettingsLayout selectedMenu="system_license">
       <div className="max-w-2xl space-y-6">
         <div>
           <h1 className={settingsPageTitleClass}>License</h1>
@@ -208,7 +204,6 @@ const LicensePage: React.FC = () => {
           </CardContent>
         </Card>
       </div>
-    </SettingsLayout>
   );
 };
 

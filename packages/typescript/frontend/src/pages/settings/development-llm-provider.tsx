@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { useParams } from '@/utils/appRouter';
-import SettingsLayout from '@/components/SettingsLayout';
 import LLMProviderConfig from '@/components/LLMProviderConfig';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -12,7 +11,6 @@ const ProviderConfigPage: React.FC = () => {
   const providerName = params.providerName as string;
 
   return (
-    <SettingsLayout selectedMenu="system_development">
       <div className="space-y-4">
         <div className="flex items-center gap-4">
           <Link 
@@ -28,7 +26,6 @@ const ProviderConfigPage: React.FC = () => {
           <LLMProviderConfig providerName={providerName} />
         </div>
       </div>
-    </SettingsLayout>
   );
 };
 

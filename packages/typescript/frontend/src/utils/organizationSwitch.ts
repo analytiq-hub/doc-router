@@ -8,12 +8,23 @@ export type OrganizationSwitchNavigation =
   | { type: 'none' }
   | { type: 'navigate'; path: string; replace?: boolean }
 
-/** After the header org switcher: always land on the new org dashboard (drop query params). */
+/**
+ * After the header org switcher: an organization settings page stays on the same page of the
+ * other organization. Every other page lands on the new organization's dashboard.
+ */
 export function organizationSwitchNavigation(
-  _pathname: string,
-  _search: string,
+  pathname: string,
+  search: string,
   organizationId: string,
 ): OrganizationSwitchNavigation {
+  const settingsOrg = pathname.match(/^\/settings\/organizations\/[^/]+(\/.*)?$/)
+  if (settingsOrg) {
+    return {
+      type: 'navigate',
+      path: `/settings/organizations/${organizationId}${settingsOrg[1] ?? ''}${search}`,
+      replace: true,
+    }
+  }
   return {
     type: 'navigate',
     path: `/orgs/${organizationId}/dashboard`,

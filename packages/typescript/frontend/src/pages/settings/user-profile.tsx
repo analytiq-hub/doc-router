@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react';
-import SettingsLayout from '@/components/SettingsLayout';
 import UserEdit from '@/components/UserEdit';
 import { useAppSession } from '@/utils/useAppSession';
 
@@ -13,11 +12,9 @@ const ProfilePage: React.FC = () => {
   }
 
   return (
-    <SettingsLayout selectedMenu="user_profile">
-      <div>
-        {session?.user?.id && <UserEdit userId={session.user.id} />}
-      </div>
-    </SettingsLayout>
+    <div>
+      {session?.user?.id && <UserEdit userId={session.user.id} />}
+    </div>
   );
 };
 

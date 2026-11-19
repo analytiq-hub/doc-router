@@ -1,14 +1,12 @@
 'use client'
 
 import React from 'react';
-import SettingsLayout from '@/components/SettingsLayout';
 import LLMModelsConfig from '@/components/LLMModelsConfig';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 
 const ModelsPage: React.FC = () => {
   return (
-    <SettingsLayout selectedMenu="system_development">
       <div className="space-y-4">
         <div className="flex items-center gap-4">
           <Link 
@@ -25,7 +23,6 @@ const ModelsPage: React.FC = () => {
           <LLMModelsConfig />
         </div>
       </div>
-    </SettingsLayout>
   );
 };
 

@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { useRouteParams } from '@/utils/useRouteParams';
-import SettingsLayout from '@/components/SettingsLayout';
 import OrganizationEdit from '@/components/OrganizationEdit';
 
 interface OrganizationEditPageProps {
@@ -13,11 +12,7 @@ interface OrganizationEditPageProps {
 
 const OrganizationEditPage: React.FC<OrganizationEditPageProps> = (props) => {
   const { organizationId } = useRouteParams(props);
-  return (
-    <SettingsLayout selectedMenu="organizations">
-      <OrganizationEdit organizationId={organizationId} />
-    </SettingsLayout>
-  );
+  return <OrganizationEdit organizationId={organizationId} />;
 };
 
 export default OrganizationEditPage; 

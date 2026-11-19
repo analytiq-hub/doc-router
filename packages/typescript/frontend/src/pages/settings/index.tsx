@@ -1,25 +1,8 @@
-'use client'
+import { Navigate } from 'react-router-dom'
 
-import { useEffect } from 'react';
-import { useRouter } from '@/utils/appRouter';
-import SettingsLayout from '@/components/SettingsLayout';
+import { lastSettingsPath } from '@/utils/navMemory'
 
-const SettingsPage = () => {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/settings/user/developer');
-  }, [router]);
-
-  return (
-    <SettingsLayout selectedMenu="user_developer">
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-pulse text-gray-500">
-          Loading settings...
-        </div>
-      </div>
-    </SettingsLayout>
-  );
-};
-
-export default SettingsPage;
+/** `/settings` opens where the user left it; the first time, on Profile. */
+export default function SettingsPage() {
+  return <Navigate to={lastSettingsPath() ?? '/settings/user/profile'} replace />
+}

@@ -4,7 +4,6 @@ import React from 'react';
 import { useParams } from '@/utils/appRouter';
 import SubscriptionManager from '@/components/SubscriptionManager';
 import { useAppSession } from '@/utils/useAppSession';
-import SettingsLayout from '@/components/SettingsLayout';
 
 export default function OrganizationSubscriptionPage() {
   const params = useParams();
@@ -16,17 +15,8 @@ export default function OrganizationSubscriptionPage() {
   }
 
   return (
-    <SettingsLayout selectedMenu="organizations">
-      {/* <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">Billing</h1>
-        <p className="text-gray-600 mt-2">
-          Manage your subscription plans, usage, and billing preferences.
-        </p>
-      </div> */}
-
-      <div className="space-y-6">
-        <SubscriptionManager organizationId={organizationId} />
-      </div>
-    </SettingsLayout>
+    <div className="space-y-6">
+      <SubscriptionManager organizationId={organizationId} />
+    </div>
   );
 } 

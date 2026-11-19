@@ -2,11 +2,13 @@ import { Outlet } from 'react-router-dom';
 
 import Layout from '@/components/Layout';
 
-/** Match Next root layout: settings pages sit inside the main app chrome, then `SettingsLayout` in each page. */
+/** Settings uses the main shell. `Layout` swaps in the settings menu, so pages keep the content width. */
 export function SettingsAppLayout() {
   return (
     <Layout>
-      <Outlet />
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <Outlet />
+      </div>
     </Layout>
   );
 }

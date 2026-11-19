@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, ReactNode, useEffect, useLayoutEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { useRouter, usePathname } from '@/utils/appRouter';
+import { Link, useLocation } from 'react-router-dom';
+import { useRouter } from '@/utils/appRouter';
 import { useAppSession } from '@/contexts/AppSessionContext';
 import AuthButton from '@/components/AuthButton';
 import UserMenu from '@/components/UserMenu';
@@ -21,14 +21,16 @@ import {
   GitBranch,
   Library,
   Settings,
-  type LucideIcon,
 } from 'lucide-react';
 import TourGuide from '@/components/TourGuide';
 import LicenseBanner from '@/components/LicenseBanner';
+import { NavLinkItem, type NavItem } from '@/components/NavLinkItem';
+import { SettingsNav } from '@/components/SettingsNav';
 import { appName } from '@/config/branding';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { isSysAdmin } from '@/utils/roles';
+import { lastAppPath, rememberPath } from '@/utils/navMemory';
 
 import type { DocSidebarTab } from '@/utils/docPageUrl';
 
@@ -47,73 +49,34 @@ declare global {
   }
 }
 
-interface MenuItem {
-  text: string;
-  icon: LucideIcon;
-  href: string;
-  tooltip: string;
-}
-
 interface LayoutProps {
   children: ReactNode;
 }
 
-function NavLinkItem({
-  item,
-  open,
-  active,
-  disabled,
-}: {
-  item: MenuItem;
-  open: boolean;
-  active: boolean;
-  disabled?: boolean;
-}) {
-  const Icon = item.icon;
-  const link = (
-    <Link
-      to={item.href}
-      aria-current={active ? 'page' : undefined}
-      aria-disabled={disabled || undefined}
-      className={cn(
-        'flex h-10 w-full items-center gap-3.5 rounded-md px-3 text-sm font-medium outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring',
-        active && 'bg-primary-soft text-primary',
-        !active && !disabled && 'text-foreground',
-        disabled && 'pointer-events-none cursor-not-allowed opacity-60',
-      )}
-      onClick={disabled ? (e) => e.preventDefault() : undefined}
-    >
-      <Icon className="size-5 shrink-0" aria-hidden />
-      <span className={cn('truncate', !open && 'sr-only')}>{item.text}</span>
-    </Link>
-  );
-
-  if (open) {
-    return link;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger render={link} />
-      <TooltipContent side="right">{disabled ? 'Select an organization' : item.tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { currentOrganization } = useOrganization();
+  const { currentOrganization, organizations } = useOrganization();
 
   const [open, setOpen] = useState(true);
 
   const { session, status } = useAppSession();
   const router = useRouter();
-  const pathname = usePathname();
+  const { pathname, search } = useLocation();
   const isPDFViewer = pathname.includes('/docs/');
   const [forceUpdate, setForceUpdate] = useState(0);
   const [pdfControls, setPdfControls] = useState<PDFViewerControlsType | null>(null);
 
   const orgIdForLinks =
     (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null;
+  const inSettings = pathname === '/settings' || pathname.startsWith('/settings/');
+  const settingsOrgId = pathname.match(/^\/settings\/organizations\/([^/]+)/)?.[1] ?? null;
+  const menuOrgId = settingsOrgId ?? currentOrganization?.id ?? null;
+  const menuOrg =
+    organizations.find((organization) => organization.id === menuOrgId) ??
+    (menuOrgId && menuOrgId === currentOrganization?.id ? currentOrganization : null);
+
+  useEffect(() => {
+    rememberPath(pathname, search);
+  }, [pathname, search]);
 
   useLayoutEffect(() => {
     const savedSidebarState = localStorage.getItem('sidebarOpen');
@@ -130,7 +93,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     });
   }, []);
 
-  const fileMenuItems: MenuItem[] = orgIdForLinks
+  const fileMenuItems: NavItem[] = orgIdForLinks
     ? [
         { text: 'Dashboard', icon: LayoutDashboard, tooltip: 'Dashboard', href: `/orgs/${orgIdForLinks}/dashboard` },
         { text: 'Documents', icon: FileText, tooltip: 'Documents', href: `/orgs/${orgIdForLinks}/docs` },
@@ -154,7 +117,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         { text: 'Knowledge Bases', icon: Library, tooltip: 'Knowledge Bases', href: '#' },
       ];
 
-  const systemMenuItems: MenuItem[] = [
+  const systemMenuItems: NavItem[] = [
     { text: 'Settings', icon: Settings, tooltip: 'Settings', href: '/settings' },
   ];
 
@@ -203,7 +166,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   }, [status, router, pathname]);
 
-  const renderMenuItem = (item: MenuItem) => {
+  const renderMenuItem = (item: NavItem) => {
     const isPlaceholder = item.href === '#';
     const isSelected = !isPlaceholder && (pathname === item.href || pathname.startsWith(`${item.href}/`));
 
@@ -266,14 +229,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             open ? 'w-56 overflow-hidden' : 'w-15 overflow-visible',
           )}
         >
-            {status === 'authenticated' ? (
+            {inSettings && status === 'authenticated' ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <SettingsNav
+                  open={open}
+                  pathname={pathname}
+                  organizationId={menuOrgId}
+                  organizationName={menuOrg?.name ?? null}
+                  isSysadmin={isSysAdmin(session)}
+                  lastAppPath={lastAppPath()}
+                  fallbackTo={currentOrganization?.id ? `/orgs/${currentOrganization.id}/dashboard` : '/dashboard'}
+                />
+              </div>
+            ) : status === 'authenticated' ? (
               <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                 {fileMenuItems.map(renderMenuItem)}
               </div>
             ) : (
               <div />
             )}
-            <div>{systemMenuItems.map(renderMenuItem)}</div>
+            {inSettings ? null : <div>{systemMenuItems.map(renderMenuItem)}</div>}
         </nav>
 
         <main
