@@ -38,14 +38,21 @@ const searchParamsMock = vi.hoisted(() => ({
   params: new URLSearchParams(),
 }))
 
+const routeParamsMock = vi.hoisted(() => ({
+  organizationId: 'org-hub-test',
+  caseId: 'case-claim-1',
+}))
+
 vi.mock('@/hooks/useOrgPermissions', () => ({
   useOrgCapability: (...args: unknown[]) => useOrgCapabilityMock(...args),
   useOrgCapabilityTabGuard: vi.fn(),
+  useOrgCapabilityRouteGuard: () => ({ blocked: false, loading: false }),
 }))
 
 vi.mock('@/utils/appRouter', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => searchParamsMock.params,
+  useParams: () => routeParamsMock,
 }))
 
 vi.mock('@/utils/api', () => ({
@@ -55,6 +62,12 @@ vi.mock('@/utils/api', () => ({
     deletePrompt = vi.fn()
     deleteForm = vi.fn()
     uploadDocument = vi.fn()
+    getCase = vi.fn().mockResolvedValue({
+      case_id: 'case-claim-1',
+      name: 'Claim Alpha',
+      tag_ids: [],
+      metadata: {},
+    })
   },
   DocRouterAccountApi: class {
     getUser = vi.fn().mockResolvedValue({ name: 'Test User' })
@@ -113,6 +126,11 @@ import Dashboard from '@/components/Dashboard'
 import FlowsPageClient from '@/pages/orgs/flows-client'
 import DocumentsPageClient from '@/pages/orgs/documents-client'
 import CasesPage from '@/pages/orgs/cases'
+import CaseUpdatePage from '@/pages/orgs/case-update'
+import SchemasPage from '@/pages/orgs/schemas'
+import PromptsPage from '@/pages/orgs/prompts'
+import FormsPage from '@/pages/orgs/forms'
+import KnowledgeBasesPage from '@/pages/orgs/knowledge-bases'
 
 function resetFlowApiMocks() {
   listFlowsMock.mockReset()
@@ -356,6 +374,58 @@ describe('org hub tab pages', () => {
       )
       expect(within(container).getByRole('heading', { name: 'Create case' })).toBeInTheDocument()
       expect(within(container).getByRole('button', { name: 'Create case' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Config create tabs', () => {
+    it('renders create schema when tab=schema-create', () => {
+      searchParamsMock.params = new URLSearchParams('tab=schema-create')
+      const { container } = renderOrgHub(
+        <SchemasPage params={Promise.resolve({ organizationId: ORG_HUB_ID })} organizationId={ORG_HUB_ID} />,
+      )
+      expect(within(container).getByRole('heading', { name: 'Create schema' })).toBeInTheDocument()
+      expect(within(container).getByRole('button', { name: /Back to schemas/i })).toBeInTheDocument()
+    })
+
+    it('renders create prompt when tab=prompt-create', () => {
+      searchParamsMock.params = new URLSearchParams('tab=prompt-create')
+      const { container } = renderOrgHub(
+        <PromptsPage params={Promise.resolve({ organizationId: ORG_HUB_ID })} organizationId={ORG_HUB_ID} />,
+      )
+      expect(within(container).getByRole('heading', { name: 'Create prompt' })).toBeInTheDocument()
+      expect(within(container).getByRole('button', { name: /Back to prompts/i })).toBeInTheDocument()
+    })
+
+    it('renders create form when tab=form-create', () => {
+      searchParamsMock.params = new URLSearchParams('tab=form-create')
+      const { container } = renderOrgHub(
+        <FormsPage params={Promise.resolve({ organizationId: ORG_HUB_ID })} organizationId={ORG_HUB_ID} />,
+      )
+      expect(within(container).getByRole('heading', { name: 'Create form' })).toBeInTheDocument()
+      expect(within(container).getByRole('button', { name: /Back to forms/i })).toBeInTheDocument()
+    })
+
+    it('renders create knowledge base when tab=kb-create', () => {
+      searchParamsMock.params = new URLSearchParams('tab=kb-create')
+      const { container } = renderOrgHub(
+        <KnowledgeBasesPage
+          params={Promise.resolve({ organizationId: ORG_HUB_ID })}
+          organizationId={ORG_HUB_ID}
+        />,
+      )
+      expect(within(container).getByRole('heading', { name: 'Create knowledge base' })).toBeInTheDocument()
+      expect(within(container).getByRole('button', { name: /Back to knowledge bases/i })).toBeInTheDocument()
+    })
+  })
+
+  describe('Case update route', () => {
+    it('renders update case form for an existing case', async () => {
+      const { container } = renderOrgHub(<CaseUpdatePage />)
+      await waitFor(() => {
+        expect(within(container).getByText('Update case')).toBeInTheDocument()
+      })
+      expect(within(container).getByRole('button', { name: '← Back to case' })).toBeInTheDocument()
+      expect(within(container).getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
     })
   })
 })
