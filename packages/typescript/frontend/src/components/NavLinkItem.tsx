@@ -9,6 +9,8 @@ export interface NavItem {
   icon: LucideIcon
   href: string
   tooltip: string
+  /** Open in a new tab (e.g. API docs on `/fastapi/docs`). */
+  external?: boolean
 }
 
 /** An item of the left navigation: an icon and its name, or the icon alone (with a tooltip) when closed. */
@@ -24,17 +26,30 @@ export function NavLinkItem({
   disabled?: boolean
 }) {
   const Icon = item.icon
-  const link = (
+  const className = cn(
+    'flex h-10 w-full items-center gap-3.5 rounded-md px-3 text-sm font-medium outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring',
+    active && 'bg-primary-soft text-primary',
+    !active && !disabled && 'text-foreground',
+    disabled && 'pointer-events-none cursor-not-allowed opacity-60',
+  )
+  const link = item.external ? (
+    <a
+      href={item.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-disabled={disabled || undefined}
+      className={className}
+      onClick={disabled ? (event) => event.preventDefault() : undefined}
+    >
+      <Icon className="size-5 shrink-0" aria-hidden />
+      <span className={cn('truncate', !open && 'sr-only')}>{item.text}</span>
+    </a>
+  ) : (
     <Link
       to={item.href}
       aria-current={active ? 'page' : undefined}
       aria-disabled={disabled || undefined}
-      className={cn(
-        'flex h-10 w-full items-center gap-3.5 rounded-md px-3 text-sm font-medium outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring',
-        active && 'bg-primary-soft text-primary',
-        !active && !disabled && 'text-foreground',
-        disabled && 'pointer-events-none cursor-not-allowed opacity-60',
-      )}
+      className={className}
       onClick={disabled ? (event) => event.preventDefault() : undefined}
     >
       <Icon className="size-5 shrink-0" aria-hidden />

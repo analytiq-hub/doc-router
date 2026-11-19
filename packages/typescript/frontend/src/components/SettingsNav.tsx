@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  BookOpen,
   BadgeCheck,
   Boxes,
   Building2,
@@ -24,6 +25,7 @@ import { Link } from 'react-router-dom'
 import { NavLinkItem } from '@/components/NavLinkItem'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { fastApiDocsHref } from '@/utils/api'
 
 interface SettingsLink {
   text: string
@@ -33,6 +35,8 @@ interface SettingsLink {
   exact?: boolean
   /** Other paths that count as this page (a sibling screen of the same setting). */
   also?: string[]
+  /** Same-origin or absolute URL opened in a new tab (not a settings route). */
+  external?: boolean
 }
 
 interface SettingsGroup {
@@ -92,6 +96,12 @@ export function settingsNavGroups({
           icon: KeyRound,
           to: '/settings/user/developer/account-access-tokens',
           also: ['/settings/user/access-tokens'],
+        },
+        {
+          text: 'API documentation',
+          icon: BookOpen,
+          to: fastApiDocsHref(),
+          external: true,
         },
       ],
     },
@@ -187,7 +197,13 @@ export function SettingsNav({
               {group.items.map((item) => (
                 <NavLinkItem
                   key={item.to}
-                  item={{ text: item.text, icon: item.icon, href: item.to, tooltip: item.text }}
+                  item={{
+                    text: item.text,
+                    icon: item.icon,
+                    href: item.to,
+                    tooltip: item.text,
+                    external: item.external,
+                  }}
                   open={false}
                   active={settingsItemActive(pathname, item)}
                 />
@@ -219,7 +235,13 @@ export function SettingsNav({
                 {group.items.map((item) => (
                   <NavLinkItem
                     key={item.to}
-                    item={{ text: item.text, icon: item.icon, href: item.to, tooltip: item.text }}
+                    item={{
+                      text: item.text,
+                      icon: item.icon,
+                      href: item.to,
+                      tooltip: item.text,
+                      external: item.external,
+                    }}
                     open
                     active={settingsItemActive(pathname, item)}
                   />

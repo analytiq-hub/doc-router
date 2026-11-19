@@ -103,6 +103,11 @@ export default defineConfig(({ mode }) => {
           target: backend,
           changeOrigin: false,
           rewrite: (p) => p.replace(/^\/fastapi/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('X-Forwarded-Prefix', '/fastapi');
+            });
+          },
         },
       },
     },

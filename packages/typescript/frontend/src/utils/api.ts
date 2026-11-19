@@ -66,6 +66,12 @@ export function fastApiBrowserBase(): string {
   return raw.replace(/\/$/, '') || '/fastapi';
 }
 
+/** OpenAPI / Swagger UI (same origin in dev, compose, and kind). */
+export function fastApiDocsHref(): string {
+  const base = fastApiBrowserBase().replace(/\/$/, '') || '/fastapi';
+  return `${base}/docs`;
+}
+
 const fastApiBrowserBaseUrl = fastApiBrowserBase();
 const FASTAPI_SESSION_FETCH_PREFIX = fastApiBrowserBase();
 

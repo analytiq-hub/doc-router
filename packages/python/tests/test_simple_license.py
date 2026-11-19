@@ -207,6 +207,8 @@ def test_allowlist_paths():
     assert is_path_allowlisted("/v0/account/auth/login")
     assert not is_path_allowlisted("/v0/account/organizations")
     assert not is_path_allowlisted("/v0/orgs/abc/documents")
+    assert is_path_allowlisted("/fastapi/openapi.json")
+    assert is_path_allowlisted("/fastapi/docs")
 
 
 @pytest.mark.asyncio

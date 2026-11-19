@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Callable, Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -30,7 +31,20 @@ _ALLOW_PREFIXES = (
 )
 
 
+def _normalize_public_api_path(path: str) -> str:
+    """Map ingress paths like ``/fastapi/docs`` to backend ``/docs`` for allowlist checks."""
+    for prefix in ("/fastapi", (os.getenv("FASTAPI_ROOT_PATH") or "").rstrip("/")):
+        if not prefix or prefix == "/":
+            continue
+        if path == prefix:
+            return "/"
+        if path.startswith(prefix + "/"):
+            return path[len(prefix) :] or "/"
+    return path
+
+
 def _is_allowlisted(path: str) -> bool:
+    path = _normalize_public_api_path(path)
     if path in _ALLOW_EXACT:
         return True
     # Strip trailing slash for comparison

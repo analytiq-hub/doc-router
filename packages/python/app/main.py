@@ -18,7 +18,7 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 
 # Third-party imports
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.security import HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -149,6 +149,15 @@ security = HTTPBearer()
 
 cors_origins = frontend_origins()
 logger.info(f"CORS allowed origins: {cors_origins}")
+
+@app.middleware("http")
+async def forwarded_prefix_root_path(request: Request, call_next):
+    """Swagger/ReDoc: browser uses /fastapi/docs but must load /fastapi/openapi.json."""
+    prefix = (request.headers.get("x-forwarded-prefix") or "").strip().rstrip("/")
+    if prefix and (request.scope.get("root_path") or "") in ("", "/"):
+        request.scope["root_path"] = prefix
+    return await call_next(request)
+
 
 # License expiry gate innermost relative to CORS so 403 responses still get CORS headers.
 app.add_middleware(LicenseGateMiddleware)
