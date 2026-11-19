@@ -1,6 +1,6 @@
 import type { Tag } from '@docrouter/sdk'
 import { Badge } from '@/components/ui/badge'
-import { readableTextColor } from '@/lib/color'
+import { isColorLight } from '@/utils/colors'
 
 export const DEFAULT_TAG_COLOR = '#3B82F6'
 
@@ -16,7 +16,7 @@ export function TagBadge({
   const background = soft
     ? `color-mix(in srgb, ${color} 22%, var(--card))`
     : color
-  const textColor = soft ? 'black' : readableTextColor(color)
+  const textColor = soft ? 'black' : isColorLight(color) ? 'black' : 'white'
   return (
     <Badge
       className="max-w-full border-0"
