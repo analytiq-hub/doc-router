@@ -103,10 +103,10 @@ const CaseDetailView: React.FC<CaseDetailViewProps> = ({ organizationId, caseId 
         {canWriteDocuments && (
           <div className="flex gap-2">
             <Link
-              to={`/orgs/${organizationId}/cases/${encodeURIComponent(decodedCaseId)}/edit`}
+              to={`/orgs/${organizationId}/cases/${encodeURIComponent(decodedCaseId)}/update`}
               className="px-3 py-2 border rounded text-sm hover:bg-gray-50"
             >
-              Edit case
+              Update
             </Link>
             <button
               type="button"

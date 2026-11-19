@@ -176,10 +176,10 @@ const CaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
             { label: 'Properties', icon: Info, onSelect: () => setViewing(row) },
             { label: 'Open', icon: FolderOpen, to: caseDetailHref(organizationId, row.case_id) },
             canWriteDocuments && {
-              label: 'Edit',
+              label: 'Update',
               icon: Pencil,
               onSelect: () =>
-                router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(row.case_id)}/edit`),
+                router.push(`/orgs/${organizationId}/cases/${encodeURIComponent(row.case_id)}/update`),
             },
             canWriteDocuments && {
               label: 'Delete',

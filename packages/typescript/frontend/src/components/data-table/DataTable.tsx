@@ -493,7 +493,7 @@ export function DataTable<Row>({
                   <TableCell key={cell.id} role="cell" data-field={cell.column.id} className={
                       autoRowHeight
                         ? 'flex min-h-9 min-w-0 items-center py-1 leading-snug whitespace-normal [overflow-wrap:anywhere]'
-                        : 'h-9 min-w-0 overflow-hidden py-0 leading-9 text-ellipsis [&>a]:inline-block [&>a]:max-w-full [&>a]:truncate [&>a]:align-middle'
+                        : 'flex h-9 min-w-0 items-center overflow-hidden py-0 [&>a]:inline-block [&>a]:min-w-0 [&>a]:max-w-full [&>a]:truncate'
                     }>
                     {/* Called, not given to flexRender: that would make each render's function a new component and remount the cell. */}
                     {(cell.column.columnDef.cell as (context: CellContext<Row, unknown>) => ReactNode)(cell.getContext())}

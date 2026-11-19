@@ -3,8 +3,8 @@
 import {
   BadgeInfo,
   Download,
+  Pencil,
   ScanText,
-  Tags,
   Trash2,
   Type,
   Zap,
@@ -334,8 +334,8 @@ export default function OrgDocumentList({
             },
             { label: 'Properties', icon: BadgeInfo, onSelect: () => setInfoDocument(row) },
             canWriteDocuments && {
-              label: 'Edit tags & metadata',
-              icon: Tags,
+              label: 'Update',
+              icon: Pencil,
               onSelect: () => {
                 setEditingDocument(row)
                 setIsTagEditorOpen(true)

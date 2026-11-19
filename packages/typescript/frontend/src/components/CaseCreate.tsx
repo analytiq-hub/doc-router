@@ -102,7 +102,7 @@ const CaseCreate: React.FC<{ organizationId: string; caseId?: string }> = ({
   return (
     <Card className="max-w-3xl">
       <CardHeader className="flex flex-row items-center gap-2 space-y-0">
-        <CardTitle>{editCaseId ? 'Edit case' : 'Create case'}</CardTitle>
+        <CardTitle>{editCaseId ? 'Update case' : 'Create case'}</CardTitle>
         <InfoTooltip
           title="About cases"
           content={

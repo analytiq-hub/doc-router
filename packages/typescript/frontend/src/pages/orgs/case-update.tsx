@@ -5,7 +5,7 @@ import CaseCreate from '@/components/CaseCreate';
 import { useOrgCapabilityRouteGuard } from '@/hooks/useOrgPermissions';
 import { CAP_DOCUMENTS_WRITE } from '@/utils/orgCapabilities';
 
-export default function CaseEditPage() {
+export default function CaseUpdatePage() {
   const { organizationId, caseId } = useParams();
   const router = useRouter();
   const orgId = organizationId as string;

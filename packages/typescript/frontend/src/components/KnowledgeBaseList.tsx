@@ -178,7 +178,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       minWidth: 180,
       sortable: false,
       renderCell: ({ row }) => (
-        <span className="line-clamp-2 text-sm text-muted-foreground" title={row.description ?? ''}>
+        <span className="block min-w-0 truncate text-sm text-muted-foreground" title={row.description?.trim() || undefined}>
           {row.description?.trim() || '—'}
         </span>
       ),

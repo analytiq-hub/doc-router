@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 import CasesPage from '@/pages/orgs/cases';
 import CaseDetailPage from '@/pages/orgs/case-detail';
-import CaseEditPage from '@/pages/orgs/case-edit';
+import CaseUpdatePage from '@/pages/orgs/case-update';
 import TagsPage from '@/pages/orgs/tags';
 import TagEditPage from '@/pages/orgs/tag-edit';
 import SchemasPage from '@/pages/orgs/schemas';
@@ -32,7 +32,7 @@ export const OrgCaseDetail = withRouteParams(
   ['organizationId', 'caseId'],
   CaseDetailPage,
 );
-export const OrgCaseEdit = CaseEditPage;
+export const OrgCaseUpdate = CaseUpdatePage;
 export const OrgTags = withOrgParams(TagsPage);
 export const OrgTagEdit = TagEditPage;
 export const OrgSchemas = withOrgParams(SchemasPage);

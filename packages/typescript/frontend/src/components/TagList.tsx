@@ -228,8 +228,8 @@ const TagList: React.FC<TagListProps> = ({ organizationId, registerNewTag }) => 
       flex: 2,
       minWidth: 200,
       renderCell: ({ row }) => (
-        <span className="line-clamp-2 text-sm" title={row.description ?? ''}>
-          {row.description ?? ''}
+        <span className="block min-w-0 truncate text-sm" title={row.description?.trim() || undefined}>
+          {row.description?.trim() || '—'}
         </span>
       ),
     },

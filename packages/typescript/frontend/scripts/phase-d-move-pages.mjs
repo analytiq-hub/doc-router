@@ -44,7 +44,7 @@ const MOVES = [
   // org list pages
   { from: 'orgs/[organizationId]/cases/page.tsx', to: 'orgs/cases.tsx' },
   { from: 'orgs/[organizationId]/cases/[caseId]/page.tsx', to: 'orgs/case-detail.tsx' },
-  { from: 'orgs/[organizationId]/cases/[caseId]/edit/page.tsx', to: 'orgs/case-edit.tsx' },
+  { from: 'orgs/[organizationId]/cases/[caseId]/edit/page.tsx', to: 'orgs/case-update.tsx' },
   { from: 'orgs/[organizationId]/tags/page.tsx', to: 'orgs/tags.tsx' },
   { from: 'orgs/[organizationId]/tags/[tagId]/page.tsx', to: 'orgs/tag-edit.tsx' },
   { from: 'orgs/[organizationId]/schemas/page.tsx', to: 'orgs/schemas.tsx' },

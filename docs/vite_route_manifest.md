@@ -33,7 +33,7 @@ Tracks SPA route coverage in `src/router.tsx` (page components under `src/pages/
 | `dashboard` | ✅ |
 | `docs`, `docs/:id` | ✅ |
 | `upload`, `models` | ✅ |
-| `cases`, `cases/:caseId`, `…/edit` | ✅ |
+| `cases`, `cases/:caseId`, `…/update` | ✅ |
 | `tags`, `tags/:tagId` | ✅ |
 | `schemas`, `schemas/:schemaRevId`, `schemas/by-id/:schemaId` | ✅ |
 | `prompts`, `prompts/:promptRevId`, `prompts/by-id/:promptId` | ✅ |
