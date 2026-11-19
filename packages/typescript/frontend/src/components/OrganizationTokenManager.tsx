@@ -194,12 +194,15 @@ const OrganizationTokenManager: React.FC = () => {
             <DialogTitle>New token created</DialogTitle>
             <DialogDescription>Copy your new token. It is shown only once.</DialogDescription>
           </DialogHeader>
-          <div className="flex items-center justify-between gap-2 rounded-md bg-muted p-2">
-            <span className="min-w-0 break-all font-mono text-sm">{newToken?.token}</span>
+          <div className="flex items-center gap-2 rounded-md bg-muted p-3">
+            <p className="min-w-0 flex-1 font-mono text-xs leading-relaxed break-all [overflow-wrap:anywhere]">
+              {newToken?.token}
+            </p>
             <Button
               type="button"
               variant="outline"
               size="icon-sm"
+              className="shrink-0"
               onClick={() => newToken?.token && void copyToClipboard(newToken.token)}
               aria-label="Copy token"
             >
