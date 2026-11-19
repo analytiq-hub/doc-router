@@ -13,5 +13,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.spec.{ts,tsx}'],
     setupFiles: ['./vitest.setup.ts'],
+    // jsdom → whatwg-url → tr46 still requires Node's deprecated `punycode` builtin (DEP0040).
+    execArgv: ['--disable-warning=DEP0040'],
   },
 });

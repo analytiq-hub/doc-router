@@ -69,12 +69,28 @@ vi.mock('@/utils/api', () => ({
     getKnowledgeBase = vi.fn().mockResolvedValue(hubKnowledgeBase)
     listKbChatThreads = vi.fn().mockResolvedValue([])
     listTags = vi.fn().mockResolvedValue({ tags: [hubTag], total_count: 1 })
+    listSchemaVersions = vi.fn().mockResolvedValue({ schemas: [hubSchema] })
+    listPromptVersions = vi.fn().mockResolvedValue({ prompts: [hubPrompt] })
+    listFormVersions = vi.fn().mockResolvedValue({
+      forms: [
+        {
+          form_id: hubForm.form_id,
+          form_revid: 'form-1',
+          name: hubForm.name,
+          form_version: hubForm.form_version,
+          tag_ids: hubForm.tag_ids,
+          fields: [],
+          created_at: hubForm.created_at,
+        },
+      ],
+    })
     searchKnowledgeBase = vi.fn()
   },
   DocRouterAccountApi: class {
     getUser = vi.fn().mockResolvedValue({ name: 'Test User' })
     listLLMModels = vi.fn().mockResolvedValue({
       chat_models: [{ litellm_model: 'gpt-4.1-mini' }],
+      embedding_models: [{ litellm_model: 'text-embedding-3-small' }],
     })
   },
   getApiErrorMsg: () => '',

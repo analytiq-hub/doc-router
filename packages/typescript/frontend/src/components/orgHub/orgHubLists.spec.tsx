@@ -71,6 +71,10 @@ vi.mock('@/utils/api', () => ({
   },
   DocRouterAccountApi: class {
     getUser = vi.fn().mockResolvedValue({ name: 'Test User' })
+    listLLMModels = vi.fn().mockResolvedValue({
+      chat_models: [{ litellm_model: 'gpt-4.1-mini' }],
+      embedding_models: [{ litellm_model: 'text-embedding-3-small' }],
+    })
   },
   getApiErrorMsg: () => '',
 }))
