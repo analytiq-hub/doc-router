@@ -145,7 +145,7 @@ const AzureConfigManager: React.FC = () => {
       </Card>
 
       <Card className="border-primary/30 bg-primary-soft">
-        <CardContent className="pt-6 text-sm text-foreground">
+        <CardContent className="flex min-h-11 items-center py-0 text-sm text-foreground">
           Change Azure configuration for on-prem installs only.
         </CardContent>
       </Card>
