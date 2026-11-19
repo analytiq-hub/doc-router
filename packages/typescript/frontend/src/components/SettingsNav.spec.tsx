@@ -95,6 +95,26 @@ describe('SettingsNav', () => {
     expect(within(nav).getByRole('link', { name: 'AWS' })).toHaveAttribute('aria-current', 'page')
   })
 
+  it('highlights OCR under Organization', () => {
+    const nav = renderNav('/settings/organizations/org-1/ocr')
+    const ocr = within(nav).getByRole('link', { name: 'OCR' })
+    expect(ocr).toHaveAttribute('href', '/settings/organizations/org-1/ocr')
+    expect(ocr).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('highlights org Users route without conflating with system Users', () => {
+    const nav = renderNav('/settings/organizations/org-1/users')
+    const orgUsers = within(nav)
+      .getAllByRole('link')
+      .find((link) => link.getAttribute('href') === '/settings/organizations/org-1/users')
+    expect(orgUsers).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('highlights Queues on the legacy worker-settings path', () => {
+    const nav = renderNav('/settings/account/development/worker-settings')
+    expect(within(nav).getByRole('link', { name: 'Queues' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('shows every page icon, without section headings, when the navigation is closed', () => {
     const nav = renderNav('/settings/user/profile', { open: false })
     expect(within(nav).queryAllByRole('link').some((link) => link.hasAttribute('aria-expanded'))).toBe(false)

@@ -42,5 +42,15 @@ describe('organizationSwitchNavigation', () => {
       path: '/settings/organizations/new/webhooks',
       replace: true,
     })
+    expect(organizationSwitchNavigation('/settings/organizations/old/users', '', 'new')).toEqual({
+      type: 'navigate',
+      path: '/settings/organizations/new/users',
+      replace: true,
+    })
+    expect(organizationSwitchNavigation('/settings/organizations/old/ocr', '?tab=1', 'new')).toEqual({
+      type: 'navigate',
+      path: '/settings/organizations/new/ocr?tab=1',
+      replace: true,
+    })
   })
 })

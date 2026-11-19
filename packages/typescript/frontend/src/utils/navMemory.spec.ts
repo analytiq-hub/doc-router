@@ -19,8 +19,18 @@ describe('navMemory', () => {
     rememberPath('/settings/organizations/org-1', '')
     rememberPath('/settings/user/developer', '')
     rememberPath('/settings/account/development', '?x=1')
+    rememberPath('/settings/account/development/worker-settings', '')
     rememberPath('/settings/organizations/org-1/webhooks', '')
     expect(lastSettingsPath()).toBe('/settings/organizations/org-1')
+  })
+
+  it('remembers queues and organization subpages as return targets', () => {
+    rememberPath('/settings/account/queues', '')
+    expect(lastSettingsPath()).toBe('/settings/account/queues')
+    rememberPath('/settings/organizations/org-1/users', '')
+    expect(lastSettingsPath()).toBe('/settings/organizations/org-1/users')
+    rememberPath('/settings/account/limits', '?x=1')
+    expect(lastSettingsPath()).toBe('/settings/account/limits?x=1')
   })
 
   it('ignores a stored address that is not a settings or work page', () => {
