@@ -110,3 +110,56 @@ export const hubFlowExecution = {
   started_at: '2026-01-10T08:00:00.000Z',
   stopped_at: '2026-01-10T08:00:10.000Z',
 }
+
+export const hubKbDocument = {
+  document_id: 'kb-doc-1',
+  document_name: 'indexed-policy.pdf',
+  chunk_count: 4,
+  indexed_at: '2026-01-11T12:00:00.000Z',
+}
+
+export const hubFlowNodeManualTrigger = {
+  key: 'docrouter.trigger.manual',
+  label: 'Manual Trigger',
+  description: 'Run on demand',
+  is_trigger: true,
+  inputs: 0,
+  outputs: 1,
+  palette_group: 'trigger',
+  icon_key: 'play',
+}
+
+export const hubFlowNodeProcess = {
+  key: 'docrouter.processnoop',
+  label: 'No-op',
+  description: 'Pass-through node',
+  is_trigger: false,
+  inputs: 1,
+  outputs: 1,
+  palette_group: 'transform',
+  icon_key: 'code',
+}
+
+export const hubFlowNodeTypes = [hubFlowNodeManualTrigger, hubFlowNodeProcess]
+
+export const hubFlowRevision = {
+  flow_revid: 'flow-rev-1',
+  flow_id: 'flow-1',
+  flow_version: 1,
+  graph_hash: '',
+  nodes: [],
+  connections: {},
+  settings: {},
+  pin_data: null,
+  engine_version: 1,
+}
+
+export const hubFlowDetail = {
+  flow: {
+    ...hubFlowListItem.flow,
+    active_flow_revid: 'flow-rev-1',
+    callable_as_tool: false,
+    tool_description: null as string | null,
+  },
+  latest_revision: hubFlowRevision,
+}
