@@ -689,7 +689,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   ? 'bg-primary-600 text-white hover:bg-primary-700' 
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
             >
-              Save Changes
+              Save
             </button>
             <button
               type="button"

@@ -99,9 +99,9 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
       />
       
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl mx-4">
         {/* Header */}
-        <div className="bg-gradient-to-r bg-primary-600 px-6 py-4">
+        <div className="shrink-0 bg-gradient-to-r bg-primary-600 px-6 py-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-white">
               Test LLM Model: {modelName}
@@ -118,7 +118,7 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
           {/* Prompt Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -171,7 +171,7 @@ const LLMTestModal: React.FC<LLMTestModalProps> = ({ open, onClose, modelName })
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
           <button
             onClick={handleClose}
             className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"

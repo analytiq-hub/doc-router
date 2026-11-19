@@ -486,10 +486,10 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
 
   return (
     <div className="max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
-      <div className="mb-4 bg-gray-50 rounded-lg px-0 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Organization webhooks</h2>
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="m-0 text-lg font-semibold text-gray-900">Webhooks</h2>
+          <div className="flex flex-wrap items-center gap-2">
             {canEdit && (
               <button
                 type="button"
@@ -529,9 +529,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
             )}
           </div>
         </div>
-      </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
         <div className="mb-8">
           {endpoints.length > 0 || isCreatingNew ? (
             <>
