@@ -9,6 +9,7 @@ import {
   CreditCard,
   Gauge,
   Hexagon,
+  ListOrdered,
   KeyRound,
   SlidersHorizontal,
   Sparkles,
@@ -133,7 +134,13 @@ export function settingsNavGroups({
         },
         { text: 'GCP', icon: Boxes, to: '/settings/account/development/gcp-config' },
         { text: 'Azure', icon: Hexagon, to: '/settings/account/development/azure-config' },
-        { text: 'Workers', icon: Gauge, to: '/settings/account/development/worker-settings' },
+        {
+          text: 'Queues',
+          icon: ListOrdered,
+          to: '/settings/account/queues',
+          also: ['/settings/account/development/worker-settings'],
+        },
+        { text: 'Rate limits', icon: Gauge, to: '/settings/account/limits' },
       ],
     })
   }

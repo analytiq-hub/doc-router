@@ -31,6 +31,8 @@ const WORKER_COUNT_FIELDS: Array<{ field: WorkerCountField; label: string }> = [
   { field: 'n_flow_run_workers', label: 'Flow run queue workers' },
 ];
 
+export type SystemSettingsSection = 'queues' | 'limits';
+
 function clampTextractMaxConcurrent(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_TEXTRACT_MAX_CONCURRENT;
   return Math.min(
@@ -56,13 +58,36 @@ function defaultSettings(): SystemSettings {
   };
 }
 
-const SystemSettingsManager: React.FC = () => {
+function limitsDirty(current: SystemSettings, baseline: SystemSettings): boolean {
+  const draft = Number.isFinite(current.textract_max_concurrent)
+    ? clampTextractMaxConcurrent(current.textract_max_concurrent)
+    : null;
+  if (draft === null) return true;
+  return draft !== clampTextractMaxConcurrent(baseline.textract_max_concurrent);
+}
+
+function queuesDirty(current: SystemSettings, baseline: SystemSettings): boolean {
+  return WORKER_COUNT_FIELDS.some(({ field }) => {
+    const draft = Number.isFinite(current[field]) ? clampWorkerCount(current[field]) : null;
+    if (draft === null) return true;
+    return draft !== clampWorkerCount(baseline[field]);
+  });
+}
+
+const SystemSettingsManager: React.FC<{ section: SystemSettingsSection }> = ({ section }) => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
+  const [savedSettings, setSavedSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+
+  const isDirty = useMemo(() => {
+    if (!savedSettings || loading) return false;
+    return section === 'limits'
+      ? limitsDirty(settings, savedSettings)
+      : queuesDirty(settings, savedSettings);
+  }, [loading, savedSettings, section, settings]);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -70,6 +95,7 @@ const SystemSettingsManager: React.FC = () => {
     try {
       const loaded = await docRouterAccountApi.getSystemSettings();
       setSettings(loaded);
+      setSavedSettings(loaded);
     } catch (err) {
       setError(getApiErrorMsg(err) || 'Failed to load system settings.');
     } finally {
@@ -84,24 +110,24 @@ const SystemSettingsManager: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
-    setSuccess(null);
 
-    const payload: SystemSettingsUpdate = {
-      textract_max_concurrent: clampTextractMaxConcurrent(settings.textract_max_concurrent),
-      n_ocr_workers: clampWorkerCount(settings.n_ocr_workers),
-      n_llm_workers: clampWorkerCount(settings.n_llm_workers),
-      n_kb_index_workers: clampWorkerCount(settings.n_kb_index_workers),
-      n_webhook_workers: clampWorkerCount(settings.n_webhook_workers),
-      n_flow_run_workers: clampWorkerCount(settings.n_flow_run_workers),
-    };
-    setSettings((prev) => ({ ...prev, ...payload }));
+    const payload: SystemSettingsUpdate =
+      section === 'limits'
+        ? {
+            textract_max_concurrent: clampTextractMaxConcurrent(settings.textract_max_concurrent),
+          }
+        : {
+            n_ocr_workers: clampWorkerCount(settings.n_ocr_workers),
+            n_llm_workers: clampWorkerCount(settings.n_llm_workers),
+            n_kb_index_workers: clampWorkerCount(settings.n_kb_index_workers),
+            n_webhook_workers: clampWorkerCount(settings.n_webhook_workers),
+            n_flow_run_workers: clampWorkerCount(settings.n_flow_run_workers),
+          };
 
     try {
       const saved = await docRouterAccountApi.updateSystemSettings(payload);
       setSettings(saved);
-      setSuccess(
-        'Worker settings saved. Textract limits refresh within about 25 jobs; queue worker counts resize within about 15 seconds.',
-      );
+      setSavedSettings(saved);
     } catch (err) {
       setError(getApiErrorMsg(err) || 'Failed to save system settings.');
     } finally {
@@ -109,46 +135,77 @@ const SystemSettingsManager: React.FC = () => {
     }
   };
 
+  const saveButton = (
+    <Button
+      type="button"
+      className="mt-4 w-fit self-start"
+      onClick={() => void handleSave()}
+      disabled={saving || loading || !isDirty}
+    >
+      {saving ? 'Saving…' : 'Save'}
+    </Button>
+  );
+
+  const errorAlert = error ? (
+    <Alert variant="destructive" className="mt-4">
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  ) : null;
+
+  if (section === 'limits') {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">OCR (Textract)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Limits how many Textract jobs each queue-worker pod runs at once. Set to 0 to disable the
+              limit. This applies per worker pod, not cluster-wide.
+            </p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Per-model LLM concurrency limits are configured on the LLM models table in Development
+              settings.
+            </p>
+
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <FieldGroup>
+                <Field className="max-w-xs">
+                  <FieldLabel htmlFor="textract-max-concurrent">Max concurrent Textract jobs</FieldLabel>
+                  <Input
+                    id="textract-max-concurrent"
+                    type="number"
+                    min={MIN_TEXTRACT_MAX_CONCURRENT}
+                    max={MAX_TEXTRACT_MAX_CONCURRENT}
+                    value={Number.isFinite(settings.textract_max_concurrent) ? settings.textract_max_concurrent : ''}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        textract_max_concurrent: e.target.valueAsNumber,
+                      }))
+                    }
+                    disabled={saving}
+                  />
+                  <FieldDescription>
+                    Range {MIN_TEXTRACT_MAX_CONCURRENT}–{MAX_TEXTRACT_MAX_CONCURRENT} (default{' '}
+                    {DEFAULT_TEXTRACT_MAX_CONCURRENT}).
+                  </FieldDescription>
+                </Field>
+                {saveButton}
+                {errorAlert}
+              </FieldGroup>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">OCR concurrency</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Limits how many Textract jobs each queue-worker pod runs at once. Set to 0 to disable the
-            limit. This applies per worker pod, not cluster-wide.
-          </p>
-
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <Field className="max-w-xs">
-              <FieldLabel htmlFor="textract-max-concurrent">Max concurrent Textract jobs</FieldLabel>
-              <Input
-                id="textract-max-concurrent"
-                type="number"
-                min={MIN_TEXTRACT_MAX_CONCURRENT}
-                max={MAX_TEXTRACT_MAX_CONCURRENT}
-                value={Number.isFinite(settings.textract_max_concurrent) ? settings.textract_max_concurrent : ''}
-                onChange={(e) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    textract_max_concurrent: e.target.valueAsNumber,
-                  }))
-                }
-                disabled={saving}
-              />
-              <FieldDescription>
-                Range {MIN_TEXTRACT_MAX_CONCURRENT}–{MAX_TEXTRACT_MAX_CONCURRENT} (default{' '}
-                {DEFAULT_TEXTRACT_MAX_CONCURRENT}).
-              </FieldDescription>
-            </Field>
-          )}
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Queue worker counts</CardTitle>
@@ -160,7 +217,9 @@ const SystemSettingsManager: React.FC = () => {
             their current job before exiting. Set all to 0 to stop queue processing on this pod.
           </p>
 
-          {!loading ? (
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
             <>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {WORKER_COUNT_FIELDS.map(({ field, label }) => (
@@ -194,22 +253,10 @@ const SystemSettingsManager: React.FC = () => {
                 </p>
               ) : null}
 
-              <Button type="button" className="mt-4" onClick={() => void handleSave()} disabled={saving}>
-                {saving ? 'Saving…' : 'Save'}
-              </Button>
+              {saveButton}
+              {errorAlert}
             </>
-          ) : null}
-
-          {error ? (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          {success ? (
-            <Alert variant="success" className="mt-4">
-              <AlertDescription>{success}</AlertDescription>
-            </Alert>
-          ) : null}
+          )}
         </CardContent>
       </Card>
     </div>

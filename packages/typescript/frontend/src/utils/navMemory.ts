@@ -8,6 +8,7 @@ const LAST_SETTINGS = 'lastSettingsPath'
 const FORWARDING = [
   /^\/settings\/user\/developer\/?$/,
   /^\/settings\/account\/development\/?$/,
+  /^\/settings\/account\/development\/worker-settings\/?$/,
   /^\/settings\/organizations\/[^/]+\/webhooks\/?$/,
 ]
 

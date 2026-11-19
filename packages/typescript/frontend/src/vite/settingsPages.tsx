@@ -18,6 +18,8 @@ import DevelopmentAwsCredentialsPage from '@/pages/settings/development-aws-cred
 import DevelopmentAzureConfigPage from '@/pages/settings/development-azure-config';
 import DevelopmentGcpConfigPage from '@/pages/settings/development-gcp-config';
 import DevelopmentWorkerSettingsPage from '@/pages/settings/development-worker-settings';
+import SystemQueuesPage from '@/pages/settings/system-queues';
+import SystemRateLimitsPage from '@/pages/settings/system-rate-limits';
 import DevelopmentLlmManagerPage from '@/pages/settings/development-llm-manager';
 import DevelopmentLlmManagerModelsPage from '@/pages/settings/development-llm-manager-models';
 import DevelopmentLlmProviderPage from '@/pages/settings/development-llm-provider';
@@ -47,6 +49,8 @@ export const SettingsDevelopmentAwsCredentials = DevelopmentAwsCredentialsPage;
 export const SettingsDevelopmentAzureConfig = DevelopmentAzureConfigPage;
 export const SettingsDevelopmentGcpConfig = DevelopmentGcpConfigPage;
 export const SettingsDevelopmentWorkerSettings = DevelopmentWorkerSettingsPage;
+export const SettingsAccountQueues = SystemQueuesPage;
+export const SettingsAccountLimits = SystemRateLimitsPage;
 export const SettingsDevelopmentLlmManager = DevelopmentLlmManagerPage;
 export const SettingsDevelopmentLlmManagerModels = DevelopmentLlmManagerModelsPage;
 export const SettingsDevelopmentLlmProvider = DevelopmentLlmProviderPage;
