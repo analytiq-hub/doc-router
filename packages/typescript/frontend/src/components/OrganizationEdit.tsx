@@ -753,9 +753,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId, sec
           ) : null}
 
           {section === 'ocr' && ocrConfig && organization ? (
-            <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">OCR</h3>
-
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <div className="flex flex-col gap-1 mb-4">
                 <label htmlFor="ocr-mode" className="block text-sm font-medium text-gray-700">
                   OCR engine
@@ -943,9 +941,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId, sec
 
           {section === 'users' ? (
           <div className="bg-gray-50 p-4 rounded-lg flex flex-col min-h-[24rem]">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Members</h3>
-              
+            <div className="flex justify-end mb-4">
               <Button
                 type="button"
                 onClick={() => setShowAddUserModal(true)}
