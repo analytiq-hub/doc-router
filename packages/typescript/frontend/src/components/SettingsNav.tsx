@@ -11,6 +11,7 @@ import {
   Hexagon,
   ListOrdered,
   KeyRound,
+  ScanText,
   SlidersHorizontal,
   Sparkles,
   User,
@@ -105,6 +106,8 @@ export function settingsNavGroups({
   const organizationItems: SettingsLink[] = organizationId
     ? [
         { text: 'General', icon: SlidersHorizontal, to: `/settings/organizations/${organizationId}`, exact: true },
+        { text: 'Users', icon: Users, to: `/settings/organizations/${organizationId}/users` },
+        { text: 'OCR', icon: ScanText, to: `/settings/organizations/${organizationId}/ocr` },
         { text: 'Subscription', icon: CreditCard, to: `/settings/organizations/${organizationId}/subscription` },
         { text: 'API tokens', icon: KeyRound, to: '/settings/user/developer/organization-access-tokens' },
         { text: 'Webhooks', icon: Webhook, to: '/settings/user/developer/organization-webhooks' },

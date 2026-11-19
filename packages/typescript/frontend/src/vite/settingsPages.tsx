@@ -1,6 +1,8 @@
 import SettingsPage from '@/pages/settings/index';
 import OrganizationsSettingsPage from '@/pages/settings/organizations';
 import OrganizationEditSettingsPage from '@/pages/settings/organization-edit';
+import OrganizationUsersSettingsPage from '@/pages/settings/organization-users';
+import OrganizationOcrSettingsPage from '@/pages/settings/organization-ocr';
 import OrganizationWebhooksPage from '@/pages/settings/organization-webhooks';
 import OrganizationSubscriptionPage from '@/pages/settings/organization-subscription';
 import UserProfilePage from '@/pages/settings/user-profile';
@@ -32,6 +34,8 @@ export const SettingsOrganizationEdit = withRouteParams(
   ['organizationId'],
   OrganizationEditSettingsPage,
 );
+export const SettingsOrganizationUsers = withRouteParams(['organizationId'], OrganizationUsersSettingsPage);
+export const SettingsOrganizationOcr = withRouteParams(['organizationId'], OrganizationOcrSettingsPage);
 export const SettingsOrganizationWebhooks = OrganizationWebhooksPage;
 export const SettingsOrganizationSubscription = OrganizationSubscriptionPage;
 export const SettingsUserProfile = UserProfilePage;

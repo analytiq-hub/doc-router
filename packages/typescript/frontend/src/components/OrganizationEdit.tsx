@@ -2,9 +2,15 @@
 
 import { toastActionError } from '@/utils/toastActionError';
 import React, { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom';
 import { useRouter } from '@/utils/appRouter'
 import type { LLMChatModel, OcrMode, OrgOcrConfig } from '@docrouter/sdk'
+import {
+  cloneOcrConfig,
+  FALLBACK_OCR_MODES,
+  FALLBACK_TEXTRACT_FEATURES,
+  isOcrMode,
+  OCR_MODE_LABELS,
+} from '@/components/organizationSettings/ocrConfigUtils'
 import type { FlowLogLevel } from '@/types/organizations'
 import { OrganizationMember, OrganizationType } from '@/types/index'
 import { DocRouterAccountApi } from '@/utils/api';
@@ -40,47 +46,12 @@ import {
   type BuiltinPermissionGroupId,
 } from '@/utils/orgPermissionGroups'
 
+export type OrganizationSettingsSection = 'general' | 'users' | 'ocr'
+
 interface OrganizationEditProps {
   organizationId: string
+  section: OrganizationSettingsSection
 }
-
-const FALLBACK_TEXTRACT_FEATURES = ['LAYOUT', 'TABLES', 'FORMS', 'SIGNATURES'] as const
-
-const FALLBACK_OCR_MODES: OcrMode[] = ['textract', 'mistral', 'mistral_vertex', 'llm', 'pymupdf']
-
-const OCR_MODE_LABELS: Record<OcrMode, string> = {
-  textract: 'AWS Textract',
-  mistral: 'Mistral OCR',
-  mistral_vertex: 'Mistral OCR (Vertex AI)',
-  llm: 'LLM OCR',
-  pymupdf: 'PyMuPDF (embedded text)',
-}
-
-function isOcrMode(s: string): s is OcrMode {
-  return s === 'textract' || s === 'mistral' || s === 'mistral_vertex' || s === 'llm' || s === 'pymupdf'
-}
-
-function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
-  return {
-    mode: raw.mode ?? 'textract',
-    textract: {
-      feature_types:
-        raw.textract?.feature_types !== undefined && Array.isArray(raw.textract.feature_types)
-          ? [...raw.textract.feature_types]
-          : [],
-    },
-    mistral: raw.mistral ?? {},
-    mistral_vertex: raw.mistral_vertex ?? {},
-    pymupdf: raw.pymupdf ?? {},
-    llm: {
-      provider: raw.llm?.provider ?? null,
-      model: raw.llm?.model ?? null,
-    },
-  }
-}
-
-const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig =>
-  normalizeOcrConfig(JSON.parse(JSON.stringify(c)) as OrgOcrConfig)
 
 type OrgMemberRow = {
   id: string
@@ -114,7 +85,7 @@ const getAvailableOrganizationTypes = (currentType: OrganizationType, isSystemAd
   }
 };
 
-const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) => {
+const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId, section }) => {
   const router = useRouter()
   const { organization, loading, refreshData } = useOrganizationData(organizationId)
   const [name, setName] = useState('')
@@ -136,6 +107,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const { session } = useAppSession();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [memberPagination, setMemberPagination] = useState<PaginationModel>({ page: 0, pageSize: 5 });
+  const [saving, setSaving] = useState(false);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
 
   const [ocrLlmChatModels, setOcrLlmChatModels] = useState<LLMChatModel[]>([])
@@ -198,7 +170,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       const isUserOrgAdmin = organization ? isOrgAdmin(organization, session) : false;
       const isUserSysAdmin = isSysAdmin(session);
       
-      if (isUserOrgAdmin || isUserSysAdmin) {
+      if ((section === 'users') && (isUserOrgAdmin || isUserSysAdmin)) {
         let allUsers: User[] = [];
         let skip = 0;
         const limit = 100;
@@ -216,9 +188,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     };
 
     fetchUsers();
-  }, [organizationId, organization, session, docRouterAccountApi]);
+  }, [organizationId, organization, section, session, docRouterAccountApi]);
 
   useEffect(() => {
+    if (section !== 'ocr') return
     let cancelled = false
     const load = async () => {
       setOcrLlmCatalogLoading(true)
@@ -248,17 +221,21 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     return () => {
       cancelled = true
     }
-  }, [docRouterAccountApi])
+  }, [docRouterAccountApi, section])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!validateAdminPresence(members)) {
-      toast.error('Organization must have at least one admin');
-      return;
+  const handleSubmit = async () => {
+    if (section === 'users') {
+      if (!validateAdminPresence(members)) {
+        toast.error('Organization must have at least one admin');
+        return;
+      }
+      if (type === 'individual' && members.length > 1) {
+        toast.error('Individual organizations cannot have multiple members');
+        return;
+      }
     }
 
-    if (ocrConfig) {
+    if (section === 'ocr' && ocrConfig) {
       if (ocrConfig.mode === 'llm') {
         const p = ocrConfig.llm.provider?.trim() ?? '';
         const m = ocrConfig.llm.model?.trim() ?? '';
@@ -281,42 +258,46 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       }
     }
 
-    // Validate individual organization member count
-    if (type === 'individual' && members.length > 1) {
-      toast.error('Individual organizations cannot have multiple members');
-      return;
+    if (section === 'general') {
+      if ((originalType === 'individual' || originalType === 'team') && type === 'enterprise' && !isSysAdmin(session)) {
+        toast.error('Only system administrators can upgrade organizations to Enterprise');
+        return;
+      }
     }
 
-    // Check if user is trying to upgrade to Enterprise without admin privileges
-    if ((originalType === 'individual' || originalType === 'team') && type === 'enterprise' && !isSysAdmin(session)) {
-      toast.error('Only system administrators can upgrade organizations to Enterprise');
-      return;
-    }
+    const payload =
+      section === 'users'
+        ? { members }
+        : section === 'ocr' && ocrConfig
+          ? { ocr_config: ocrConfig as unknown as Record<string, unknown> }
+          : {
+              name,
+              type,
+              default_prompt_enabled: defaultPromptEnabled,
+              experimental_features: experimentalFeatures,
+              flow_log_level: flowLogLevel,
+            };
 
+    setSaving(true);
     try {
-      await docRouterAccountApi.updateOrganization(organizationId, { 
-        name,
-        type,
-        members,
-        default_prompt_enabled: defaultPromptEnabled,
-        experimental_features: experimentalFeatures,
-        flow_log_level: flowLogLevel,
-        ...(ocrConfig ? { ocr_config: ocrConfig as unknown as Record<string, unknown> } : {}),
-      });
+      await docRouterAccountApi.updateOrganization(organizationId, payload);
       await refreshData();
-      
-      // Update original values after successful save
-      setOriginalName(name);
-      setOriginalType(type);
-      setOriginalMembers(members);
-      setOriginalDefaultPromptEnabled(defaultPromptEnabled);
-      setOriginalExperimentalFeatures(experimentalFeatures);
-      setOriginalFlowLogLevel(flowLogLevel);
-      if (ocrConfig) {
-        setOriginalOcrConfig(cloneOcrConfig(ocrConfig))
+
+      if (section === 'users') {
+        setOriginalMembers(members);
+      } else if (section === 'ocr' && ocrConfig) {
+        setOriginalOcrConfig(cloneOcrConfig(ocrConfig));
+      } else {
+        setOriginalName(name);
+        setOriginalType(type);
+        setOriginalDefaultPromptEnabled(defaultPromptEnabled);
+        setOriginalExperimentalFeatures(experimentalFeatures);
+        setOriginalFlowLogLevel(flowLogLevel);
       }
     } catch (err) {
       toastActionError('Failed to update organization', err);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -599,27 +580,29 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     return [...base, cur].sort((a, b) => a.localeCompare(b))
   }, [ocrConfig?.llm?.model, ocrLlmModelsForProvider])
 
-  // Check if form has changes
-  const hasChanges = () => {
-    if (name !== originalName) return true;
-    if (type !== originalType) return true;
-    if (members.length !== originalMembers.length) return true;
-    if (defaultPromptEnabled !== originalDefaultPromptEnabled) return true;
-    if (experimentalFeatures !== originalExperimentalFeatures) return true;
-    if (flowLogLevel !== originalFlowLogLevel) return true;
-    if (ocrConfig && originalOcrConfig && JSON.stringify(ocrConfig) !== JSON.stringify(originalOcrConfig)) {
-      return true;
+  const hasSectionChanges = () => {
+    if (section === 'general') {
+      if (name !== originalName) return true;
+      if (type !== originalType) return true;
+      if (defaultPromptEnabled !== originalDefaultPromptEnabled) return true;
+      if (experimentalFeatures !== originalExperimentalFeatures) return true;
+      if (flowLogLevel !== originalFlowLogLevel) return true;
+      return false;
     }
-
-    // Compare each member and their roles
-    const memberChanges = members.some(member => {
-      const originalMember = originalMembers.find(m => m.user_id === member.user_id);
+    if (section === 'ocr') {
+      return (
+        ocrConfig != null &&
+        originalOcrConfig != null &&
+        JSON.stringify(ocrConfig) !== JSON.stringify(originalOcrConfig)
+      );
+    }
+    if (members.length !== originalMembers.length) return true;
+    return members.some((member) => {
+      const originalMember = originalMembers.find((m) => m.user_id === member.user_id);
       const norm = normalizeOrgMember(member);
       const orig = originalMember ? normalizeOrgMember(originalMember) : null;
       return !orig || orig.permission_group_ids.join() !== norm.permission_group_ids.join();
     });
-
-    return memberChanges;
   };
 
   const validateAdminPresence = (updatedMembers: OrganizationMember[]): boolean => {
@@ -656,54 +639,21 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     return <div className="flex items-center justify-center p-4">Organization not found</div>
   }
 
+  const saveButton = (
+    <Button
+      type="button"
+      className="w-fit self-start"
+      disabled={!hasSectionChanges() || saving}
+      onClick={() => void handleSubmit()}
+    >
+      {saving ? 'Saving…' : 'Save'}
+    </Button>
+  )
+
   return (
-    <div className="max-w-4xl mx-auto bg-white rounded-lg shadow p-6 min-h-[calc(100vh-80px)] flex flex-col">
-      <div className="flex flex-col flex-1 h-0">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Edit Organization</h2>
-          <div className="flex gap-4">
-            {/* Subscription Link - Only show for org admins and sys admins */}
-            {(() => {
-              const isUserOrgAdmin = organization ? isOrgAdmin(organization, session) : false;
-              const isUserSysAdmin = isSysAdmin(session);
-              return (isUserOrgAdmin || isUserSysAdmin) ? (
-                <>
-                  <Link
-                    to={`/settings/organizations/${organizationId}/subscription`}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                    Billing
-                  </Link>
-                </>
-              ) : null;
-            })()}
-            <button
-              type="submit"
-              form="organization-form"
-              disabled={!hasChanges()}
-              className={`px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-                ${hasChanges() 
-                  ? 'bg-primary-600 text-white hover:bg-primary-700' 
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/settings/organizations')}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-        
-        <form id="organization-form" onSubmit={handleSubmit} className="flex flex-col flex-1">
-          {/* Organization Name Section */}
-          <div className="bg-gray-50 p-4 rounded-lg mb-6">
+    <div className="flex flex-col gap-6">
+          {section === 'general' ? (
+          <div className="bg-gray-50 p-4 rounded-lg">
             <div className="space-y-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
@@ -800,9 +750,9 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               </div>
             </div>
           </div>
+          ) : null}
 
-          {/* OCR settings */}
-          {ocrConfig && organization && (
+          {section === 'ocr' && ocrConfig && organization ? (
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
               <h3 className="text-lg font-medium text-gray-900 mb-2">OCR</h3>
 
@@ -989,10 +939,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
-          {/* Members Section - adjust the height calculation */}
-          <div className="flex-1 bg-gray-50 p-4 rounded-lg flex flex-col">
+          {section === 'users' ? (
+          <div className="bg-gray-50 p-4 rounded-lg flex flex-col min-h-[24rem]">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">Members</h3>
               
@@ -1024,16 +974,19 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               />
             </div>
           </div>
-        </form>
-      </div>
+          ) : null}
 
-      <UserAddToOrgModal
-        open={showAddUserModal}
-        onClose={() => setShowAddUserModal(false)}
-        onAdd={handleAddMember}
-        organizationId={organizationId}
-        currentMembers={members.map(member => member.user_id)}
-      />
+      {saveButton}
+
+      {section === 'users' ? (
+        <UserAddToOrgModal
+          open={showAddUserModal}
+          onClose={() => setShowAddUserModal(false)}
+          onAdd={handleAddMember}
+          organizationId={organizationId}
+          currentMembers={members.map((member) => member.user_id)}
+        />
+      ) : null}
     </div>
   )
 }
