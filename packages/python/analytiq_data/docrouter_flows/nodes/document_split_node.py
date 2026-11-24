@@ -180,7 +180,9 @@ class DocRouterDocumentSplitNode:
             fan_out: list["ad.flows.FlowItem"] = []
 
             for pdf_name, ref in pdf_entries:
-                pdf_bytes = await ad.flows.get_binary_stream(ref, context.analytiq_client)
+                pdf_bytes = await ad.flows.get_binary_stream(
+                    ref, context.analytiq_client, organization_id=context.organization_id
+                )
                 pages, is_empty_pdf = await asyncio.to_thread(
                     _split_pdf_pages_sync,
                     pdf_bytes,

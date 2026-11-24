@@ -78,7 +78,9 @@ async def resolve_outbound_attachments(
                 f"Gmail expected item.binary[{prop!r}] for attachment upload, but it was missing"
             )
         ref = ad.flows.coerce_binary_ref(raw)
-        data = await ad.flows.get_binary_stream(ref, context.analytiq_client)
+        data = await ad.flows.get_binary_stream(
+            ref, context.analytiq_client, organization_id=context.organization_id
+        )
         if not data:
             raise ValueError(f"Gmail attachment {prop!r} is empty")
         out.append(

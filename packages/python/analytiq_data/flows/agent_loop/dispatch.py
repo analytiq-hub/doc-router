@@ -99,18 +99,18 @@ async def _dispatch_tool_code(
         parent_item=parent_item,
         upstream_nodes_snapshot=upstream_nodes_snapshot,
     )
-    result, logs = await ad.flows.run_python_tool(
-        code=code,
-        params=arguments,
-        context=tool_ctx,
-        timeout_seconds=timeout,
-        analytiq_client=ctx.analytiq_client,
-        node_id=wired.node_id,
-        execution_id=ctx.execution_id,
+    result = await ad.flows.run_code_task(
+        ad.flows.CodeTask(
+            kind="tool_code",
+            code=code,
+            params=dict(arguments or {}),
+            context=tool_ctx,
+            timeout_seconds=min(timeout, 120.0),
+        )
     )
-    if logs:
-        ctx.node_logs.setdefault(wired.node_id, []).extend(logs)
-    return json.dumps(result, ensure_ascii=False, default=str)
+    if result.logs:
+        ctx.node_logs.setdefault(wired.node_id, []).extend(result.logs)
+    return json.dumps(result.tool_result, ensure_ascii=False, default=str)
 
 
 async def _dispatch_kb_tool(

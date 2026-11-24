@@ -1,13 +1,22 @@
-"""Isolated Python runner for ``flows.code``."""
+"""Sandboxed Python runner for ``flows.code`` and ``flows.tool_code`` (see ``runner.py``)."""
 
 from __future__ import annotations
 
-from .parent import CodeExecutionError, run_python_code, run_python_tool
-from .sandbox import flow_item_to_sandbox_dict
+from .checks import CodeCheckError, check_code
+from .runner import (
+    CodeExecutionError,
+    CodeResult,
+    CodeTask,
+    get_code_runner,
+    run_code_task,
+)
 
 __all__ = [
+    "CodeCheckError",
     "CodeExecutionError",
-    "flow_item_to_sandbox_dict",
-    "run_python_code",
-    "run_python_tool",
+    "CodeResult",
+    "CodeTask",
+    "check_code",
+    "get_code_runner",
+    "run_code_task",
 ]

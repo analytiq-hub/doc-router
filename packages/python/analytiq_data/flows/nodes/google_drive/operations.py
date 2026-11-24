@@ -469,7 +469,9 @@ async def _read_input_binary(
                 str(getattr(ref, "mime_type", None) or "application/octet-stream"),
             )
         raise RuntimeError("Google Drive binary upload requires analytiq_client on the execution context")
-    blob = await ad.flows.get_binary_stream(ref, context.analytiq_client)
+    blob = await ad.flows.get_binary_stream(
+        ref, context.analytiq_client, organization_id=context.organization_id
+    )
     return (
         blob,
         str(getattr(ref, "file_name", None) or "file"),

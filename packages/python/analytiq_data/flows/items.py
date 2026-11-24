@@ -52,11 +52,87 @@ class FlowItem:
         return {"json": dict(self.json or {}), "binary": binary_meta, "meta": dict(self.meta or {})}
 
 
-async def get_binary_stream(ref: BinaryRef, analytiq_client: Any) -> bytes:
+class BinaryAccessError(PermissionError):
+    """A ``storage_id`` does not belong to the run's organization (or names an unknown bucket)."""
+
+
+async def assert_storage_id_in_org(analytiq_client: Any, storage_id: str, organization_id: str) -> None:
+    """
+    Raise ``BinaryAccessError`` unless ``storage_id`` (``<bucket>:<key>``) belongs to ``organization_id``.
+
+    Item ``storage_id`` values are data that flow nodes (Code, Set, expressions, pinned data) can
+    write, so readers must not trust them. Allowed:
+
+    - ``files:<key>``: a ``docs`` record of the organization has that ``pdf_file_name`` or
+      ``mongo_file_name``.
+    - ``flow_blobs:<execution_id>/...``: that execution belongs to the organization.
+    - ``flow_pins:pin/<flow_revid>/...``: that revision's flow belongs to the organization.
+    """
+    from bson import ObjectId
+    from bson.errors import InvalidId
+
+    import analytiq_data as ad
+
+    if not organization_id:
+        raise BinaryAccessError("Reading a stored file requires the run's organization")
+    bucket, _, key = storage_id.partition(":")
+    db = ad.common.get_async_db(analytiq_client)
+    denied = BinaryAccessError(f"Stored file {storage_id!r} does not belong to this organization")
+
+    if bucket == "files":
+        doc = await db.docs.find_one(
+            {
+                "organization_id": organization_id,
+                "$or": [{"pdf_file_name": key}, {"mongo_file_name": key}],
+            },
+            {"_id": 1},
+        )
+        if not doc:
+            raise denied
+        return
+
+    if bucket == "flow_blobs":
+        try:
+            exec_oid = ObjectId(key.split("/", 1)[0])
+        except (InvalidId, TypeError):
+            raise denied from None
+        ex = await db.flow_executions.find_one(
+            {"_id": exec_oid, "organization_id": organization_id}, {"_id": 1}
+        )
+        if not ex:
+            raise denied
+        return
+
+    if bucket == "flow_pins":
+        segs = key.split("/")
+        if len(segs) < 3 or segs[0] != "pin":
+            raise denied
+        try:
+            rev_oid = ObjectId(segs[1])
+        except (InvalidId, TypeError):
+            raise denied from None
+        rev = await db.flow_revisions.find_one({"_id": rev_oid}, {"flow_id": 1})
+        flow_id = (rev or {}).get("flow_id")
+        try:
+            flow_oid = ObjectId(str(flow_id))
+        except (InvalidId, TypeError):
+            raise denied from None
+        flow = await db.flows.find_one(
+            {"_id": flow_oid, "organization_id": organization_id}, {"_id": 1}
+        )
+        if not flow:
+            raise denied
+        return
+
+    raise denied
+
+
+async def get_binary_stream(ref: BinaryRef, analytiq_client: Any, *, organization_id: str) -> bytes:
     """
     Return the bytes for a ``BinaryRef``: from in-memory ``data`` or GridFS via ``storage_id``.
 
-    ``storage_id`` must be ``\"<bucket>:<key>\"`` (e.g. ``files:abc.pdf`` or ``flow_blobs:exec/n/0/p``).
+    ``storage_id`` must be ``\"<bucket>:<key>\"`` (e.g. ``files:abc.pdf`` or ``flow_blobs:exec/n/0/p``)
+    and must belong to ``organization_id`` (the run's organization; see ``assert_storage_id_in_org``).
     Callers should prefer this over reading ``ref.data`` directly so both buckets work uniformly.
     """
     if ref.data is not None:
@@ -73,6 +149,7 @@ async def get_binary_stream(ref: BinaryRef, analytiq_client: Any) -> bytes:
     bucket, key = parts[0], parts[1]
     import analytiq_data as ad
 
+    await assert_storage_id_in_org(analytiq_client, sid, organization_id)
     result = await ad.mongodb.blob.get_blob_async(analytiq_client, bucket=bucket, key=key)
     if not result:
         raise ValueError(f"Binary blob not found for storage_id={sid!r}")

@@ -25,6 +25,7 @@ data:
 {{- if .Values.config.flowCodeBuiltinsDeny }}
   FLOW_CODE_BUILTINS_DENY: {{ .Values.config.flowCodeBuiltinsDeny | quote }}
 {{- end }}
-{{- if .Values.config.flowCodeBlockEnvAccess }}
-  FLOW_CODE_BLOCK_ENV_ACCESS: {{ .Values.config.flowCodeBlockEnvAccess | quote }}
+  FLOW_CODE_RUNNER: {{ .Values.config.flowCodeRunner | default "wasi" | quote }}
+{{- if .Values.config.flowCodeAllowUnsandboxed }}
+  FLOW_CODE_ALLOW_UNSANDBOXED: {{ .Values.config.flowCodeAllowUnsandboxed | quote }}
 {{- end }}

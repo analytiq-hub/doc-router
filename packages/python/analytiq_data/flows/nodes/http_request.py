@@ -621,7 +621,9 @@ class FlowsHttpRequestNode:
             ref = item.binary.get(prop)
             if ref is None:
                 raise RuntimeError(f"HTTP Request expected item.binary[{prop!r}] for binary upload, but it was missing")
-            blob = await ad.flows.get_binary_stream(ref, context.analytiq_client)
+            blob = await ad.flows.get_binary_stream(
+                ref, context.analytiq_client, organization_id=context.organization_id
+            )
             mime = (ref.mime_type or "application/octet-stream") if hasattr(ref, "mime_type") else "application/octet-stream"
             filename = (ref.file_name or "upload") if hasattr(ref, "file_name") else "upload"
 

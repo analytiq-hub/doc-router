@@ -60,4 +60,10 @@ RUN uv pip install --system --no-cache-dir -r packages/python/requirements.txt
 COPY packages/ ./packages/
 COPY schemas/ ./schemas/
 
+# Flows Code node sandbox: pinned CPython WASI build and pure-Python packages (pypdf), SHA-256
+# checked, with their bytecode and the compiled python.wasm module, so workers compile nothing at
+# start-up or per run. Nothing is downloaded at run time.
+ENV FLOW_CODE_WASI_DIR=/opt/python-wasi
+RUN cd packages/python && python -m analytiq_data.flows.code_runner.python_wasi
+
 EXPOSE 8000

@@ -99,5 +99,6 @@ typer==0.21.1
 typing-inspection==0.4.2
 urllib3==2.8.0
 uvicorn==0.40.0
+wasmtime==50.0.1
 yarl==1.25.1
 zipp==3.23.0

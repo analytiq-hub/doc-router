@@ -120,7 +120,9 @@ class DocRouterOcrNode:
             if isinstance(it.meta, dict) and isinstance(it.meta.get("item_index"), int):
                 blob_item_index = it.meta["item_index"]
 
-            pdf_bytes = await ad.flows.get_binary_stream(pdf_ref, context.analytiq_client)
+            pdf_bytes = await ad.flows.get_binary_stream(
+                pdf_ref, context.analytiq_client, organization_id=context.organization_id
+            )
 
             ocr_kwargs: dict[str, Any] = {
                 "ocr_provider": ocr_provider,

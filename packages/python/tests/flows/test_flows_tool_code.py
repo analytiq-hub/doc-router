@@ -10,7 +10,8 @@ import pytest
 import analytiq_data as ad
 from analytiq_data.flows.agent_loop.dispatch import execute_tool_call
 from analytiq_data.flows.agent_loop.types import NormalizedToolCall
-from analytiq_data.flows.code_runner.parent import CodeExecutionError
+from analytiq_data.flows.code_runner import CodeExecutionError
+from analytiq_data.flows.code_runner.python_wasi import is_installed
 from analytiq_data.flows.tool_wiring import WiredTool
 
 
@@ -26,6 +27,13 @@ def _wired_code(*, code: str, timeout: float = 5.0) -> WiredTool:
             "parameters": {"python_code": code, "timeout_seconds": timeout},
         },
     )
+
+
+@pytest.fixture(autouse=True, params=["local"] + (["wasi"] if is_installed() else []))
+def _runner(request, monkeypatch):
+    monkeypatch.setenv("FLOW_CODE_RUNNER", request.param)
+    monkeypatch.setenv("FLOW_CODE_ALLOW_UNSANDBOXED", "true")
+    monkeypatch.delenv("FLOW_CODE_ENABLED", raising=False)
 
 
 @pytest.fixture
@@ -79,16 +87,11 @@ async def test_tool_code_dispatch_missing_run_raises(ctx: ad.flows.ExecutionCont
 
 @pytest.mark.asyncio
 async def test_tool_code_dispatch_timeout(ctx: ad.flows.ExecutionContext) -> None:
-    code = (
-        "import time\n"
-        "def run(params, context):\n"
-        "  time.sleep(2)\n"
-        "  return {}\n"
-    )
-    wired = _wired_code(code=code, timeout=0.2)
+    code = "def run(params, context):\n  while True:\n    pass\n"
+    wired = _wired_code(code=code, timeout=0.5)
     tc = NormalizedToolCall(id="1", name="echo", arguments={})
 
-    with pytest.raises(CodeExecutionError):
+    with pytest.raises(CodeExecutionError, match="longer than"):
         await execute_tool_call(
             tc,
             wired,

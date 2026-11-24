@@ -111,6 +111,8 @@ setup-python:
 	# Install packages in order
 	uv pip install -r packages/python/requirements.txt ; \
 	uv pip install -e packages/python/sdk ; \
+	# CPython WASI build for the flows Code node sandbox (pinned, SHA-256 checked)
+	(cd packages/python && python -m analytiq_data.flows.code_runner.python_wasi) ; \
 	# Ensure test dependencies are installed
 	uv pip install pytest-asyncio pytest-cov pytest-xdist
 

@@ -305,7 +305,9 @@ async def _read_input_binary(
     if ref.data is not None:
         blob = ref.data if isinstance(ref.data, bytes) else bytes(ref.data)
     elif ref.storage_id and context.analytiq_client is not None:
-        blob = await ad.flows.get_binary_stream(ref, context.analytiq_client)
+        blob = await ad.flows.get_binary_stream(
+            ref, context.analytiq_client, organization_id=context.organization_id
+        )
     else:
         raise RuntimeError("Microsoft OneDrive binary upload requires item binary data.")
     upload_name = file_name or ref.file_name or "upload"

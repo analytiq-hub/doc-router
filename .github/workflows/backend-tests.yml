@@ -48,7 +48,9 @@ jobs:
         pip install --no-cache-dir uv
         uv pip install --system --no-cache-dir -r requirements.txt
         uv pip install --system --no-cache-dir pytest pytest-asyncio pymongo
-    
+        # CPython WASI build for the flows Code node sandbox (pinned, SHA-256 checked)
+        python -m analytiq_data.flows.code_runner.python_wasi
+
     - name: Verify MongoDB connection and vector search support
       run: |
         # Use Python to verify MongoDB connection and test vector search capability

@@ -1,5 +1,16 @@
 # `flows.code` — Python Code Node Plan
 
+> **Superseded for execution and security (2026-11-24).** The subprocess runner described below
+> (AST block lists + `exec` in `python -I -S`, `read_binary` RPC by storage id) was not a security
+> boundary: user code could walk generator frames to the runner's `os` module, and `read_binary`
+> read any organization's files. User code now runs in CPython on WebAssembly (WASI, `wasmtime`)
+> with no file, network, environment or process access, plus memory and time limits; input files
+> are passed in and stored files come back to the node. See
+> `packages/python/analytiq_data/flows/code_runner/runner.py` (design) and `config.py` (env vars).
+> The sandbox has the standard library plus pinned pure-Python packages (`pypdf` for PDF
+> merge/split; compiled packages such as `fitz` are not available).
+> The authoring model (`def run(items, context)`, modes, output rules) below is unchanged.
+
 Plan to extend DocRouter’s **Code (Python)** node (`flows.code`) with n8n-inspired execution, security, and I/O behavior, using **`def run(items, context)` as the only authoring model**.
 
 **Reference (behavior only — do not copy naming):** n8n `packages/@n8n/task-runner-python/` (`task_executor.py`, `task_analyzer.py`, `import_validation.py`, `task_runner.py`) and `packages/nodes-base/nodes/Code/` (`Code.node.ts`, `PythonTaskRunnerSandbox.ts`, `result-validation.ts`).
