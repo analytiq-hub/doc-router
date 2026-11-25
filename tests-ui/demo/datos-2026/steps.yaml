@@ -1,0 +1,250 @@
+# Datos Insights 2026 demo: single source of truth.
+#   reset.py         reads `config`
+#   run-demo.ts      reads `config` and `steps`, drives the UI, shows each caption
+#   render-script.ts prints the presenter script from `steps`
+#
+# IDs below are for the local staging database (MongoDB `test`).
+# Path templates: {ins} = insurance org id, {test} = test org id, {flow} = surgery flow id,
+#                 {home_case}, {home_fnol}, {kb} (looked up by name at run time).
+
+config:
+  base_url: http://localhost:5173
+  api_url: http://localhost:8000
+  viewport: { width: 1920, height: 1080 }
+  reading_words_per_second: 3     # minimum time a caption stays up
+  compress_speed: 6               # how much waits are sped up in the edited MP4
+  brand_dir: ../../../../docrouter.github.io/_brand/datos-insights   # relative to this folder
+  cta:
+    # Must match where the QR image points. The banner QR encodes https://docrouter.ai/demo,
+    # which needs a page or redirect on the site (it returned 404 on 2026-11-25).
+    url_text: docrouter.ai/demo
+    qr_image: docrouter-retractable-banner-qr.png   # in brand_dir
+
+  insurance:
+    org_id: 6afe2e5ec0d7f78066bd49dd
+    # Tags that exist before the agent runs. Any other tag, schema or prompt
+    # in this org is treated as agent output and removed by reset.py.
+    baseline_tags: [auto, home, claim, policy]
+    home_claim_case_id: 6afe2eac606230c58b94b9ca
+    home_fnol_doc_id: 6afe30c2c0d7f78066bd4a09
+    home_fnol_tags: [claim, home]
+    auto_fnol_doc_id: 6afe2fdac0d7f78066bd49e2
+    auto_fnol_tags: [claim, auto]
+    home_policy_doc_id: 6afe30c2c0d7f78066bd4a0f
+    home_policy_tags: [claim, home, policy]
+    # Part 3 uploads a copy of the auto FNOL under this name; reset.py deletes it.
+    upload_file_name: FNOL_CLAIM-AUTO-0001.pdf
+    # Tools the agent may use without an approval click (stored per document in the browser).
+    agent_preapproved_tools: [create_tag, create_schema, create_prompt, update_document, run_extraction]
+    kb:
+      name: Policy Library
+      description: Issued policy forms, declarations and endorsements.
+      tag: policy
+      chat_model: claude-sonnet-4-6
+      system_prompt: >-
+        The knowledge base contains insurance policies, declarations pages and
+        endorsements issued by the carrier. Answer only from these documents and
+        quote the passage you used.
+
+  test:
+    org_id: 6795345439604beca2b2808d
+    surgery_flow_id: 6a386e942647557e5dab4082
+
+# Each step: `part` (shown as a chip), `caption` (the voice-over), `actions`, optional `hold`
+# (extra seconds after the actions). A caption stays up at least words / reading_words_per_second.
+steps:
+  # ---------------------------------------------------------------- opening
+  - part: DocRouter
+    caption: "DocRouter: an AI index for the insurance archive."
+    actions:
+      - title_card: { heading: "An AI index for the archive", sub: "Claims · Policies · Mixed packets" }
+    hold: 2
+
+  # ---------------------------------------------------------------- Part 1
+  - part: 1 · The archive
+    caption: "This is a carrier's archive: claim files and policy packets, auto and home, as they come in. DocRouter indexes it and sits beside your system of record. It doesn't replace it."
+    actions:
+      - goto: /orgs/{ins}/docs
+      - wait_for: { text: "01_first_notice_of_loss.pdf" }
+      - highlight: { selector: "table", ms: 2500 }
+
+  - part: 1 · The archive
+    caption: "Cases group what belongs together. This is one homeowner claim: eight documents from five sources, in one place."
+    actions:
+      - click: { selector: 'a[href$="/cases/{home_case}"]', first: true }
+      - wait_for: { text: "CLAIM-HOME-0001" }
+      - highlight: { selector: "main table", ms: 2500 }
+    hold: 2
+
+  # ---------------------------------------------------------------- Part 2
+  - part: 2 · The agent builds a pipeline
+    caption: "Here's the first notice of loss for that claim. Normally an adjuster rekeys this."
+    actions:
+      - click: { text: "01_first_notice_of_loss.pdf" }
+      - wait_for: { selector: "canvas" }
+      - pause: 1.5
+    hold: 1
+
+  - part: 2 · The agent builds a pipeline
+    caption: "No data-science team. The person who knows the document describes it, and the agent builds the pipeline: a tag, a schema, and a versioned prompt."
+    actions:
+      - preapprove_agent_tools: {}
+      - reload: {}
+      - click: { selector: "[role=tab]", text: "Chat" }
+      - type:
+          selector: 'textarea[placeholder="Message the agent…"]'
+          text: "Create a tag, schema and prompt to process first notice of loss documents for any line of business, then run it on this document. Keep the document's existing tags. The LLM should be the newest Gemini Flash."
+      - press: Enter
+      - wait_agent: { timeout: 240 }
+      - scroll_to_bottom: { selector: "main" }
+    hold: 4
+
+  - part: 2 · The agent builds a pipeline
+    caption: "Structured fields, from a document nobody had configured five minutes ago."
+    actions:
+      - click: { selector: "[role=tab]", text: "Extraction" }
+      - expand_extraction: {}
+    hold: 4
+
+  - part: 2 · The agent builds a pipeline
+    caption: "The prompt is versioned and tied to a tag and a schema. A change to it is a release, not an edit in a chat log."
+    actions:
+      - goto: /orgs/{ins}/prompts
+      - wait_for: { text: "gemini", timeout: 15 }
+      - highlight: { selector: "table", ms: 3000 }
+
+  # ---------------------------------------------------------------- Part 3
+  - part: 3 · Tags trigger the work
+    caption: "From now on it's a rule. A new loss notice arrives, from the UI, the API or a connector, tagged First Notice of Loss…"
+    actions:
+      - goto: /orgs/{ins}/docs?tab=upload
+      - upload: { file: .cache/FNOL_CLAIM-AUTO-0001.pdf }
+      - click: { selector: button, text: "Continue" }
+      - click_agent_tag: {}
+      - click: { selector: "label, span", text: "claim" }
+      - click: { selector: "label, span", text: "auto" }
+      - click: { selector: button, text: "Continue" }
+      - click: { selector: button, text: "Upload files" }
+      - pause: 2
+
+  - part: 3 · Tags trigger the work
+    caption: "…and the pipeline runs on its own: OCR, then the same extraction. A different line of business, the same schema."
+    actions:
+      - open_uploaded_doc: { timeout: 60 }
+      - wait_extraction: { timeout: 180 }
+      - expand_extraction: {}
+    hold: 4
+
+  # ---------------------------------------------------------------- Part 4
+  - part: 4 · Cited answers
+    caption: "This is the agent part. It answers from the policy the carrier actually issued, and it quotes the passage it read."
+    actions:
+      - goto: /orgs/{ins}/knowledge-bases?tab=edit&kbId={kb}
+      - click: { selector: button, text: "Chat" }
+      - select_kb_model: {}
+      - type:
+          selector: 'textarea[placeholder="Type your message..."]'
+          text: "What deductible applies to a roof claim at 12 Maple Lane, and which policy form governs it? Quote the passages you used."
+      - press: Enter
+      - wait_gone: { selector: button, text: "Cancel", timeout: 120 }
+      - scroll_to_bottom: {}
+    hold: 5
+
+  - part: 4 · Cited answers
+    caption: "A model that remembers a form won't survive an audit. One that quotes the form will."
+    actions:
+      - highlight: { selector: "main", ms: 2500 }
+    hold: 1
+
+  # ---------------------------------------------------------------- Part 5
+  - part: 5 · A mixed packet, end to end
+    caption: "Real packets arrive mixed. This flow starts whenever a document is uploaded with the tag Surgery Pre-Op Schedule."
+    actions:
+      - goto: /orgs/{test}/flows/{flow}
+      - wait_for: { selector: ".react-flow__node" }
+      - open_node: "Document event trigger"
+    hold: 3
+
+  - part: 5 · A mixed packet, end to end
+    caption: "To show it now, we've pinned a sample packet on the trigger: 13 pages, three patients, one PDF."
+    actions:
+      - close_panel: {}
+      - highlight: { selector: '.react-flow__node[data-id="964a1ab2-78e8-4999-bae1-c3c65829cff0"]', ms: 2500 }
+
+  - part: 5 · A mixed packet, end to end
+    caption: "Watch it run."
+    actions:
+      - click: { xpath: '//button[not(@aria-label)][normalize-space(.)="Execute flow"]' }
+      - wait_for: { text: "Success in", fail_text: "Error in", timeout: 120 }
+    hold: 2
+
+  - part: 5 · A mixed packet, end to end
+    caption: "It splits the packet into pages, so each page is handled on its own."
+    actions:
+      - open_node: "Document Split"
+      - output_view: Table
+    hold: 3
+
+  - part: 5 · A mixed packet, end to end
+    caption: "It reads the text of every page."
+    actions:
+      - close_panel: {}
+      - open_node: "Run OCR"
+      - output_view: Table
+    hold: 3
+
+  - part: 5 · A mixed packet, end to end
+    caption: "The model labels each page and pulls out who it belongs to: name, date of birth, MRN. Three pages have no name on them: an advance-directives note and a nurse signature."
+    actions:
+      - close_panel: {}
+      - open_node: "Run LLM"
+      - output_view: Table
+      - highlight: { selector: "[role=dialog] td", text: '"unknown"', contains: true, all: true, ms: 4000 }
+    hold: 2
+
+  - part: 5 · A mixed packet, end to end
+    caption: "Then plain code, not a model, assigns every page to a patient: by MRN, by name, and by where the page sits in the packet. Those three pages go to the right patient."
+    actions:
+      - close_panel: {}
+      - open_node: "Code (Python)"
+      - output_view: Schema
+      - highlight: { selector: "[role=dialog] *", text: "patients", ms: 3000, row: true }
+    hold: 2
+
+  - part: 5 · A mixed packet, end to end
+    caption: "One clean file per patient, each traced back to its source pages."
+    actions:
+      - output_view: Binary
+    hold: 3
+
+  - part: 5 · A mixed packet, end to end
+    caption: "And this is the oversight hook. human_review is 0: every page was placed, so the packet goes straight through. If a page couldn't be placed, it would be 1, and the next step would hold the packet for a person."
+    actions:
+      - output_view: Schema
+      - highlight: { selector: "[role=dialog] *", text: "human_review", ms: 6000, row: true }
+    hold: 2
+
+  # ---------------------------------------------------------------- Part 6
+  - part: 6 · Everything is an API
+    caption: "Every screen you just saw runs on the same REST API: documents, tags, schemas, prompts, knowledge bases, flows. Anything you can do in the UI, your claims system or your data lake can do through the API."
+    actions:
+      - goto_api_docs: {}
+    hold: 2
+
+  - part: 6 · Everything is an API
+    caption: "And your own agents can drive it too, through the Python and TypeScript SDKs or the MCP server."
+    actions:
+      - scroll_to: "#operations-tag-flows"
+    hold: 2
+
+  - part: DocRouter
+    caption: "The archive isn't an AI system until it's indexed. DocRouter does the indexing. The agent recommends. People decide."
+    actions:
+      - title_card: { heading: "The agent recommends. People decide." }
+    hold: 3
+
+  - part: Live demo
+    caption: "Want to see it on your own documents? Scan the code to book a live demo, or talk to us here at the booth."
+    actions:
+      - title_card: { heading: "See it on your own documents", sub: "Book a live demo · {cta_url}", qr: true }
+    hold: 6

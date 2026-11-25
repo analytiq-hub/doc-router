@@ -1,0 +1,31 @@
+import { start, dump, sleep, OUT, base, clickText } from './probe-lib.ts';
+
+const ORG = '6afe2e5ec0d7f78066bd49dd';
+const { browser, page } = await start();
+
+await page.goto(`${base}/orgs/${ORG}/docs?tab=upload`, { waitUntil: 'networkidle0' });
+await sleep(1000);
+const input = await page.$('input[type=file]');
+await (input as any).uploadFile(new URL('.cache/FNOL_CLAIM-AUTO-0001.pdf', import.meta.url).pathname);
+await sleep(1000);
+await page.screenshot({ path: `${OUT}/u2-selected.png` });
+await clickText(page, 'button', 'Continue');
+await sleep(1000);
+await page.screenshot({ path: `${OUT}/u3-tags.png` });
+console.log('--- tags step\n' + (await dump(page)).split('\n').filter((l) => !/\[8,|base-ui-_r_[38]_ /.test(l)).join('\n'));
+await clickText(page, 'label, span', 'First Notice of Loss');
+await clickText(page, 'label, span', 'claim');
+await clickText(page, 'label, span', 'auto');
+await sleep(500);
+await page.screenshot({ path: `${OUT}/u4-tagged.png` });
+await clickText(page, 'button', 'Continue');
+await sleep(1000);
+await page.screenshot({ path: `${OUT}/u5-review.png` });
+console.log('--- review step\n' + (await dump(page)).split('\n').filter((l) => !/\[8,|base-ui-_r_[38]_ /.test(l)).join('\n'));
+const t0 = Date.now();
+await clickText(page, 'button', 'Upload');
+await sleep(4000);
+console.log('after upload url', page.url());
+await page.screenshot({ path: `${OUT}/u6-after.png` });
+console.log('ms', Date.now() - t0);
+await browser.close();

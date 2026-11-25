@@ -1,0 +1,6 @@
+# Recordings, timelines and debug screenshots
+out/
+# Copy of the auto FNOL fetched by reset.py
+.cache/
+# Demo user credentials
+.env
