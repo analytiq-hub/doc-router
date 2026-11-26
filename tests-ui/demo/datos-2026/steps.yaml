@@ -14,9 +14,10 @@ config:
   reading_words_per_second: 3     # minimum time a caption stays up
   compress_speed: 6               # how much waits are sped up in the edited MP4
   brand_dir: ../../../../docrouter.github.io/_brand/datos-insights   # relative to this folder
+  # Title-card background, shared with the video poster (relative to brand_dir).
+  card_background: ../demo-poster/background.png
   cta:
-    # Must match where the QR image points. The banner QR encodes https://docrouter.ai/demo,
-    # which needs a page or redirect on the site (it returned 404 on 2026-11-25).
+    # Must match where the QR image points. The banner QR encodes https://docrouter.ai/demo.
     url_text: docrouter.ai/demo
     qr_image: docrouter-retractable-banner-qr.png   # in brand_dir
 
@@ -55,20 +56,20 @@ config:
 steps:
   # ---------------------------------------------------------------- opening
   - part: DocRouter
-    caption: "DocRouter: an AI index for the insurance archive."
+    caption: "DocRouter: an AI index for the insurance document store."
     actions:
-      - title_card: { heading: "An AI index for the archive", sub: "Claims · Policies · Mixed packets" }
+      - title_card: { label: "PRODUCT DEMO", heading: "An AI index for the document store", sub: "Claims · Policies · Mixed packets" }
     hold: 2
 
   # ---------------------------------------------------------------- Part 1
-  - part: 1 · The archive
-    caption: "This is a carrier's archive: claim files and policy packets, auto and home, as they come in. DocRouter indexes it and sits beside your system of record. It doesn't replace it."
+  - part: 1 · The document store
+    caption: "This is a carrier's document store: claim files and policy packets, auto and home, as they come in. DocRouter indexes it and sits beside your system of record. It doesn't replace it."
     actions:
       - goto: /orgs/{ins}/docs
       - wait_for: { text: "01_first_notice_of_loss.pdf" }
       - highlight: { selector: "table", ms: 2500 }
 
-  - part: 1 · The archive
+  - part: 1 · The document store
     caption: "Cases group what belongs together. This is one homeowner claim: eight documents from five sources, in one place."
     actions:
       - click: { selector: 'a[href$="/cases/{home_case}"]', first: true }
@@ -238,7 +239,7 @@ steps:
     hold: 2
 
   - part: DocRouter
-    caption: "The archive isn't an AI system until it's indexed. DocRouter does the indexing. The agent recommends. People decide."
+    caption: "A document store isn't an AI system until it's indexed. DocRouter does the indexing. The agent recommends. People decide."
     actions:
       - title_card: { heading: "The agent recommends. People decide." }
     hold: 3
@@ -246,5 +247,5 @@ steps:
   - part: Live demo
     caption: "Want to see it on your own documents? Scan the code to book a live demo, or talk to us here at the booth."
     actions:
-      - title_card: { heading: "See it on your own documents", sub: "Book a live demo · {cta_url}", qr: true }
+      - title_card: { label: "LIVE DEMO", heading: "See it on your own documents", sub: "Book a live demo · {cta_url}", qr: true }
     hold: 6

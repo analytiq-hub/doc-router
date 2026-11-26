@@ -10,11 +10,15 @@ that drives the real UI against a local stack and shows the voice-over as captio
 | `reset.py` | Puts the `insurance` and `test` orgs back to the starting state |
 | `postprocess.ts` | Turns a recording into an MP4 with the long waits sped up |
 | `render-script.ts` | Prints the presenter script from `steps.yaml` |
+| `overlay.ts` | Caption bar, part label, cursor and highlight boxes injected into each page |
+| `title-card.ts` | Title cards in the video-poster design (pattern background from the site's `_brand/demo-poster`) |
+| `render-cards.ts` | Renders replacement title cards and caption bars for patching a recorded video |
+| `patch-video.sh` | Lays those over an existing MP4, at timings measured for one take |
 | `probe*.ts` | Dev helpers used to find selectors; not part of a run |
 
 ## The story
 
-1. **The archive** (`insurance` org): document list, then case `CLAIM-HOME-0001`.
+1. **The document store** (`insurance` org): document list, then case `CLAIM-HOME-0001`.
 2. **The agent builds a pipeline**: on the home FNOL, the chat agent creates a tag, schema and
    prompt and runs the extraction (live LLM, about 80 s).
 3. **Tags trigger the work**: a copy of the auto FNOL is uploaded with the new tag; OCR and the
@@ -66,8 +70,30 @@ In `insurance`: deletes the uploaded FNOL copy, every prompt and schema, and any
 user's agent threads on the home FNOL. In `test` it only checks that the surgery flow is active
 and has a pinned input.
 
+## Changing wording or cards without re-recording
+
+Title cards and captions can be replaced in a finished MP4, which keeps a good take and costs no
+SPU credits:
+
+```bash
+# after editing steps.yaml
+node render-cards.ts --cards 0,22,23 --captions 1,2 --fade-captions 1     # -> out/patch/*.png
+./patch-video.sh out/web/docrouter-datos-2026.mp4 out/web/docrouter-datos-2026-v2.mp4
+```
+
+The timings at the top of `patch-video.sh` belong to the 2026-11-25 take; a new take needs
+them re-measured (frame differences in the caption area, at 30 fps). Caption patches are drawn
+in the bar's measured solid colour; where a bar fades in after a page load, the script restores
+a clean background strip and fades in the real 92%-opaque bar, so old and new text never mix.
+The caption bar is `box-sizing: border-box` (1400 px wide, as on the app pages).
+
+## Published files
+
+`media.docrouter.ai/demos/datos-2026/` (S3 bucket `analytiq-media-890742589311`, see
+`analytiq-terraform/applications/media`): `docrouter-datos-2026-v2.mp4` and `poster-v3.jpg` are
+current. Never overwrite a published file; upload the next version under a new name.
+
 ## Before the show
 
 - The call-to-action card shows the banner QR code, which encodes `https://docrouter.ai/demo`.
-  That URL must resolve; on 2026-11-25 it returned 404.
 - Record a few takes and keep the cleanest; the agent's wording varies between runs.

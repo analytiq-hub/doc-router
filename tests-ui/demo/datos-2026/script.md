@@ -4,12 +4,12 @@ Generated from `steps.yaml`. Edit the captions there, not here.
 
 ## DocRouter
 
-0. DocRouter: an AI index for the insurance archive.
-   _Screen: title card: An AI index for the archive_
+0. DocRouter: an AI index for the insurance document store.
+   _Screen: title card: An AI index for the document store_
 
-## 1 · The archive
+## 1 · The document store
 
-1. This is a carrier's archive: claim files and policy packets, auto and home, as they come in. DocRouter indexes it and sits beside your system of record. It doesn't replace it.
+1. This is a carrier's document store: claim files and policy packets, auto and home, as they come in. DocRouter indexes it and sits beside your system of record. It doesn't replace it.
    _Screen: open /orgs/{ins}/docs_
 2. Cases group what belongs together. This is one homeowner claim: eight documents from five sources, in one place.
    _Screen: click a[href$="/cases/{home_case}"]_
@@ -66,7 +66,7 @@ Generated from `steps.yaml`. Edit the captions there, not here.
 
 ## DocRouter
 
-22. The archive isn't an AI system until it's indexed. DocRouter does the indexing. The agent recommends. People decide.
+22. A document store isn't an AI system until it's indexed. DocRouter does the indexing. The agent recommends. People decide.
    _Screen: title card: The agent recommends. People decide._
 
 ## Live demo
